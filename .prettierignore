@@ -1,0 +1,9 @@
+dist/
+.expo/
+expo-env.d.ts
+coverage/
+playwright-report/
+test-results/
+ios/
+android/
+package-lock.json

@@ -1,0 +1,37 @@
+# Builds the app on EAS and runs the Maestro flows in .maestro on an Android emulator
+# and an iOS simulator. Manual by default (each run uses EAS build credits):
+#   npx eas-cli@latest workflow:run .eas/workflows/e2e.yml
+# To run on every pull request instead, uncomment `on:`.
+name: E2E tests
+
+# on:
+#   pull_request:
+#     branches: ['*']
+
+jobs:
+  build_android:
+    name: Build Android (e2e)
+    type: build
+    params:
+      platform: android
+      profile: e2e-test
+  build_ios:
+    name: Build iOS simulator (e2e)
+    type: build
+    params:
+      platform: ios
+      profile: e2e-test
+  maestro_android:
+    name: Maestro on Android
+    needs: [build_android]
+    type: maestro
+    params:
+      build_id: ${{ needs.build_android.outputs.build_id }}
+      flow_path: ['.maestro']
+  maestro_ios:
+    name: Maestro on iOS
+    needs: [build_ios]
+    type: maestro
+    params:
+      build_id: ${{ needs.build_ios.outputs.build_id }}
+      flow_path: ['.maestro']
