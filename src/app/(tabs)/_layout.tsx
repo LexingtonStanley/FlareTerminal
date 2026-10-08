@@ -3,7 +3,7 @@ import { SymbolView } from 'expo-symbols';
 
 import { useTheme } from '@/hooks/use-theme';
 
-export default function AppLayout() {
+export default function TabsLayout() {
   const theme = useTheme();
 
   return (
@@ -16,10 +16,10 @@ export default function AppLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
+          title: 'Connections',
           tabBarIcon: ({ color, size }) => (
             <SymbolView
-              name={{ ios: 'house.fill', android: 'home', web: 'home' }}
+              name={{ ios: 'terminal.fill', android: 'terminal', web: 'terminal' }}
               tintColor={color}
               size={size}
             />

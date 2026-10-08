@@ -1,0 +1,6 @@
+/* xterm.css paints the viewport black under the themed scroll layer. At fractional
+   device pixel ratios (most phones) its edge bleeds through as a grey border in
+   light mode, so let the themed container show instead. */
+.xterm .xterm-viewport {
+  background-color: transparent !important;
+}

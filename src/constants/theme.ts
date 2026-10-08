@@ -17,6 +17,7 @@ export const Colors = {
     primary: '#208AEF',
     onPrimary: '#FFFFFF',
     danger: '#D93025',
+    success: '#1A7F37',
     border: '#D9D9DE',
   },
   dark: {
@@ -28,11 +29,67 @@ export const Colors = {
     primary: '#4AA3F5',
     onPrimary: '#FFFFFF',
     danger: '#FF6B6B',
+    success: '#3FB950',
     border: '#3A3B40',
   },
 } as const;
 
 export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
+
+/**
+ * xterm.js themes (the 16 ANSI colors follow VS Code's integrated terminal). Background and
+ * foreground match the app so the terminal blends into the screen in both modes.
+ */
+export const TerminalColors = {
+  light: {
+    background: Colors.light.background,
+    foreground: '#1F2328',
+    cursor: Colors.light.primary,
+    cursorAccent: Colors.light.background,
+    selectionBackground: '#208AEF40',
+    black: '#000000',
+    red: '#CD3131',
+    green: '#107C10',
+    yellow: '#949800',
+    blue: '#0451A5',
+    magenta: '#BC05BC',
+    cyan: '#0598BC',
+    white: '#555555',
+    brightBlack: '#666666',
+    brightRed: '#CD3131',
+    brightGreen: '#14CE14',
+    brightYellow: '#B5BA00',
+    brightBlue: '#0451A5',
+    brightMagenta: '#BC05BC',
+    brightCyan: '#0598BC',
+    brightWhite: '#A5A5A5',
+  },
+  dark: {
+    background: Colors.dark.background,
+    foreground: '#E5E5E5',
+    cursor: Colors.dark.primary,
+    cursorAccent: Colors.dark.background,
+    selectionBackground: '#4AA3F555',
+    black: '#000000',
+    red: '#CD3131',
+    green: '#0DBC79',
+    yellow: '#E5E510',
+    blue: '#2472C8',
+    magenta: '#BC3FBC',
+    cyan: '#11A8CD',
+    white: '#E5E5E5',
+    brightBlack: '#666666',
+    brightRed: '#F14C4C',
+    brightGreen: '#23D18B',
+    brightYellow: '#F5F543',
+    brightBlue: '#3B8EEA',
+    brightMagenta: '#D670D6',
+    brightCyan: '#29B8DB',
+    brightWhite: '#E5E5E5',
+  },
+} as const;
+
+export type TerminalTheme = (typeof TerminalColors)['light' | 'dark'];
 
 export const Fonts = Platform.select({
   ios: {

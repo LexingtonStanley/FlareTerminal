@@ -13,7 +13,10 @@
     "ios": {
       "bundleIdentifier": "com.lexingtonstanley.flareterminal",
       "icon": "./assets/expo.icon",
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocalNetworkUsageDescription": "Flare Terminal connects to terminals running on computers on your local network."
+      }
     },
     "android": {
       "package": "com.lexingtonstanley.flareterminal",
@@ -39,7 +42,16 @@
           "imageWidth": 76
         }
       ],
-      "expo-sqlite"
+      "expo-sqlite",
+      "expo-secure-store",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

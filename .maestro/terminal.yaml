@@ -1,0 +1,30 @@
+# Device smoke test, run on EAS by .eas/workflows/e2e.yml (or locally: maestro test .maestro).
+# appId must match expo.ios.bundleIdentifier / expo.android.package (production variant).
+#
+# The web tests can't see the native WebView that hosts xterm.js. Connecting starts only
+# after that WebView has loaded and measured the terminal, so reaching "Couldn't connect"
+# proves the terminal renders on the device.
+appId: com.lexingtonstanley.flareterminal
+---
+- launchApp:
+    clearState: true
+- assertVisible: 'Connect to a computer running ttyd'
+- tapOn: 'New connection'
+- tapOn:
+    id: 'connection-save'
+- assertVisible: 'Enter a name'
+- tapOn:
+    id: 'connection-name'
+- inputText: 'Nowhere'
+- tapOn:
+    id: 'connection-address'
+- inputText: '127.0.0.1:9'
+- hideKeyboard
+- tapOn:
+    id: 'connection-save'
+- tapOn: 'Nowhere'
+- extendedWaitUntil:
+    visible: "Couldn't connect to ws://127.0.0.1:9/ws"
+    timeout: 20000
+- assertVisible: 'esc'
+- assertVisible: 'Reconnect'
