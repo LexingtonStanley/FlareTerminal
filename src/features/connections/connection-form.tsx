@@ -5,6 +5,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
 import { Screen } from '@/components/ui/screen';
+import { SegmentedControl } from '@/components/ui/segmented-control';
 import { TextField } from '@/components/ui/text-field';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -12,9 +13,11 @@ import { secretsSupported } from '@/lib/secrets';
 
 import {
   connectionWarning,
+  EMPTY_CONNECTION_INPUT,
   validateConnection,
   type ConnectionErrors,
   type ConnectionInput,
+  type ConnectionKind,
 } from './connections';
 
 type ConnectionFormProps = {
@@ -22,26 +25,33 @@ type ConnectionFormProps = {
   submitLabel: string;
   onSubmit(input: ConnectionInput): void;
   onDelete?(): void;
+  /** The trusted host key, when one is saved, with a way to forget it. */
+  hostKey?: { fingerprint: string; onForget(): void } | null;
 };
 
-const EMPTY: ConnectionInput = { name: '', url: '', username: '', password: '' };
+const KIND_OPTIONS: { value: ConnectionKind; label: string }[] = [
+  { value: 'ssh', label: 'SSH' },
+  { value: 'ttyd', label: 'ttyd' },
+];
 
 export function ConnectionForm({
-  initial = EMPTY,
+  initial = EMPTY_CONNECTION_INPUT,
   submitLabel,
   onSubmit,
   onDelete,
+  hostKey,
 }: ConnectionFormProps) {
   const theme = useTheme();
   const [values, setValues] = useState(initial);
   const [errors, setErrors] = useState<ConnectionErrors>({});
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const warning = connectionWarning(values.url);
+  const warning = connectionWarning(values);
+  const isSsh = values.kind === 'ssh';
 
   const field = (name: keyof ConnectionInput) => ({
     value: values[name],
     onChangeText: (text: string) => setValues((current) => ({ ...current, [name]: text })),
-    error: errors[name as keyof ConnectionErrors],
+    error: errors[name],
   });
 
   function submit() {
@@ -50,66 +60,131 @@ export function ConnectionForm({
     if (Object.keys(next).length === 0) onSubmit(values);
   }
 
+  const note = (text: string) => (
+    <ThemedView type="backgroundElement" style={styles.note}>
+      <ThemedText type="small" themeColor="textSecondary">
+        {text}
+      </ThemedText>
+    </ThemedView>
+  );
+
   return (
     <KeyboardAvoidingView
       style={styles.flex}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Screen scroll edges={['left', 'right', 'bottom']}>
-        <TextField
-          label="Name"
-          placeholder="Devbox"
-          returnKeyType="next"
-          testID="connection-name"
-          {...field('name')}
+        <SegmentedControl
+          label="Connection type"
+          options={KIND_OPTIONS}
+          value={values.kind}
+          onChange={(kind) => {
+            setValues((current) => ({ ...current, kind }));
+            setErrors({});
+          }}
         />
-        <TextField
-          label="Address"
-          placeholder="https://devbox.tailnet.ts.net or 192.168.1.20:7681"
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="url"
-          textContentType="URL"
-          returnKeyType="next"
-          testID="connection-address"
-          {...field('url')}
-        />
-        {warning ? (
-          <ThemedText type="small" style={{ color: theme.danger }}>
-            {warning}
-          </ThemedText>
-        ) : null}
 
-        {secretsSupported ? (
+        {isSsh ? (
           <>
             <TextField
+              label="Host"
+              placeholder="lexbox, 100.101.102.103 or user@host"
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+              returnKeyType="next"
+              testID="connection-host"
+              {...field('host')}
+            />
+            <TextField
               label="Username"
-              placeholder="Optional: the user from ttyd -c user:password"
+              placeholder="Your username on that computer"
               autoCapitalize="none"
               autoCorrect={false}
               autoComplete="username"
               textContentType="username"
               returnKeyType="next"
+              testID="connection-username"
               {...field('username')}
             />
             <TextField
-              label="Password"
-              secureTextEntry
-              autoCapitalize="none"
-              autoComplete="password"
-              textContentType="password"
-              returnKeyType="done"
-              onSubmitEditing={submit}
-              {...field('password')}
+              label="Port"
+              keyboardType="number-pad"
+              returnKeyType="next"
+              {...field('port')}
             />
           </>
         ) : (
-          <ThemedView type="backgroundElement" style={styles.note}>
-            <ThemedText type="small" themeColor="textSecondary">
-              Browsers can&apos;t send a ttyd username and password. Use the Android or iOS app for
-              hosts started with -c, or put ttyd behind a sign-in proxy.
-            </ThemedText>
-          </ThemedView>
+          <>
+            <TextField
+              label="Address"
+              placeholder="https://devbox.tailnet.ts.net or 192.168.1.20:7681"
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+              textContentType="URL"
+              returnKeyType="next"
+              testID="connection-address"
+              {...field('url')}
+            />
+            {warning ? (
+              <ThemedText type="small" style={{ color: theme.danger }}>
+                {warning}
+              </ThemedText>
+            ) : null}
+            {secretsSupported ? (
+              <TextField
+                label="Username"
+                placeholder="Optional: the user from ttyd -c user:password"
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="username"
+                textContentType="username"
+                returnKeyType="next"
+                {...field('username')}
+              />
+            ) : null}
+          </>
         )}
+
+        {secretsSupported ? (
+          <TextField
+            label="Password"
+            placeholder={isSsh ? 'Optional: leave empty to be asked each time' : undefined}
+            secureTextEntry
+            autoCapitalize="none"
+            autoComplete="password"
+            textContentType="password"
+            returnKeyType="done"
+            onSubmitEditing={submit}
+            {...field('password')}
+          />
+        ) : null}
+
+        <TextField
+          label="Name"
+          placeholder="Optional, e.g. Lexbox"
+          returnKeyType="done"
+          testID="connection-name"
+          {...field('name')}
+        />
+
+        {!secretsSupported
+          ? note(
+              isSsh
+                ? "SSH runs in the Android and iOS apps: browsers can't open SSH connections. You can still save it here."
+                : "Browsers can't send a ttyd username and password. Use the Android or iOS app for hosts started with -c, or put ttyd behind a sign-in proxy."
+            )
+          : null}
+
+        {isSsh && hostKey ? (
+          <ThemedView type="backgroundElement" style={styles.note}>
+            <ThemedText type="smallBold">Trusted host key</ThemedText>
+            <ThemedText type="code" selectable>
+              {hostKey.fingerprint}
+            </ThemedText>
+            <Button title="Forget host key" variant="secondary" onPress={hostKey.onForget} />
+          </ThemedView>
+        ) : null}
 
         <Button title={submitLabel} onPress={submit} testID="connection-save" />
         {onDelete ? (
@@ -126,5 +201,5 @@ export function ConnectionForm({
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  note: { padding: Spacing.three, borderRadius: Spacing.three },
+  note: { gap: Spacing.two, padding: Spacing.three, borderRadius: Spacing.three },
 });

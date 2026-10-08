@@ -17,7 +17,11 @@ export type TransportListener = {
   onData(text: string): void;
   onTitle(title: string): void;
   onStatus(status: SessionStatus): void;
+  /** 'secret' while the transport is reading a password typed into the terminal. */
+  onInputMode?(mode: InputMode): void;
 };
+
+export type InputMode = 'normal' | 'secret';
 
 export interface TerminalTransport {
   /** Opens the session at the terminal's current size. Call once per transport. */

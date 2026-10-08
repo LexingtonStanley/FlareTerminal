@@ -13,6 +13,8 @@ module.exports = defineConfig([
     'test-results/*',
     'ios/*',
     'android/*',
+    // Git worktrees that coding agents create inside the repo.
+    '.claude/worktrees/*',
   ]),
   expoConfig,
   eslintPluginPrettierRecommended,

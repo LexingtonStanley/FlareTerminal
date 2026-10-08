@@ -3,7 +3,14 @@ import { createContext, use, useState, type PropsWithChildren } from 'react';
 import { getSecret, setSecret } from '@/lib/secrets';
 import { readJson, writeJson } from '@/lib/storage';
 
-import { newConnectionId, passwordKey, type Connection, type ConnectionInput } from './connections';
+import {
+  migrateConnection,
+  newConnectionId,
+  passwordKey,
+  toConnection,
+  type Connection,
+  type ConnectionInput,
+} from './connections';
 
 const STORAGE_KEY = 'flare.connections.v1';
 
@@ -19,8 +26,10 @@ type ConnectionsContextValue = {
 const ConnectionsContext = createContext<ConnectionsContextValue | null>(null);
 
 export function ConnectionsProvider({ children }: PropsWithChildren) {
-  const [connections, setConnections] = useState<Connection[]>(
-    () => readJson<Connection[]>(STORAGE_KEY) ?? []
+  const [connections, setConnections] = useState<Connection[]>(() =>
+    (readJson<unknown[]>(STORAGE_KEY) ?? [])
+      .map(migrateConnection)
+      .filter((connection) => connection !== null)
   );
 
   function commit(next: Connection[]) {
@@ -30,19 +39,16 @@ export function ConnectionsProvider({ children }: PropsWithChildren) {
 
   const value: ConnectionsContextValue = {
     connections,
-    save({ password, ...fields }, id) {
-      const connection: Connection = {
-        id: id ?? newConnectionId(),
-        name: fields.name.trim(),
-        url: fields.url.trim(),
-        username: fields.username.trim(),
-      };
+    save(input, id) {
+      const connection = toConnection(input, id ?? newConnectionId());
       commit(
         id
           ? connections.map((existing) => (existing.id === id ? connection : existing))
           : [...connections, connection]
       );
-      setSecret(passwordKey(connection.id), connection.username ? password : null);
+      // SSH may save a password on its own (else it asks); ttyd only uses one with a username.
+      const keep = connection.kind === 'ssh' || connection.username;
+      setSecret(passwordKey(connection.id), keep && input.password ? input.password : null);
       return connection;
     },
     remove(id) {

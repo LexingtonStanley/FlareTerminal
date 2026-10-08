@@ -6,7 +6,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
 import { Screen } from '@/components/ui/screen';
 import { Spacing } from '@/constants/theme';
-import { TTYD_COMMAND } from '@/features/connections/connections';
+import { connectionLabel } from '@/features/connections/connections';
 import { useConnections } from '@/features/connections/connections-provider';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -23,20 +23,19 @@ export default function ConnectionsScreen() {
 
       {connections.length === 0 ? (
         <ThemedView type="backgroundElement" style={styles.card}>
-          <ThemedText type="smallBold">Connect to a computer running ttyd</ThemedText>
+          <ThemedText type="smallBold">Connect to your computer over SSH</ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
-            On the computer, install ttyd and tmux, then run:
+            Nothing to install on it: if you can run this from a laptop, Flare can connect too.
           </ThemedText>
           <ThemedText
             type="code"
             selectable
             style={[styles.command, { borderColor: theme.border }]}>
-            {TTYD_COMMAND}
+            ssh lexde@lexbox
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
-            -W lets you type, -c sets the username and password, and tmux keeps your shells and
-            agents running while the phone is away. Reach it over Tailscale or HTTPS rather than the
-            open internet.
+            With Tailscale on the phone and the computer, use the computer&apos;s Tailscale name.
+            Run agents inside tmux or zellij so they keep going while the phone is away.
           </ThemedText>
         </ThemedView>
       ) : (
@@ -51,8 +50,9 @@ export default function ConnectionsScreen() {
               style={({ pressed }) => [styles.open, pressed && styles.pressed]}>
               <ThemedText type="smallBold">{connection.name}</ThemedText>
               <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
-                {connection.username ? `${connection.username} @ ` : ''}
-                {connection.url}
+                {connection.kind === 'ttyd'
+                  ? `ttyd · ${connectionLabel(connection)}`
+                  : connectionLabel(connection)}
               </ThemedText>
             </Pressable>
             <Pressable

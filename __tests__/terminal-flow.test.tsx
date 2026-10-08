@@ -2,6 +2,7 @@ import { act, userEvent } from '@testing-library/react-native';
 import { router } from 'expo-router';
 import { screen } from 'expo-router/testing-library';
 
+import type { Connection } from '@/features/connections/connections';
 import { FAKE_SIZE } from '@/test-utils/fake-terminal-view';
 import { transports } from '@/test-utils/fake-transport';
 import { clearMemoryStorage, secrets, writeJson } from '@/test-utils/memory-storage';
@@ -16,10 +17,17 @@ jest.mock('@/features/terminal/open-transport', () =>
   jest.requireActual('@/test-utils/fake-transport')
 );
 
-const DEVBOX = { id: 'devbox', name: 'Devbox', url: 'devbox:7681', username: 'ada' };
+const DEVBOX: Connection = {
+  id: 'devbox',
+  kind: 'ssh',
+  name: 'Devbox',
+  host: 'devbox',
+  port: 22,
+  username: 'ada',
+};
 
 /** Starts the app with saved connections, as if from a previous launch. */
-function saved(...connections: (typeof DEVBOX)[]) {
+function saved(...connections: unknown[]) {
   writeJson('flare.connections.v1', connections);
 }
 
@@ -39,34 +47,70 @@ beforeEach(() => {
 });
 
 describe('connections', () => {
-  it('explains how to start ttyd when nothing is saved', async () => {
+  it('explains how to connect over SSH when nothing is saved', async () => {
     await renderApp('/');
 
-    expect(await screen.findByText('Connect to a computer running ttyd')).toBeOnTheScreen();
-    expect(
-      screen.getByText('ttyd -W -c you:a-long-password tmux new -A -s main')
-    ).toBeOnTheScreen();
+    expect(await screen.findByText('Connect to your computer over SSH')).toBeOnTheScreen();
+    expect(screen.getByText('ssh lexde@lexbox')).toBeOnTheScreen();
   });
 
-  it('saves a connection with its password in secure storage', async () => {
+  it('saves an SSH connection typed as user@host, password in secure storage', async () => {
     const user = userEvent.setup();
     const app = await renderApp('/');
 
     await user.press(await screen.findByRole('button', { name: 'New connection' }));
-    await user.type(await screen.findByLabelText('Name'), 'Devbox');
-    await user.type(screen.getByLabelText('Address'), 'devbox:7681');
-    await user.type(screen.getByLabelText('Username'), 'ada');
+    expect(await screen.findByRole('radio', { name: 'SSH' })).toBeChecked();
     await user.press(screen.getByRole('button', { name: 'Save' }));
+    expect(
+      await screen.findByText('Enter the computer’s name or IP, e.g. lexbox')
+    ).toBeOnTheScreen();
 
-    expect(await screen.findByText('Enter the password for this username')).toBeOnTheScreen();
-
+    await user.type(screen.getByLabelText('Host'), 'lexde@lexbox');
     await user.type(screen.getByLabelText('Password'), 's3cret');
     await user.press(screen.getByRole('button', { name: 'Save' }));
 
-    expect(await screen.findByRole('button', { name: 'Open Devbox' })).toBeOnTheScreen();
-    expect(screen.getByText('ada @ devbox:7681')).toBeOnTheScreen();
+    expect(await screen.findByRole('button', { name: 'Open lexde@lexbox' })).toBeOnTheScreen();
     expect(app).toHavePathname('/');
     expect([...secrets.values()]).toEqual(['s3cret']);
+  });
+
+  it('saves a ttyd connection', async () => {
+    const user = userEvent.setup();
+    await renderApp('/connections/new');
+
+    await user.press(await screen.findByRole('radio', { name: 'ttyd' }));
+    await user.type(screen.getByLabelText('Address'), 'devbox:7681');
+    await user.type(screen.getByLabelText('Username'), 'ada');
+    await user.press(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('Enter the password for this username')).toBeOnTheScreen();
+
+    await user.type(screen.getByLabelText('Password'), 's3cret');
+    await user.type(screen.getByLabelText('Name'), 'Devbox');
+    await user.press(screen.getByRole('button', { name: 'Save' }));
+
+    expect(await screen.findByRole('button', { name: 'Open Devbox' })).toBeOnTheScreen();
+    expect(screen.getByText('ttyd · devbox:7681')).toBeOnTheScreen();
+  });
+
+  it('reads ttyd connections saved by the first version', async () => {
+    saved({ id: 'old', name: 'Old box', url: 'old:7681', username: '' });
+    await renderApp('/');
+
+    expect(await screen.findByText('ttyd · old:7681')).toBeOnTheScreen();
+  });
+
+  it('shows and forgets the trusted host key', async () => {
+    saved(DEVBOX);
+    writeJson('flare.known-hosts.v1', {
+      devbox: { type: 'ssh-ed25519', key: 'AAAA', fingerprint: 'SHA256:abc', addedAt: '' },
+    });
+    const user = userEvent.setup();
+    await renderApp('/connections/devbox');
+
+    expect(await screen.findByText('SHA256:abc')).toBeOnTheScreen();
+    await user.press(screen.getByRole('button', { name: 'Forget host key' }));
+
+    expect(screen.queryByText('SHA256:abc')).not.toBeOnTheScreen();
   });
 
   it('removes the password when a connection is deleted', async () => {
@@ -78,7 +122,7 @@ describe('connections', () => {
     await user.press(await screen.findByRole('button', { name: 'Delete connection' }));
     await user.press(screen.getByRole('button', { name: 'Tap again to delete' }));
 
-    expect(await screen.findByText('Connect to a computer running ttyd')).toBeOnTheScreen();
+    expect(await screen.findByText('Connect to your computer over SSH')).toBeOnTheScreen();
     expect(secrets.size).toBe(0);
   });
 });

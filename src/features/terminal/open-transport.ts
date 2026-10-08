@@ -1,5 +1,9 @@
 import type { Connection } from '@/features/connections/connections';
+import { loadAppKey } from '@/features/ssh/app-key';
+import { knownHosts } from '@/features/ssh/known-hosts';
+import { openSocket } from '@/features/ssh/socket';
 
+import { SshTransport } from './ssh-transport';
 import type { TerminalTransport, TransportListener } from './transport';
 import { TtydTransport } from './ttyd';
 
@@ -9,6 +13,20 @@ export function openTransport(
   password: string | null,
   listener: TransportListener
 ): TerminalTransport {
+  if (connection.kind === 'ssh') {
+    return new SshTransport(
+      {
+        host: connection.host,
+        port: connection.port,
+        username: connection.username,
+        password,
+        userKey: loadAppKey(),
+        knownHosts,
+        openSocket,
+      },
+      listener
+    );
+  }
   const credentials = connection.username
     ? { username: connection.username, password: password ?? '' }
     : null;

@@ -2,9 +2,11 @@ import { expect, test, type Page } from '@playwright/test';
 
 import { FAKE_TITLE, FAKE_TTYD_ADDRESS, fakeTtyd } from './fake-ttyd';
 
+/** Saves a ttyd connection: the kind a browser can open. */
 async function addConnection(page: Page, name: string, address: string) {
   await page.goto('/');
   await page.getByRole('button', { name: 'New connection' }).click();
+  await page.getByRole('radio', { name: 'ttyd' }).click();
   await page.getByLabel('Name').fill(name);
   await page.getByLabel('Address').fill(address);
   await page.getByRole('button', { name: 'Save' }).click();
@@ -27,17 +29,31 @@ async function openTerminal(page: Page, { saved = false } = {}) {
   };
 }
 
-test('explains how to set up a host when there are no connections', async ({ page }) => {
+test('explains how to connect when there are no connections', async ({ page }) => {
   await page.goto('/');
 
   await expect(page.getByRole('heading', { name: 'Connections' })).toBeVisible();
-  await expect(page.getByText('ttyd -W -c you:a-long-password tmux new -A -s main')).toBeVisible();
+  await expect(page.getByText('ssh lexde@lexbox')).toBeVisible();
 });
 
-test('validates a new connection, then saves from a deep link', async ({ page }) => {
+test('saves an SSH connection, which explains it needs the app in a browser', async ({ page }) => {
   await page.goto('/connections/new');
+  await expect(page.getByRole('radio', { name: 'SSH' })).toBeChecked();
   await page.getByRole('button', { name: 'Save' }).click();
-  await expect(page.getByText('Enter a name')).toBeVisible();
+  await expect(page.getByText('Enter your username on that computer')).toBeVisible();
+
+  await page.getByLabel('Host').fill('lexde@lexbox');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await page.getByRole('button', { name: 'Open lexde@lexbox' }).click();
+
+  await expect(page.getByRole('alert')).toContainText('SSH needs the Android or iOS app');
+});
+
+test('validates a new ttyd connection, then saves from a deep link', async ({ page }) => {
+  await page.goto('/connections/new');
+  await page.getByRole('radio', { name: 'ttyd' }).click();
+  await page.getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByText('Enter the address ttyd is listening on')).toBeVisible();
 
   await page.getByLabel('Address').fill('ftp://devbox');
   await page.getByRole('button', { name: 'Save' }).click();
@@ -132,7 +148,7 @@ test('edits and deletes a connection', async ({ page }) => {
   await page.getByRole('button', { name: 'Edit Build box' }).click();
   await page.getByRole('button', { name: 'Delete connection' }).click();
   await page.getByRole('button', { name: 'Tap again to delete' }).click();
-  await expect(page.getByText('Connect to a computer running ttyd')).toBeVisible();
+  await expect(page.getByText('Connect to your computer over SSH')).toBeVisible();
 });
 
 test('unknown routes show not found', async ({ page }) => {

@@ -45,3 +45,6 @@ yarn-error.*
 coverage/
 playwright-report/
 test-results/
+
+# git worktrees created by coding agents
+.claude/worktrees/

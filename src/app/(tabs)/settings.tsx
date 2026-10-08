@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Screen } from '@/components/ui/screen';
 import { Spacing } from '@/constants/theme';
 import { FONT_SIZE, usePreferences } from '@/features/settings/preferences-provider';
+import { AppKeyCard } from '@/features/ssh/app-key-card';
 
 export default function SettingsScreen() {
   const { fontSize, setFontSize } = usePreferences();
@@ -42,6 +43,8 @@ export default function SettingsScreen() {
           </View>
         </View>
       </ThemedView>
+
+      <AppKeyCard />
 
       <ThemedView type="backgroundElement" style={styles.card}>
         <ThemedText type="smallBold">App</ThemedText>

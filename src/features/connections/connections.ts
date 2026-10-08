@@ -1,8 +1,24 @@
 import { isPrivateHost, ttydSocketUrl } from '@/features/terminal/ttyd';
 
-/** A saved host. The password lives in secure storage under `passwordKey(id)`. */
-export type Connection = {
+/**
+ * Saved hosts. SSH (the default) needs nothing on the computer beyond its SSH server;
+ * ttyd also works in the browser. Passwords live in secure storage under passwordKey(id).
+ */
+
+export type ConnectionKind = 'ssh' | 'ttyd';
+
+export type SshConnection = {
   id: string;
+  kind: 'ssh';
+  name: string;
+  host: string;
+  port: number;
+  username: string;
+};
+
+export type TtydConnection = {
+  id: string;
+  kind: 'ttyd';
   name: string;
   /** What the person typed; see ttydSocketUrl for the accepted forms. */
   url: string;
@@ -10,11 +26,32 @@ export type Connection = {
   username: string;
 };
 
-export type ConnectionInput = Omit<Connection, 'id'> & { password: string };
+export type Connection = SshConnection | TtydConnection;
 
-export type ConnectionErrors = Partial<Record<'name' | 'url' | 'password', string>>;
+/** The connection form's fields, as typed. */
+export type ConnectionInput = {
+  kind: ConnectionKind;
+  name: string;
+  host: string;
+  port: string;
+  url: string;
+  username: string;
+  password: string;
+};
 
-/** What to run on the computer: writable (-W), password-protected (-c), in a lasting tmux session. */
+export type ConnectionErrors = Partial<Record<keyof ConnectionInput, string>>;
+
+export const EMPTY_CONNECTION_INPUT: ConnectionInput = {
+  kind: 'ssh',
+  name: '',
+  host: '',
+  port: '22',
+  url: '',
+  username: '',
+  password: '',
+};
+
+/** What to run on the computer for ttyd: writable (-W), password-protected (-c), lasting tmux. */
 export const TTYD_COMMAND = 'ttyd -W -c you:a-long-password tmux new -A -s main';
 
 export const passwordKey = (id: string) => `connection.${id}.password`;
@@ -23,26 +60,109 @@ export function newConnectionId(): string {
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export function validateConnection({ name, url, username, password }: ConnectionInput) {
+/** Reads `user@host:port` (or plain `host`, `[::1]:22`, `ssh user@host`) as typed into Host. */
+export function parseSshTarget(text: string): { username?: string; host: string; port?: number } {
+  const match = /^(?:([^@\s]+)@)?(\[[^\]\s]+\]|[^:@\s/]+)(?::(\d+))?$/.exec(
+    text.trim().replace(/^ssh\s+/, '')
+  );
+  if (!match) return { host: text.trim() };
+  const [, username, host, port] = match;
+  return { username, host: host.replace(/^\[|\]$/g, ''), port: port ? Number(port) : undefined };
+}
+
+/** The form's values with `user@host:port` in Host split into its fields. */
+function sshFields(input: ConnectionInput) {
+  const target = parseSshTarget(input.host);
+  return {
+    host: target.host,
+    username: input.username.trim() || target.username || '',
+    port: target.port ?? Number(input.port.trim() || 22),
+  };
+}
+
+export function validateConnection(input: ConnectionInput): ConnectionErrors {
   const errors: ConnectionErrors = {};
-  if (!name.trim()) errors.name = 'Enter a name';
-  if (!url.trim()) errors.url = 'Enter the address ttyd is listening on';
+  if (input.kind === 'ssh') {
+    const { host, username, port } = sshFields(input);
+    if (!host) errors.host = 'Enter the computer’s name or IP, e.g. lexbox';
+    else if (!/^[\w.:-]+$/.test(host)) errors.host = 'Enter just the name or IP, e.g. lexbox';
+    if (!username) errors.username = 'Enter your username on that computer';
+    if (!Number.isInteger(port) || port < 1 || port > 65535)
+      errors.port = 'Use a port from 1 to 65535';
+    return errors;
+  }
+
+  if (!input.url.trim()) errors.url = 'Enter the address ttyd is listening on';
   else {
     try {
-      ttydSocketUrl(url);
+      ttydSocketUrl(input.url);
     } catch (error) {
       errors.url = (error as Error).message;
     }
   }
-  if (username.trim() && !password) errors.password = 'Enter the password for this username';
+  if (input.username.trim() && !input.password) {
+    errors.password = 'Enter the password for this username';
+  }
   return errors;
 }
 
-/** A warning for addresses that would send the session unencrypted over the internet. */
-export function connectionWarning(url: string): string | null {
+/** How a connection is shown when it has no name: `lexde@lexbox`, or the ttyd address. */
+export function connectionLabel(connection: Connection): string {
+  if (connection.kind === 'ttyd') return connection.url;
+  const port = connection.port === 22 ? '' : `:${connection.port}`;
+  return `${connection.username}@${connection.host}${port}`;
+}
+
+/** Builds the saved record from valid form input. */
+export function toConnection(input: ConnectionInput, id: string): Connection {
+  if (input.kind === 'ssh') {
+    const fields = sshFields(input);
+    const connection: SshConnection = { id, kind: 'ssh', name: '', ...fields };
+    return { ...connection, name: input.name.trim() || connectionLabel(connection) };
+  }
+  const url = input.url.trim();
+  return { id, kind: 'ttyd', name: input.name.trim() || url, url, username: input.username.trim() };
+}
+
+/** The form's values for a saved connection. */
+export function toInput(connection: Connection, password: string | null): ConnectionInput {
+  return connection.kind === 'ssh'
+    ? {
+        ...EMPTY_CONNECTION_INPUT,
+        kind: 'ssh',
+        name: connection.name,
+        host: connection.host,
+        port: String(connection.port),
+        username: connection.username,
+        password: password ?? '',
+      }
+    : {
+        ...EMPTY_CONNECTION_INPUT,
+        kind: 'ttyd',
+        name: connection.name,
+        url: connection.url,
+        username: connection.username,
+        password: password ?? '',
+      };
+}
+
+/** Saved connections from before SSH existed were all ttyd. */
+export function migrateConnection(stored: unknown): Connection | null {
+  if (!stored || typeof stored !== 'object') return null;
+  const record = stored as Partial<Connection> & { url?: string };
+  if (record.kind === 'ssh' || record.kind === 'ttyd') return record as Connection;
+  if (typeof record.url === 'string' && typeof record.id === 'string') {
+    return { ...(record as TtydConnection), kind: 'ttyd' };
+  }
+  return null;
+}
+
+/** A warning for ttyd addresses that would send the session unencrypted over the internet. */
+export function connectionWarning(input: ConnectionInput): string | null {
+  if (input.kind !== 'ttyd') return null;
   let socketUrl: URL;
   try {
-    socketUrl = new URL(ttydSocketUrl(url));
+    socketUrl = new URL(ttydSocketUrl(input.url));
   } catch {
     return null;
   }
