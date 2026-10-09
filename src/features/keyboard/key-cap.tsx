@@ -121,7 +121,10 @@ export function KeyCap({ def, label, mode, state, theme, compact }: KeyCapProps)
       {def.behavior === 'arrows' ? (
         <ArrowsFace state={state} theme={theme} />
       ) : def.icon ? (
-        <Icon name={iconFor(def, mode)} size={compact ? 20 : 22} color={foreground} />
+        // Below a corner hint, like word labels, so "abc" or "del" doesn't touch the icon.
+        <View style={hints.length === 1 && styles.belowHint}>
+          <Icon name={iconFor(def, mode)} size={compact ? 20 : 22} color={foreground} />
+        </View>
       ) : (
         <Text
           numberOfLines={1}
