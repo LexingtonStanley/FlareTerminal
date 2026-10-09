@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui/button';
@@ -81,13 +81,9 @@ export default function SecurityScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <Screen scroll edges={['left', 'right', 'bottom']} style={styles.screen}>
-        {content}
-      </Screen>
-    </KeyboardAvoidingView>
+    <Screen scroll edges={['left', 'right', 'bottom']} style={styles.screen}>
+      {content}
+    </Screen>
   );
 }
 
@@ -230,7 +226,6 @@ function LockSettingsView({ onChange, onRemove }: { onChange(): void; onRemove()
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
   screen: { gap: Spacing.four },
   row: {
     flexDirection: 'row',

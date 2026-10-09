@@ -3,14 +3,8 @@ import { Link, Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useHeaderHeight } from 'expo-router/react-navigation';
 import { useRef, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  Keyboard,
-  KeyboardAvoidingView,
-  Platform,
-  StyleSheet,
-  useWindowDimensions,
-  View,
-} from 'react-native';
+import { Keyboard, Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -59,7 +53,7 @@ export default function SessionScreen() {
   // The session keeps running meanwhile; it just isn't shown.
   if (scope && settings && !isAuthorized(scope)) {
     return (
-      <Screen centered>
+      <Screen scroll centered edges={['left', 'right', 'bottom']}>
         <Stack.Screen options={{ title: session.name }} />
         <UnlockPanel
           title={`Unlock ${session.name}`}
@@ -95,9 +89,11 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
   const view = useSessionView(viewRef, session.id);
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  // The coding keyboard, or "writing": a text field with the phone's keyboard, for prose
-  // (autocorrect, swiping, dictation) and the key bar for the keys it lacks.
-  const [writing, setWriting] = useState(false);
+  // The coding keyboard; none, to see the whole terminal (a tap brings it back); or
+  // "writing": a text field with the phone's keyboard, for prose (autocorrect, swiping,
+  // dictation) and the key bar for the keys it lacks.
+  const [input, setInput] = useState<'keys' | 'hidden' | 'writing'>('keys');
+  const writing = input === 'writing';
   const keys = {
     modifiers: view.modifiers,
     onModifiersChange: view.setModifiers,
@@ -112,7 +108,9 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
   }
 
   return (
-    <Screen edges={writing ? ['left', 'right', 'bottom'] : ['left', 'right']} style={styles.screen}>
+    <Screen
+      edges={input === 'keys' ? ['left', 'right'] : ['left', 'right', 'bottom']}
+      style={styles.screen}>
       <Stack.Screen
         options={{
           headerTitle: () => <SessionTitle name={session.name} title={session.title} />,
@@ -127,7 +125,8 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
       <SessionStrip currentId={session.id} />
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        // keyboard-controller's version, so Android's edge-to-edge layout avoids it too.
+        behavior="padding"
         keyboardVerticalOffset={headerHeight}>
         <View style={[styles.flex, { backgroundColor: terminalTheme.background }]}>
           <TerminalView
@@ -136,6 +135,7 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
             fontSize={fontSize}
             {...view.viewCallbacks}
             onOpenLink={openLink}
+            onTap={() => setInput((current) => (current === 'hidden' ? 'keys' : current))}
             dom={{
               style: styles.flex,
               scrollEnabled: false,
@@ -155,6 +155,18 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
               </ThemedText>
               <Button title="Reconnect" onPress={() => manager.reconnect(session.id)} />
             </ThemedView>
+          ) : input === 'hidden' ? (
+            <View style={styles.showKeyboard}>
+              <IconButton
+                icon="keyboard"
+                label="Show keyboard"
+                filled
+                onPress={() => {
+                  setInput('keys');
+                  viewRef.current?.focus();
+                }}
+              />
+            </View>
           ) : null}
         </View>
         {writing ? (
@@ -163,7 +175,7 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
               {...keys}
               onOpenKeyboard={() => {
                 Keyboard.dismiss();
-                setWriting(false);
+                setInput('keys');
                 viewRef.current?.focus();
               }}
             />
@@ -174,12 +186,16 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
               onModifiedKey={view.type}
             />
           </>
-        ) : (
+        ) : input === 'keys' ? (
           // The tray colour runs under the home indicator.
           <View style={{ paddingBottom: insets.bottom, backgroundColor: theme.keyboard }}>
-            <CodingKeyboard {...keys} onUseSystemKeyboard={() => setWriting(true)} />
+            <CodingKeyboard
+              {...keys}
+              onHide={() => setInput('hidden')}
+              onUseSystemKeyboard={() => setInput('writing')}
+            />
           </View>
-        )}
+        ) : null}
       </KeyboardAvoidingView>
     </Screen>
   );
@@ -210,6 +226,7 @@ const styles = StyleSheet.create({
   screen: { padding: 0, gap: 0, maxWidth: '100%' },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one },
   title: { fontSize: 12, lineHeight: 16 },
+  showKeyboard: { position: 'absolute', right: Spacing.three, bottom: Spacing.three },
   banner: {
     position: 'absolute',
     left: Spacing.three,

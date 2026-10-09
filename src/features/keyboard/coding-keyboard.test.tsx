@@ -30,7 +30,11 @@ async function renderKeyboard(kind: 'bar' | 'keyboard') {
     return kind === 'bar' ? (
       <AccessoryBar {...props} onOpenKeyboard={() => switches.push('coding')} />
     ) : (
-      <CodingKeyboard {...props} onUseSystemKeyboard={() => switches.push('system')} />
+      <CodingKeyboard
+        {...props}
+        onHide={() => switches.push('hidden')}
+        onUseSystemKeyboard={() => switches.push('system')}
+      />
     );
   }
 
@@ -216,11 +220,31 @@ describe('CodingKeyboard', () => {
     ]);
   });
 
-  it('switches to the phone keyboard', async () => {
+  it('flicks the period key for # , and parentheses', async () => {
+    const { surface, sent } = await renderKeyboard('keyboard');
+    const rows = rowsFor('letters');
+
+    await swipe(surface, rows, 'Period');
+    await swipe(surface, rows, 'Period', { dy: -30 });
+    await swipe(surface, rows, 'Period', { dy: 30 });
+    await swipe(surface, rows, 'Period', { dx: -30 });
+    await swipe(surface, rows, 'Period', { dx: 30 });
+
+    expect(sent).toEqual([
+      { text: '.' },
+      { text: '#' },
+      { text: ',' },
+      { text: '(' },
+      { text: ')' },
+    ]);
+  });
+
+  it('hides, or flicks up for the phone keyboard', async () => {
     const { surface, switches } = await renderKeyboard('keyboard');
 
-    await swipe(surface, rowsFor('letters'), 'Phone keyboard');
+    await swipe(surface, rowsFor('letters'), 'Hide keyboard');
+    await swipe(surface, rowsFor('letters'), 'Hide keyboard', { dy: -30 });
 
-    expect(switches).toEqual(['system']);
+    expect(switches).toEqual(['hidden', 'system']);
   });
 });

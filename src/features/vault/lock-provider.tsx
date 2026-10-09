@@ -1,5 +1,6 @@
 import { createContext, use, useEffect, useState, type PropsWithChildren } from 'react';
 import { AppState, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 
 import { ThemedText } from '@/components/themed-text';
 import { Icon } from '@/components/ui/icon';
@@ -150,11 +151,13 @@ function LockScreen() {
   const theme = useTheme();
 
   return (
-    <View style={[StyleSheet.absoluteFill, styles.cover, { backgroundColor: theme.background }]}>
+    <KeyboardAvoidingView
+      behavior="padding"
+      style={[StyleSheet.absoluteFill, styles.cover, { backgroundColor: theme.background }]}>
       <View style={styles.panel}>
         <UnlockPanel title="Flare is locked" autoBiometrics />
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

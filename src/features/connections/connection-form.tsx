@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui/button';
@@ -70,215 +70,209 @@ export function ConnectionForm({
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <Screen scroll edges={['left', 'right', 'bottom']} style={styles.screen}>
-        <SegmentedControl
-          label="Connection type"
-          options={KIND_OPTIONS}
-          value={values.kind}
-          onChange={(kind) => {
-            setValues((current) => ({ ...current, kind }));
-            setErrors({});
-          }}
-        />
+    <Screen scroll edges={['left', 'right', 'bottom']} style={styles.screen}>
+      <SegmentedControl
+        label="Connection type"
+        options={KIND_OPTIONS}
+        value={values.kind}
+        onChange={(kind) => {
+          setValues((current) => ({ ...current, kind }));
+          setErrors({});
+        }}
+      />
 
-        {isSsh ? (
-          <>
-            <TextField
-              label="Host"
-              placeholder="lexbox, 100.101.102.103 or user@host"
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-              returnKeyType="next"
-              monospace
-              testID="connection-host"
-              {...field('host')}
-            />
+      {isSsh ? (
+        <>
+          <TextField
+            label="Host"
+            placeholder="lexbox, 100.101.102.103 or user@host"
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            returnKeyType="next"
+            monospace
+            testID="connection-host"
+            {...field('host')}
+          />
+          <TextField
+            label="Username"
+            placeholder="Your username on that computer"
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoComplete="username"
+            textContentType="username"
+            returnKeyType="next"
+            monospace
+            testID="connection-username"
+            {...field('username')}
+          />
+          <TextField
+            label="Port"
+            keyboardType="number-pad"
+            returnKeyType="next"
+            monospace
+            {...field('port')}
+          />
+        </>
+      ) : (
+        <>
+          <TextField
+            label="Address"
+            placeholder="https://devbox.tailnet.ts.net or 192.168.1.20:7681"
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            textContentType="URL"
+            returnKeyType="next"
+            monospace
+            testID="connection-address"
+            {...field('url')}
+          />
+          {warning ? <Callout tone="warning">{warning}</Callout> : null}
+          {secretsSupported ? (
             <TextField
               label="Username"
-              placeholder="Your username on that computer"
+              placeholder="Optional: the user from ttyd -c user:password"
               autoCapitalize="none"
               autoCorrect={false}
               autoComplete="username"
               textContentType="username"
               returnKeyType="next"
-              monospace
-              testID="connection-username"
               {...field('username')}
             />
-            <TextField
-              label="Port"
-              keyboardType="number-pad"
-              returnKeyType="next"
-              monospace
-              {...field('port')}
-            />
-          </>
-        ) : (
-          <>
-            <TextField
-              label="Address"
-              placeholder="https://devbox.tailnet.ts.net or 192.168.1.20:7681"
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-              textContentType="URL"
-              returnKeyType="next"
-              monospace
-              testID="connection-address"
-              {...field('url')}
-            />
-            {warning ? <Callout tone="warning">{warning}</Callout> : null}
-            {secretsSupported ? (
-              <TextField
-                label="Username"
-                placeholder="Optional: the user from ttyd -c user:password"
-                autoCapitalize="none"
-                autoCorrect={false}
-                autoComplete="username"
-                textContentType="username"
-                returnKeyType="next"
-                {...field('username')}
-              />
-            ) : null}
-          </>
-        )}
+          ) : null}
+        </>
+      )}
 
-        {secretsSupported ? (
-          <TextField
-            label="Password"
-            placeholder={isSsh ? 'Optional: leave empty to be asked each time' : undefined}
-            secureTextEntry
-            autoCapitalize="none"
-            autoComplete="password"
-            textContentType="password"
-            returnKeyType="done"
-            onSubmitEditing={submit}
-            {...field('password')}
+      {secretsSupported ? (
+        <TextField
+          label="Password"
+          placeholder={isSsh ? 'Optional: leave empty to be asked each time' : undefined}
+          secureTextEntry
+          autoCapitalize="none"
+          autoComplete="password"
+          textContentType="password"
+          returnKeyType="done"
+          onSubmitEditing={submit}
+          {...field('password')}
+        />
+      ) : null}
+
+      <TextField
+        label="Name"
+        placeholder="Optional, e.g. Lexbox"
+        returnKeyType="done"
+        testID="connection-name"
+        {...field('name')}
+      />
+
+      {!secretsSupported ? (
+        <Callout>
+          {isSsh
+            ? "SSH runs in the Android and iOS apps: browsers can't open SSH connections. You can still save it here."
+            : "Browsers can't send a ttyd username and password. Use the Android or iOS app for hosts started with -c, or put ttyd behind a sign-in proxy."}
+        </Callout>
+      ) : null}
+
+      {groups.length ? (
+        <View style={styles.field}>
+          <ThemedText type="eyebrow" themeColor="textSecondary">
+            Group
+          </ThemedText>
+          <View role="radiogroup" aria-label="Group" style={styles.chips}>
+            {[{ id: '', name: 'None' }, ...groups].map((option) => {
+              const selected = option.id === values.groupId;
+              return (
+                <Pressable
+                  key={option.id}
+                  role="radio"
+                  aria-checked={selected}
+                  aria-label={option.name}
+                  onPress={() => setValues((current) => ({ ...current, groupId: option.id }))}
+                  style={[
+                    styles.chip,
+                    {
+                      backgroundColor: selected ? theme.primaryMuted : theme.backgroundElement,
+                      borderColor: selected ? theme.primary : theme.border,
+                    },
+                  ]}>
+                  <Text style={[styles.chipText, { color: selected ? theme.primary : theme.text }]}>
+                    {option.name}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      ) : null}
+
+      <Section title="Access">
+        <Card flush>
+          <ToggleRow
+            title="Require unlock"
+            caption={
+              group?.protected
+                ? `Its group, ${group.name}, already asks for the app lock`
+                : lock.settings
+                  ? 'Ask for the app lock each time you come back to it'
+                  : lock.supported
+                    ? 'Turn on the app lock in Settings first'
+                    : 'Needs the app lock in the Android and iOS apps'
+            }
+            value={values.protected || group?.protected === true}
+            disabled={!lock.settings || group?.protected === true}
+            onChange={(on) => setValues((current) => ({ ...current, protected: on }))}
+          />
+          <Divider inset={Spacing.three} />
+          <ToggleRow
+            title="Stay connected when you leave"
+            caption={
+              values.keepAlive
+                ? 'Sessions keep running in the background'
+                : 'Sessions disconnect when you leave them or the app'
+            }
+            value={values.keepAlive}
+            onChange={(on) => setValues((current) => ({ ...current, keepAlive: on }))}
+          />
+        </Card>
+      </Section>
+
+      {isSsh && hostKey ? (
+        <Card>
+          <View style={styles.inline}>
+            <Icon name="key" size={16} color="success" />
+            <ThemedText type="smallBold">Trusted host key</ThemedText>
+          </View>
+          <ThemedText
+            type="code"
+            selectable
+            style={[styles.well, { backgroundColor: theme.backgroundSelected }]}>
+            {hostKey.fingerprint}
+          </ThemedText>
+          <Button
+            title="Forget host key"
+            variant="secondary"
+            size="small"
+            onPress={hostKey.onForget}
+          />
+        </Card>
+      ) : null}
+
+      <View style={styles.actions}>
+        <Button title={submitLabel} onPress={submit} testID="connection-save" />
+        {onDelete ? (
+          <Button
+            title={confirmingDelete ? 'Tap again to delete' : 'Delete connection'}
+            variant="danger"
+            onPress={() => (confirmingDelete ? onDelete() : setConfirmingDelete(true))}
           />
         ) : null}
-
-        <TextField
-          label="Name"
-          placeholder="Optional, e.g. Lexbox"
-          returnKeyType="done"
-          testID="connection-name"
-          {...field('name')}
-        />
-
-        {!secretsSupported ? (
-          <Callout>
-            {isSsh
-              ? "SSH runs in the Android and iOS apps: browsers can't open SSH connections. You can still save it here."
-              : "Browsers can't send a ttyd username and password. Use the Android or iOS app for hosts started with -c, or put ttyd behind a sign-in proxy."}
-          </Callout>
-        ) : null}
-
-        {groups.length ? (
-          <View style={styles.field}>
-            <ThemedText type="eyebrow" themeColor="textSecondary">
-              Group
-            </ThemedText>
-            <View role="radiogroup" aria-label="Group" style={styles.chips}>
-              {[{ id: '', name: 'None' }, ...groups].map((option) => {
-                const selected = option.id === values.groupId;
-                return (
-                  <Pressable
-                    key={option.id}
-                    role="radio"
-                    aria-checked={selected}
-                    aria-label={option.name}
-                    onPress={() => setValues((current) => ({ ...current, groupId: option.id }))}
-                    style={[
-                      styles.chip,
-                      {
-                        backgroundColor: selected ? theme.primaryMuted : theme.backgroundElement,
-                        borderColor: selected ? theme.primary : theme.border,
-                      },
-                    ]}>
-                    <Text
-                      style={[styles.chipText, { color: selected ? theme.primary : theme.text }]}>
-                      {option.name}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-        ) : null}
-
-        <Section title="Access">
-          <Card flush>
-            <ToggleRow
-              title="Require unlock"
-              caption={
-                group?.protected
-                  ? `Its group, ${group.name}, already asks for the app lock`
-                  : lock.settings
-                    ? 'Ask for the app lock each time you come back to it'
-                    : lock.supported
-                      ? 'Turn on the app lock in Settings first'
-                      : 'Needs the app lock in the Android and iOS apps'
-              }
-              value={values.protected || group?.protected === true}
-              disabled={!lock.settings || group?.protected === true}
-              onChange={(on) => setValues((current) => ({ ...current, protected: on }))}
-            />
-            <Divider inset={Spacing.three} />
-            <ToggleRow
-              title="Stay connected when you leave"
-              caption={
-                values.keepAlive
-                  ? 'Sessions keep running in the background'
-                  : 'Sessions disconnect when you leave them or the app'
-              }
-              value={values.keepAlive}
-              onChange={(on) => setValues((current) => ({ ...current, keepAlive: on }))}
-            />
-          </Card>
-        </Section>
-
-        {isSsh && hostKey ? (
-          <Card>
-            <View style={styles.inline}>
-              <Icon name="key" size={16} color="success" />
-              <ThemedText type="smallBold">Trusted host key</ThemedText>
-            </View>
-            <ThemedText
-              type="code"
-              selectable
-              style={[styles.well, { backgroundColor: theme.backgroundSelected }]}>
-              {hostKey.fingerprint}
-            </ThemedText>
-            <Button
-              title="Forget host key"
-              variant="secondary"
-              size="small"
-              onPress={hostKey.onForget}
-            />
-          </Card>
-        ) : null}
-
-        <View style={styles.actions}>
-          <Button title={submitLabel} onPress={submit} testID="connection-save" />
-          {onDelete ? (
-            <Button
-              title={confirmingDelete ? 'Tap again to delete' : 'Delete connection'}
-              variant="danger"
-              onPress={() => (confirmingDelete ? onDelete() : setConfirmingDelete(true))}
-            />
-          ) : null}
-        </View>
-      </Screen>
-    </KeyboardAvoidingView>
+      </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
   screen: { gap: Spacing.three + 4 },
   inline: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   well: {

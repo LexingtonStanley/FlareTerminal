@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -39,51 +39,46 @@ export function GroupForm({
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <Screen scroll edges={['left', 'right', 'bottom']} style={styles.screen}>
-        <TextField
-          label="Name"
-          placeholder="e.g. Work, Home lab, Production"
-          value={values.name}
-          onChangeText={(name) => setValues((current) => ({ ...current, name }))}
-          error={error}
-          returnKeyType="done"
-          onSubmitEditing={submit}
+    <Screen scroll edges={['left', 'right', 'bottom']} style={styles.screen}>
+      <TextField
+        label="Name"
+        placeholder="e.g. Work, Home lab, Production"
+        value={values.name}
+        onChangeText={(name) => setValues((current) => ({ ...current, name }))}
+        error={error}
+        returnKeyType="done"
+        onSubmitEditing={submit}
+      />
+      <Card flush>
+        <ToggleRow
+          title="Require unlock"
+          caption={
+            lock.settings
+              ? 'Ask for the app lock each time you come back to any of its sessions'
+              : lock.supported
+                ? 'Turn on the app lock in Settings first'
+                : 'Needs the app lock in the Android and iOS apps'
+          }
+          value={values.protected}
+          disabled={!lock.settings && !values.protected}
+          onChange={(on) => setValues((current) => ({ ...current, protected: on }))}
         />
-        <Card flush>
-          <ToggleRow
-            title="Require unlock"
-            caption={
-              lock.settings
-                ? 'Ask for the app lock each time you come back to any of its sessions'
-                : lock.supported
-                  ? 'Turn on the app lock in Settings first'
-                  : 'Needs the app lock in the Android and iOS apps'
-            }
-            value={values.protected}
-            disabled={!lock.settings && !values.protected}
-            onChange={(on) => setValues((current) => ({ ...current, protected: on }))}
+      </Card>
+      <View style={styles.actions}>
+        <Button title={submitLabel} onPress={submit} />
+        {onDelete ? (
+          <Button
+            title={confirmingDelete ? 'Tap again to delete' : 'Delete group'}
+            variant="danger"
+            onPress={() => (confirmingDelete ? onDelete() : setConfirmingDelete(true))}
           />
-        </Card>
-        <View style={styles.actions}>
-          <Button title={submitLabel} onPress={submit} />
-          {onDelete ? (
-            <Button
-              title={confirmingDelete ? 'Tap again to delete' : 'Delete group'}
-              variant="danger"
-              onPress={() => (confirmingDelete ? onDelete() : setConfirmingDelete(true))}
-            />
-          ) : null}
-        </View>
-      </Screen>
-    </KeyboardAvoidingView>
+        ) : null}
+      </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
   screen: { gap: Spacing.three + 4 },
   actions: { gap: Spacing.two + 2, marginTop: Spacing.two },
 });

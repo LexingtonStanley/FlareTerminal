@@ -4,6 +4,7 @@ import { ThemedText } from '@/components/themed-text';
 import { Screen } from '@/components/ui/screen';
 import { useConnections } from '@/features/connections/connections-provider';
 import { ShortcutForm } from '@/features/shortcuts/shortcut-form';
+import { groupOptions } from '@/features/shortcuts/shortcuts';
 import { useShortcuts } from '@/features/shortcuts/shortcuts-provider';
 
 export default function EditShortcutScreen() {
@@ -30,6 +31,7 @@ export default function EditShortcutScreen() {
   return (
     <ShortcutForm
       connections={connections}
+      groups={groupOptions(shortcuts)}
       initial={shortcut}
       onSubmit={(input) => {
         save(input, shortcut.id);

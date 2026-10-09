@@ -1,6 +1,6 @@
 import { applyModifiers, type SpecialKey } from '@/features/terminal/keys';
 
-import type { KeyAction, LayerId } from './layout';
+import type { KeyAction, KeyboardTarget, LayerId } from './layout';
 import {
   DOUBLE_TAP_MS,
   lockModifier,
@@ -39,7 +39,7 @@ export type Effect =
   | { type: 'text'; text: string }
   | { type: 'key'; key: SpecialKey }
   | { type: 'modifiers'; modifiers: ModifierState }
-  | { type: 'switch'; to: 'coding' | 'system' };
+  | { type: 'switch'; to: KeyboardTarget };
 
 export type Resolution = { keyboard: KeyboardState; effects: Effect[]; locked: boolean };
 

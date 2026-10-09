@@ -13,9 +13,11 @@ web build), started from the RapidAppToolkit template.
   of a session or from Home. Leaving a session doesn't close it, and coming back replays its
   screen exactly. On Android they stay connected while you use other apps, and a dropped
   connection reconnects by itself.
-- **Shortcuts.** One tap connects and runs a command, e.g. Claude in tmux
-  (`tmux new -A -s claude claude`) or zellij (`zellij attach -c claude -- claude`), optionally
-  in a folder. Presets for Claude, `claude --continue` and plain tmux.
+- **Shortcuts.** One tap connects and runs a command. An agent shortcut takes a folder, a
+  name, the agent (Claude Code, Codex, Hermes or pi), a tmux or zellij session and whether to
+  skip permission prompts, and writes the command, which stays yours to edit. Any other
+  command works too (presets for tmux, zellij, `git pull`, `df -h`, htop). Home shows them in
+  groups such as Agents and Maintenance.
 - **Agent alerts.** When an agent rings the bell or sends a terminal notification (OSC 9, 777
   or 99), the app flags the session, shows a banner on other screens, and posts a phone
   notification while the app is in the background.
@@ -97,7 +99,22 @@ there sessions drop and reconnect when you come back.
 
 **Keep agents running.** If a connection drops (a network change, the phone out of signal),
 the app reconnects by itself, and a shortcut's command runs again: run agents inside tmux or
-zellij (the presets do) and that reattaches you to the same agent, still running.
+zellij (agent shortcuts do) and that reattaches you to the same agent, still running.
+
+**Agent shortcuts.** The session is named after the agent, so a second tap attaches instead of
+starting another. Janus, Claude Code in `~/agents/janus`, skipping permission prompts:
+
+```bash
+# tmux
+cd ~/agents/janus && tmux new -A -s Janus claude --dangerously-skip-permissions
+# zellij: a layout that runs the agent (flare- prefixed, beside your own), then attach or start
+mkdir -p ~/.config/zellij/layouts && echo 'layout { pane command="claude" { args "--dangerously-skip-permissions"; }; }' > ~/.config/zellij/layouts/flare-janus.kdl && cd ~/agents/janus && if zellij ls -s 2>/dev/null | grep -qx Janus; then zellij attach Janus; else zellij -s Janus -n flare-janus; fi
+```
+
+The skip flags are Claude Code's `--dangerously-skip-permissions`, Codex's
+`--dangerously-bypass-approvals-and-sandbox` and Hermes's `--yolo`; pi never asks. Commands use
+bash/zsh syntax. Edit one by hand and it's kept as you wrote it, until you choose "Use the
+generated command".
 
 **Alerts from Claude Code.** Out of the box, Claude Code only sends alerts to the terminals it
 recognises (iTerm2, Ghostty, Kitty), and it can't tell what's on the other end of SSH. Tell it
