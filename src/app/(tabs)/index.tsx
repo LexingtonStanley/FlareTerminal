@@ -17,7 +17,8 @@ import {
   useSessions,
   useStartSession,
 } from '@/features/sessions/sessions-provider';
-import { startupCommand } from '@/features/shortcuts/shortcuts';
+import { NewShortcutTile, ShortcutTile } from '@/features/shortcuts/shortcut-tile';
+import { groupShortcuts, startupCommand, type Shortcut } from '@/features/shortcuts/shortcuts';
 import { useShortcuts } from '@/features/shortcuts/shortcuts-provider';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -33,6 +34,23 @@ export default function HomeScreen() {
   const openSession = (id: string) => router.push({ pathname: '/session/[id]', params: { id } });
   const start = (target: SessionTarget) => openSession(startSession(target));
   const waiting = sessions.filter((session) => session.attention).length;
+  const { groups, ungrouped } = groupShortcuts(shortcuts);
+
+  const tile = (shortcut: Shortcut) => (
+    <ShortcutTile
+      key={shortcut.id}
+      shortcut={shortcut}
+      connectionName={connections.find(({ id }) => id === shortcut.connectionId)?.name}
+      onRun={() =>
+        start({
+          connectionId: shortcut.connectionId,
+          name: shortcut.name,
+          command: startupCommand(shortcut),
+        })
+      }
+      onEdit={() => router.push({ pathname: '/shortcuts/[id]', params: { id: shortcut.id } })}
+    />
+  );
 
   return (
     <Screen scroll style={styles.screen}>
@@ -107,85 +125,24 @@ export default function HomeScreen() {
       ) : null}
 
       {connections.length ? (
-        <Section title="Shortcuts">
-          <View style={styles.grid}>
-            {shortcuts.map((shortcut) => {
-              const connection = connections.find(({ id }) => id === shortcut.connectionId);
-              return (
-                <View
-                  key={shortcut.id}
-                  style={[
-                    styles.tile,
-                    { backgroundColor: theme.backgroundElement, borderColor: theme.border },
-                  ]}>
-                  <Pressable
-                    role="button"
-                    aria-label={`Run ${shortcut.name}`}
-                    onPress={() =>
-                      start({
-                        connectionId: shortcut.connectionId,
-                        name: shortcut.name,
-                        command: startupCommand(shortcut),
-                      })
-                    }
-                    style={({ pressed }) => [
-                      styles.tileMain,
-                      pressed && { backgroundColor: theme.backgroundSelected },
-                    ]}>
-                    <View style={[styles.runBadge, { backgroundColor: theme.primaryMuted }]}>
-                      <Icon name="run" size={16} color="primary" />
-                    </View>
-                    <View style={styles.tileText}>
-                      <ThemedText type="headline" numberOfLines={1}>
-                        {shortcut.name}
-                      </ThemedText>
-                      <ThemedText type="caption" themeColor="textSecondary" numberOfLines={1}>
-                        {connection?.name ?? 'Missing connection'}
-                      </ThemedText>
-                    </View>
-                    <ThemedText
-                      type="code"
-                      themeColor="textSecondary"
-                      numberOfLines={1}
-                      style={styles.tileCommand}>
-                      {shortcut.command}
-                    </ThemedText>
-                  </Pressable>
-                  <View style={styles.tileEdit}>
-                    <IconButton
-                      icon="edit"
-                      size={16}
-                      label={`Edit shortcut ${shortcut.name}`}
-                      onPress={() =>
-                        router.push({ pathname: '/shortcuts/[id]', params: { id: shortcut.id } })
-                      }
-                    />
-                  </View>
-                </View>
-              );
-            })}
-            <Pressable
-              role="button"
-              aria-label="New shortcut"
-              onPress={() => router.push('/shortcuts/new')}
-              style={({ pressed }) => [
-                styles.tile,
-                styles.addTile,
-                {
-                  borderColor: theme.border,
-                  backgroundColor: pressed ? theme.backgroundSelected : 'transparent',
-                },
-              ]}>
-              <View style={[styles.addBadge, { borderColor: theme.border }]}>
-                <Icon name="add" size={18} color="text" />
-              </View>
-              <ThemedText type="smallBold">New shortcut</ThemedText>
-              <ThemedText type="caption" themeColor="textSecondary" style={styles.center}>
-                {shortcuts.length ? 'One tap to a command' : 'e.g. Claude in tmux, one tap'}
-              </ThemedText>
-            </Pressable>
-          </View>
-        </Section>
+        <>
+          {groups.map((group) => (
+            <Section key={group.name} title={group.name}>
+              <View style={styles.grid}>{group.shortcuts.map(tile)}</View>
+            </Section>
+          ))}
+          <Section title="Shortcuts">
+            <View style={styles.grid}>
+              {ungrouped.map(tile)}
+              <NewShortcutTile
+                onPress={() => router.push('/shortcuts/new')}
+                hint={
+                  shortcuts.length ? 'An agent or any command' : 'e.g. Claude Code in tmux, one tap'
+                }
+              />
+            </View>
+          </Section>
+        </>
       ) : null}
 
       <Section title="Connections">
@@ -307,43 +264,6 @@ const styles = StyleSheet.create({
   inline: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one },
   shrink: { flexShrink: 1 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two + 2 },
-  tile: {
-    flexBasis: '46%',
-    flexGrow: 1,
-    minHeight: 132,
-    borderRadius: Radius.large,
-    borderWidth: StyleSheet.hairlineWidth,
-    overflow: 'hidden',
-  },
-  tileMain: { flex: 1, gap: Spacing.two + 2, padding: Spacing.three - 2 },
-  runBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: Radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tileText: { gap: Spacing.half },
-  tileCommand: { fontSize: 12, marginTop: 'auto' },
-  tileEdit: { position: 'absolute', top: Spacing.one, right: Spacing.one },
-  addTile: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.one + 2,
-    padding: Spacing.three,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-  },
-  addBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: Radius.pill,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Spacing.half,
-  },
-  center: { textAlign: 'center' },
   monogram: {
     width: 40,
     height: 40,

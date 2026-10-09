@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { StyleSheet, TextInput, View, type TextInputProps } from 'react-native';
+import { useLayoutEffect, useRef, useState } from 'react';
+import { Platform, StyleSheet, TextInput, View, type TextInputProps } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { mono, Radius, sans, Spacing } from '@/constants/theme';
@@ -28,6 +28,16 @@ export function TextField({
 }: TextFieldProps) {
   const theme = useTheme();
   const [focused, setFocused] = useState(false);
+  const input = useRef<TextInput>(null);
+  const { multiline, value } = inputProps;
+
+  // Android and iOS grow a multiline field with its text; a browser's textarea doesn't.
+  useLayoutEffect(() => {
+    const node = input.current as unknown as HTMLTextAreaElement | null;
+    if (Platform.OS !== 'web' || !multiline || !node?.style) return;
+    node.style.height = 'auto';
+    node.style.height = `${node.scrollHeight + 2}px`;
+  }, [multiline, value]);
 
   return (
     <View style={styles.container}>
@@ -35,6 +45,7 @@ export function TextField({
         {label}
       </ThemedText>
       <TextInput
+        ref={input}
         aria-label={label}
         placeholderTextColor={theme.textSecondary}
         cursorColor={theme.primary}
@@ -50,6 +61,7 @@ export function TextField({
         style={[
           styles.input,
           monospace ? styles.mono : styles.sans,
+          multiline && styles.multiline,
           {
             color: theme.text,
             backgroundColor: theme.backgroundElement,
@@ -88,6 +100,7 @@ const styles = StyleSheet.create({
   },
   sans: sans(400),
   mono: { ...mono(400), fontSize: 15 },
+  multiline: { paddingVertical: Spacing.three - 3, lineHeight: 21, textAlignVertical: 'top' },
   message: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one + 2 },
   messageText: { flexShrink: 1 },
 });

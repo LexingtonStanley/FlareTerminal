@@ -2,7 +2,13 @@ import { createContext, use, useState, type PropsWithChildren } from 'react';
 
 import { readJson, writeJson } from '@/lib/storage';
 
-import { newShortcutId, type Shortcut, type ShortcutInput } from './shortcuts';
+import {
+  migrateShortcut,
+  newShortcutId,
+  toShortcut,
+  type Shortcut,
+  type ShortcutInput,
+} from './shortcuts';
 
 const STORAGE_KEY = 'flare.shortcuts.v1';
 
@@ -17,8 +23,10 @@ type ShortcutsContextValue = {
 const ShortcutsContext = createContext<ShortcutsContextValue | null>(null);
 
 export function ShortcutsProvider({ children }: PropsWithChildren) {
-  const [shortcuts, setShortcuts] = useState<Shortcut[]>(
-    () => readJson<Shortcut[]>(STORAGE_KEY) ?? []
+  const [shortcuts, setShortcuts] = useState<Shortcut[]>(() =>
+    (readJson<unknown[]>(STORAGE_KEY) ?? [])
+      .map(migrateShortcut)
+      .filter((shortcut) => shortcut !== null)
   );
 
   function commit(next: Shortcut[]) {
@@ -29,13 +37,7 @@ export function ShortcutsProvider({ children }: PropsWithChildren) {
   const value: ShortcutsContextValue = {
     shortcuts,
     save(input, id) {
-      const shortcut: Shortcut = {
-        id: id ?? newShortcutId(),
-        name: input.name.trim(),
-        connectionId: input.connectionId,
-        command: input.command.trim(),
-        directory: input.directory.trim(),
-      };
+      const shortcut = toShortcut(input, id ?? newShortcutId());
       commit(
         id
           ? shortcuts.map((existing) => (existing.id === id ? shortcut : existing))

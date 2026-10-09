@@ -136,7 +136,9 @@ src/features/sessions/   SessionManager (every open session, headless xterm), al
                          useSessionView, session strip, status, attention banner
 src/features/keyboard/   Accessory bar and coding keyboard: layout, gestures, touch tracking,
                          modifiers, haptics (docs/keyboard.md explains the design)
-src/features/shortcuts/  Shortcut type, presets (Claude in tmux/zellij), provider, form
+src/features/shortcuts/  Shortcut type and groups, agent-command.ts (the command for an agent:
+                         Claude Code/Codex/Hermes/pi in tmux/zellij), shell quoting, provider,
+                         form, Home tile
 src/features/notifications/ Local notifications for agent alerts (no-op on web)
 src/features/connections/ Connection type (SSH or ttyd), validation, ConnectionsProvider, form
 src/features/settings/   PreferencesProvider (font size)
