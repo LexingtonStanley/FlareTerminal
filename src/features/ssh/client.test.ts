@@ -345,6 +345,40 @@ describe('SshClient against the ssh2 server', () => {
     service.close();
   });
 
+  it('runs a command alongside the shell (exec), with its input, output and end', async () => {
+    const server = await startServer();
+    const { client } = await connect(server.port, { password: 'correct-horse' });
+    await client.handshake();
+    await client.authenticate();
+    const { channel: shellChannel, output } = await shell(client);
+
+    const command = await client.openExec('read name; echo "hello $name"; echo oops >&2; exit 3');
+    let received = '';
+    let ended = false;
+    command.onData = (data) => (received += fromUtf8(data));
+    command.onEof = () => (ended = true);
+    let closed = false;
+    command.onClose = () => (closed = true);
+    command.write(utf8('ada\n'));
+
+    await waitFor(() => closed);
+    expect(received).toBe('hello ada\noops\n');
+    expect(ended).toBe(true);
+    expect(command.exitStatus).toBe(3);
+    expect(server.commands).toEqual(['read name; echo "hello $name"; echo oops >&2; exit 3']);
+    shellChannel.write(utf8('still here\n'));
+    await waitFor(() => output.text.includes('echo:still here'));
+  });
+
+  it('says when the host won’t run a command', async () => {
+    const server = await startServer({ commands: false });
+    const { client } = await connect(server.port, { password: 'correct-horse' });
+    await client.handshake();
+    await client.authenticate();
+
+    await expect(client.openExec('uptime')).rejects.toThrow('The host refused to run a command');
+  });
+
   it('says why a port can’t be forwarded', async () => {
     const refusing = await startServer();
     const { client } = await connect(refusing.port, { password: 'correct-horse' });

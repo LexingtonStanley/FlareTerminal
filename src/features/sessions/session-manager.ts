@@ -392,6 +392,14 @@ class Session {
     return this.transport.openTunnel(port, events);
   }
 
+  /** A command run through the session's current connection, beside the terminal. */
+  runCommand(command: string, events: TunnelEvents): Promise<Tunnel> {
+    if (this.snapshot.status.state !== 'connected' || !this.transport?.runCommand) {
+      return Promise.reject(new Error('Not connected'));
+    }
+    return this.transport.runCommand(command, events);
+  }
+
   /** Reconnects now, e.g. from the Reconnect button: a fresh run of retries if it fails. */
   reconnect() {
     this.retries = 0;
@@ -558,6 +566,14 @@ export class SessionManager {
   openTunnel(id: string, port: number, events: TunnelEvents): Promise<Tunnel> {
     return (
       this.sessions.get(id)?.openTunnel(port, events) ??
+      Promise.reject(new Error('The session was closed'))
+    );
+  }
+
+  /** Runs `command` on the session's host (see TerminalTransport.runCommand). */
+  runCommand(id: string, command: string, events: TunnelEvents): Promise<Tunnel> {
+    return (
+      this.sessions.get(id)?.runCommand(command, events) ??
       Promise.reject(new Error('The session was closed'))
     );
   }

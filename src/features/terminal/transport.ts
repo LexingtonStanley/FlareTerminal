@@ -52,4 +52,10 @@ export interface TerminalTransport {
    * forwarding). Missing when the transport can't; rejects while it isn't connected.
    */
   openTunnel?(port: number, events: TunnelEvents): Promise<Tunnel>;
+  /**
+   * Runs `command` on the host alongside the terminal, without one (`ssh host command`):
+   * its input and output as a tunnel, which ends when the command does. Missing when the
+   * transport can't; rejects while it isn't connected.
+   */
+  runCommand?(command: string, events: TunnelEvents): Promise<Tunnel>;
 }

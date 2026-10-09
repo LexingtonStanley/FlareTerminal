@@ -13,6 +13,7 @@ import { Screen } from '@/components/ui/screen';
 import { IconButton } from '@/components/ui/icon-button';
 import { Spacing } from '@/constants/theme';
 import { useConnections } from '@/features/connections/connections-provider';
+import { SessionHealthStrip } from '@/features/health/health-strip';
 import { parseLocalUrl, type LocalAddress } from '@/features/preview/local-urls';
 import { SessionGate } from '@/features/sessions/session-gate';
 import { StatusBadge } from '@/features/sessions/session-status';
@@ -117,6 +118,7 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
         }}
       />
       <SessionStrip currentId={session.id} />
+      <SessionHealthStrip session={session} />
       <KeyboardAvoidingView
         style={styles.flex}
         // keyboard-controller's version, so Android's edge-to-edge layout avoids it too.

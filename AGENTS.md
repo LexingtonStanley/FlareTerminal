@@ -157,6 +157,8 @@ src/features/preview/    Dev server preview: local-urls.ts (localhost links and 
                          forward.ts (ssh -L: a phone port whose connections are SSH tunnels),
                          local-server.ts (listens on 127.0.0.1; .web refuses), use-port-forward,
                          port picker, browser (react-native-webview)
+src/features/health/     Host health strip: health.ts (the sh script the session runs with exec,
+                         and its parser), use-host-health, the strip
 src/features/notifications/ Local notifications for agent alerts, with Approve/Deny actions (no-op
                          on web)
 src/features/connections/ Connection type (SSH or ttyd), validation, ConnectionsProvider, form
@@ -169,8 +171,8 @@ src/lib/                 storage.ts (JSON in localStorage / SQLite), secrets.ts 
                          vault-key.ts (seals secrets while an app lock is set)
 src/test-utils/          Jest helpers: renderApp, memory-storage, fake-terminal-view, fake-transport,
                          fake-notify, fake-local-server (the preview's port), node-listen (it over
-                         node:net), ssh-server (a real SSH server from ssh2, with forwarding),
-                         ssh-keys (OpenSSH key files written by ssh2, so no key is checked in)
+                         node:net), ssh-server (a real SSH server from ssh2, with forwarding and
+                         exec), ssh-keys (OpenSSH key files written by ssh2, so no key is checked in)
 __tests__/               Router-level Jest tests (render the real src/app tree)
 e2e/web/                 Playwright specs; fake-ttyd.ts plays a ttyd host via page.routeWebSocket
 .maestro/                Device flows, run on EAS

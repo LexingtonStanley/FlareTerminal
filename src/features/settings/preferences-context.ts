@@ -14,12 +14,15 @@ export type Preferences = {
   /** The app's theme, which sets the terminal's colours too. */
   appTheme: AppThemeId;
   appearance: Appearance;
+  /** The load, memory and disk strip above SSH sessions. */
+  hostHealth: boolean;
 };
 
 export type PreferencesContextValue = Preferences & {
   setAppTheme(theme: AppThemeId): void;
   setAppearance(appearance: Appearance): void;
   setFontSize(size: number): void;
+  setHostHealth(on: boolean): void;
 };
 
 export const PreferencesContext = createContext<PreferencesContextValue | null>(null);
