@@ -86,15 +86,16 @@ export function loadKey(id: string): UserKey | null {
 
 /**
  * The keys a connection offers, in order. Its chosen key alone, none for NO_KEY, and every
- * key (the app's first) when it has no choice or its key was deleted.
+ * key (the app's first) when it has no choice or its key was deleted. A chosen key that is
+ * still listed but can't be read is offered as nothing, never swapped for the others.
  */
 export function keysForConnection(keyId: string | null | undefined): UserKey[] {
   if (keyId === NO_KEY) return [];
   const chosen = keyId ? loadKey(keyId) : null;
   if (chosen) return [chosen];
-  return [APP_KEY_ID, ...readImportedKeys().map(({ id }) => id)]
-    .map(loadKey)
-    .filter((key) => key !== null);
+  const ids = [APP_KEY_ID, ...readImportedKeys().map(({ id }) => id)];
+  if (keyId && keyId !== APP_KEY_ID && ids.includes(keyId)) return [];
+  return ids.map(loadKey).filter((key) => key !== null);
 }
 
 /** The shell command that authorizes a public key on a computer. */

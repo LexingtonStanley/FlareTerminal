@@ -1,4 +1,4 @@
-import { bcryptPbkdf } from './bcrypt-pbkdf';
+import { AbortError, bcryptPbkdf } from './bcrypt-pbkdf';
 
 const bytes = (text: string) => new TextEncoder().encode(text);
 const hex = (data: Uint8Array) => Buffer.from(data).toString('hex');
@@ -27,7 +27,9 @@ describe('bcryptPbkdf', () => {
 
   it('reports each round as it goes', async () => {
     const progress: [number, number][] = [];
-    await bcryptPbkdf(bytes('p'), bytes('s'), 3, 48, (done, total) => progress.push([done, total]));
+    await bcryptPbkdf(bytes('p'), bytes('s'), 3, 48, {
+      onProgress: (done, total) => progress.push([done, total]),
+    });
     expect(progress).toEqual([
       [1, 6],
       [2, 6],
@@ -36,6 +38,18 @@ describe('bcryptPbkdf', () => {
       [5, 6],
       [6, 6],
     ]);
+  });
+
+  it('stops between rounds when aborted', async () => {
+    const controller = new AbortController();
+    const onProgress = jest.fn((done: number) => {
+      if (done === 2) controller.abort();
+    });
+
+    await expect(
+      bcryptPbkdf(bytes('p'), bytes('s'), 16, 48, { onProgress, signal: controller.signal })
+    ).rejects.toThrow(AbortError);
+    expect(onProgress).toHaveBeenCalledTimes(2);
   });
 
   it('refuses parameters OpenSSH refuses', async () => {

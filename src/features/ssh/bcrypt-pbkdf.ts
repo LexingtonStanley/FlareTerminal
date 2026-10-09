@@ -239,16 +239,28 @@ function bcryptHash(sha2pass: Uint8Array, sha2salt: Uint8Array): Uint8Array {
 
 const pause = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
-/**
- * Derives `length` bytes from a passphrase, as OpenSSH does for key files. `onProgress`
- * hears how many of the rounds are done.
- */
+/** What an aborted derivation rejects with (Hermes has no DOMException). */
+export class AbortError extends Error {
+  name = 'AbortError';
+  constructor() {
+    super('Aborted');
+  }
+}
+
+export type BcryptOptions = {
+  /** Hears how many of the rounds are done. */
+  onProgress?: (done: number, total: number) => void;
+  /** Stops the work between rounds, rejecting with an AbortError. */
+  signal?: AbortSignal;
+};
+
+/** Derives `length` bytes from a passphrase, as OpenSSH does for key files. */
 export async function bcryptPbkdf(
   passphrase: Uint8Array,
   salt: Uint8Array,
   rounds: number,
   length: number,
-  onProgress?: (done: number, total: number) => void
+  { onProgress, signal }: BcryptOptions = {}
 ): Promise<Uint8Array> {
   const hashSize = HASH_WORDS * 4;
   if (rounds < 1 || !passphrase.length || !salt.length || length < 1 || length > hashSize ** 2) {
@@ -272,6 +284,7 @@ export async function bcryptPbkdf(
     onProgress?.(++done, total);
     for (let round = 1; round < rounds; round++) {
       await pause();
+      if (signal?.aborted) throw new AbortError();
       block = bcryptHash(sha2pass, sha512(block));
       for (let i = 0; i < out.length; i++) out[i] ^= block[i];
       onProgress?.(++done, total);

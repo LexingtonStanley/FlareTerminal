@@ -5,6 +5,7 @@
 // and of bcrypt_pbkdf), read back by ours.
 import { generateTestKey, type TestKeyType } from '@/test-utils/ssh-keys';
 
+import { AbortError } from './bcrypt-pbkdf';
 import { fromBase64, SshReader, SshWriter, toBase64 } from './bytes';
 import { importPrivateKey, KeyImportError, needsPassphrase } from './private-key';
 import { publicKeyLine, readPrivateFields, writePrivateFields } from './user-key';
@@ -50,10 +51,20 @@ describe('importPrivateKey', () => {
     const file = generateTestKey('ed25519', { passphrase: 'pw', rounds: 3 });
     const progress = jest.fn();
 
-    await importPrivateKey(file.private, 'pw', progress);
+    await importPrivateKey(file.private, 'pw', { onProgress: progress });
 
     // aes256-ctr needs 48 bytes: two blocks of three rounds.
     expect(progress).toHaveBeenLastCalledWith(6, 6);
+  });
+
+  it('stops checking the passphrase when aborted', async () => {
+    const file = generateTestKey('ed25519', { passphrase: 'pw', rounds: 3 });
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      importPrivateKey(file.private, 'pw', { signal: controller.signal })
+    ).rejects.toThrow(AbortError);
   });
 
   it.each(['aes256-ctr', 'aes256-gcm@openssh.com'])(

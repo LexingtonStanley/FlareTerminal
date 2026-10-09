@@ -56,6 +56,18 @@ describe('keysForConnection', () => {
     expect(lines(keysForConnection('gone'))).toEqual(lines([work]));
     expect(lines(keysForConnection(APP_KEY_ID))).toEqual(lines([work]));
   });
+
+  it('offers nothing when the chosen key is listed but can’t be read', () => {
+    const work = imported('work');
+    writeImportedKeys([
+      describeSavedKey('work', 'Work', work),
+      describeSavedKey('home', 'Home', generateUserKey()),
+    ]);
+    createAppKey();
+
+    // "home" is listed, but its private half is missing.
+    expect(keysForConnection('home')).toEqual([]);
+  });
 });
 
 describe('describeSavedKey', () => {
