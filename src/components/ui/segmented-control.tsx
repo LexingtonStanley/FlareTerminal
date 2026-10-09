@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Spacing } from '@/constants/theme';
+import { Radius, sans, Spacing } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useTheme } from '@/hooks/use-theme';
 
 type SegmentedControlProps<T extends string> = {
@@ -19,12 +20,20 @@ export function SegmentedControl<T extends string>({
   onChange,
 }: SegmentedControlProps<T>) {
   const theme = useTheme();
+  const dark = useColorScheme() === 'dark';
 
   return (
     <View
       role="radiogroup"
       aria-label={label}
-      style={[styles.group, { backgroundColor: theme.backgroundElement }]}>
+      // The thumb sits one step above the track: white on grey by day, lighter ink at night.
+      style={[
+        styles.group,
+        {
+          backgroundColor: dark ? theme.backgroundElement : theme.backgroundSelected,
+          borderColor: theme.border,
+        },
+      ]}>
       {options.map((option) => {
         const selected = option.value === value;
         return (
@@ -34,7 +43,13 @@ export function SegmentedControl<T extends string>({
             aria-checked={selected}
             aria-label={option.label}
             onPress={() => onChange(option.value)}
-            style={[styles.option, selected && { backgroundColor: theme.background }]}>
+            style={[
+              styles.option,
+              selected && {
+                backgroundColor: dark ? theme.backgroundRaised : theme.backgroundElement,
+                boxShadow: `0 1px 2px ${theme.shadow}${dark ? '80' : '1F'}`,
+              },
+            ]}>
             <Text style={[styles.text, { color: selected ? theme.text : theme.textSecondary }]}>
               {option.label}
             </Text>
@@ -46,13 +61,19 @@ export function SegmentedControl<T extends string>({
 }
 
 const styles = StyleSheet.create({
-  group: { flexDirection: 'row', padding: Spacing.half, borderRadius: Spacing.two },
+  group: {
+    flexDirection: 'row',
+    padding: 3,
+    gap: Spacing.half,
+    borderRadius: Radius.medium,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
   option: {
     flex: 1,
     minHeight: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: Spacing.two - 2,
+    borderRadius: Radius.small + 1,
   },
-  text: { fontSize: 15, fontWeight: 600 },
+  text: { ...sans(600), fontSize: 15 },
 });

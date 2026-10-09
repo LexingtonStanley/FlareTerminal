@@ -134,7 +134,12 @@ export function KeySurface({
         tracker.release(points(event.nativeEvent.changedTouches))
       }
       onResponderTerminate={() => tracker.cancel()}
-      style={[styles.surface, webSurfaceStyle, { backgroundColor: theme.keyboard }]}>
+      style={[
+        styles.surface,
+        webSurfaceStyle,
+        // A hairline above the tray that takes no layout space (touches are measured from the top).
+        { backgroundColor: theme.keyboard, boxShadow: `0 -1px 0 ${theme.border}` },
+      ]}>
       <View pointerEvents={KEYS_POINTER_EVENTS}>
         {rows.map((row, rowIndex) => (
           <View key={rowIndex} style={[styles.row, { height: row.height }]}>

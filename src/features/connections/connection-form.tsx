@@ -1,13 +1,14 @@
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, StyleSheet } from 'react-native';
+import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
+import { Callout, Card } from '@/components/ui/card';
+import { Icon } from '@/components/ui/icon';
 import { Screen } from '@/components/ui/screen';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { TextField } from '@/components/ui/text-field';
-import { Spacing } from '@/constants/theme';
+import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { secretsSupported } from '@/lib/secrets';
 
@@ -60,19 +61,11 @@ export function ConnectionForm({
     if (Object.keys(next).length === 0) onSubmit(values);
   }
 
-  const note = (text: string) => (
-    <ThemedView type="backgroundElement" style={styles.note}>
-      <ThemedText type="small" themeColor="textSecondary">
-        {text}
-      </ThemedText>
-    </ThemedView>
-  );
-
   return (
     <KeyboardAvoidingView
       style={styles.flex}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <Screen scroll edges={['left', 'right', 'bottom']}>
+      <Screen scroll edges={['left', 'right', 'bottom']} style={styles.screen}>
         <SegmentedControl
           label="Connection type"
           options={KIND_OPTIONS}
@@ -92,6 +85,7 @@ export function ConnectionForm({
               autoCorrect={false}
               keyboardType="url"
               returnKeyType="next"
+              monospace
               testID="connection-host"
               {...field('host')}
             />
@@ -103,6 +97,7 @@ export function ConnectionForm({
               autoComplete="username"
               textContentType="username"
               returnKeyType="next"
+              monospace
               testID="connection-username"
               {...field('username')}
             />
@@ -110,6 +105,7 @@ export function ConnectionForm({
               label="Port"
               keyboardType="number-pad"
               returnKeyType="next"
+              monospace
               {...field('port')}
             />
           </>
@@ -123,14 +119,11 @@ export function ConnectionForm({
               keyboardType="url"
               textContentType="URL"
               returnKeyType="next"
+              monospace
               testID="connection-address"
               {...field('url')}
             />
-            {warning ? (
-              <ThemedText type="small" style={{ color: theme.danger }}>
-                {warning}
-              </ThemedText>
-            ) : null}
+            {warning ? <Callout tone="warning">{warning}</Callout> : null}
             {secretsSupported ? (
               <TextField
                 label="Username"
@@ -168,32 +161,45 @@ export function ConnectionForm({
           {...field('name')}
         />
 
-        {!secretsSupported
-          ? note(
-              isSsh
-                ? "SSH runs in the Android and iOS apps: browsers can't open SSH connections. You can still save it here."
-                : "Browsers can't send a ttyd username and password. Use the Android or iOS app for hosts started with -c, or put ttyd behind a sign-in proxy."
-            )
-          : null}
+        {!secretsSupported ? (
+          <Callout>
+            {isSsh
+              ? "SSH runs in the Android and iOS apps: browsers can't open SSH connections. You can still save it here."
+              : "Browsers can't send a ttyd username and password. Use the Android or iOS app for hosts started with -c, or put ttyd behind a sign-in proxy."}
+          </Callout>
+        ) : null}
 
         {isSsh && hostKey ? (
-          <ThemedView type="backgroundElement" style={styles.note}>
-            <ThemedText type="smallBold">Trusted host key</ThemedText>
-            <ThemedText type="code" selectable>
+          <Card>
+            <View style={styles.inline}>
+              <Icon name="key" size={16} color="success" />
+              <ThemedText type="smallBold">Trusted host key</ThemedText>
+            </View>
+            <ThemedText
+              type="code"
+              selectable
+              style={[styles.well, { backgroundColor: theme.backgroundSelected }]}>
               {hostKey.fingerprint}
             </ThemedText>
-            <Button title="Forget host key" variant="secondary" onPress={hostKey.onForget} />
-          </ThemedView>
+            <Button
+              title="Forget host key"
+              variant="secondary"
+              size="small"
+              onPress={hostKey.onForget}
+            />
+          </Card>
         ) : null}
 
-        <Button title={submitLabel} onPress={submit} testID="connection-save" />
-        {onDelete ? (
-          <Button
-            title={confirmingDelete ? 'Tap again to delete' : 'Delete connection'}
-            variant="secondary"
-            onPress={() => (confirmingDelete ? onDelete() : setConfirmingDelete(true))}
-          />
-        ) : null}
+        <View style={styles.actions}>
+          <Button title={submitLabel} onPress={submit} testID="connection-save" />
+          {onDelete ? (
+            <Button
+              title={confirmingDelete ? 'Tap again to delete' : 'Delete connection'}
+              variant="danger"
+              onPress={() => (confirmingDelete ? onDelete() : setConfirmingDelete(true))}
+            />
+          ) : null}
+        </View>
       </Screen>
     </KeyboardAvoidingView>
   );
@@ -201,5 +207,13 @@ export function ConnectionForm({
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  note: { gap: Spacing.two, padding: Spacing.three, borderRadius: Spacing.three },
+  screen: { gap: Spacing.three + 4 },
+  inline: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  well: {
+    padding: Spacing.three - 4,
+    borderRadius: Radius.small + 2,
+    overflow: 'hidden',
+    fontSize: 12,
+  },
+  actions: { gap: Spacing.two + 2, marginTop: Spacing.two },
 });
