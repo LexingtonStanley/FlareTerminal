@@ -168,7 +168,7 @@ describe('terminal', () => {
   it('sends the composer text as a paste, then Enter', async () => {
     const { transport } = await openDevbox();
     const user = userEvent.setup();
-    await keyAction('Phone keyboard');
+    await keyAction('Hide keyboard', 'up');
 
     await user.type(screen.getByLabelText('Command'), 'fix the failing test');
     await user.press(screen.getByRole('button', { name: 'Send' }));
@@ -180,7 +180,7 @@ describe('terminal', () => {
   it('applies a sticky Ctrl to the next key, then releases it', async () => {
     const { transport } = await openDevbox();
     const user = userEvent.setup();
-    await keyAction('Phone keyboard');
+    await keyAction('Hide keyboard', 'up');
     const ctrl = screen.getByRole('switch', { name: 'Control' });
 
     await keyAction('Control', 'activate', 'switch');
@@ -215,14 +215,30 @@ describe('terminal', () => {
     expect(transport.written).toEqual(['l', 's', '\r']);
 
     // The phone's keyboard comes with a text field, focused, and the key bar.
-    await keyAction('Phone keyboard');
+    await keyAction('Hide keyboard', 'up');
     expect(await screen.findByLabelText('Command')).toHaveProp('autoFocus', true);
     expect(screen.getByLabelText('Terminal keys')).toBeOnTheScreen();
-    expect(screen.queryByRole('button', { name: 'Phone keyboard' })).not.toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: 'Hide keyboard' })).not.toBeOnTheScreen();
 
     await keyAction('Coding keyboard');
     expect(await screen.findByLabelText('Coding keyboard')).toBeOnTheScreen();
     expect(screen.queryByLabelText('Command')).not.toBeOnTheScreen();
+  });
+
+  it('hides the keyboard to show the whole terminal; a tap brings it back', async () => {
+    await openDevbox();
+    const user = userEvent.setup();
+
+    await keyAction('Hide keyboard');
+    expect(screen.queryByLabelText('Coding keyboard')).not.toBeOnTheScreen();
+    // Hiding ours doesn't open the phone's.
+    expect(screen.queryByLabelText('Command')).not.toBeOnTheScreen();
+    await user.press(screen.getByRole('button', { name: 'Show keyboard' }));
+    expect(screen.getByLabelText('Coding keyboard')).toBeOnTheScreen();
+
+    await keyAction('Hide keyboard');
+    await user.press(screen.getByLabelText('Terminal output'));
+    expect(screen.getByLabelText('Coding keyboard')).toBeOnTheScreen();
   });
 
   it('offers to reconnect when the session ends', async () => {

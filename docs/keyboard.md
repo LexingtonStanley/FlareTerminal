@@ -5,9 +5,13 @@ are two modes, both inside the app:
 
 - **Mode B, the coding keyboard**, which a session opens with: a full keyboard in place of
   the phone's. No autocorrect, no IME, every key reaches the terminal as typed.
-- **Mode A, writing**: the globe key swaps it for a text field with the phone's own keyboard,
-  for prose (autocorrect, swiping, dictation), and the accessory bar above it: one row with
-  what the phone's keyboard lacks. Enter sends the text as a paste; the keyboard key goes back.
+- **Mode A, writing**: a flick up on the hide key swaps it for a text field with the phone's
+  own keyboard, for prose (autocorrect, swiping, dictation), and the accessory bar above it:
+  one row with what the phone's keyboard lacks. Enter sends the text as a paste; the keyboard
+  key goes back.
+
+A tap on the hide key puts the keyboard away, to see the whole terminal, without opening the
+phone's. A tap on the terminal, or the keyboard button in its corner, brings it back.
 
 The terminal itself never asks for the phone's keyboard (`inputmode="none"`): it keeps focus
 for its cursor and for hardware keyboards, and a tap on the line being edited moves the
@@ -42,15 +46,16 @@ Every key is at least 40 points wide on a 375-point phone (iPhone SE/mini and up
 ## Mode B: the coding keyboard
 
 ```
- esc  tab  ctrl  alt  [ ◀ ▲▼ ▶ ]  |  /  🌐        ← the bar, with 🌐 for writing (Mode A)
+ esc  tab  ctrl  alt  [ ◀ ▲▼ ▶ ]  |  /  ⌄        ← the bar; ⌄ hides, flick up for writing (Mode A)
   1    2    3    4    5    6    7    8    9    0   ← flick up (digits)
   q    w    e    r    t    y    u    i    o    p
     @    #    $    _    &    =    +    (    )
     a    s    d    f    g    h    j    k    l
          *    "    '    :    ;    !    ?
   ⇧     z    x    c    v    b    n    m     ⌫     ← ⌫ flick left: delete word (^W), right: del
-  fn    _                    ,   ^J
- 123    -  home [ space ] end  .    ⏎           ← slide on space: arrows · ⏎ flick up: newline
+  fn    _                    #   ^J
+ 123    -  home [ space ] end ( . )  ⏎          ← slide on space: arrows · ⏎ flick up: newline
+                                ,               ← . flicks: # up, , down, ( ) left and right
 ```
 
 **Symbols** (`123`): every symbol a shell needs in one tap or one flick. Digits carry their
@@ -181,5 +186,5 @@ back-swipe at the left edge cancelling a touch on Esc; timing constants on a rea
   keys, landscape layout.
 - Slide from `123` onto a symbol and release to type it and come straight back (iOS does
   this), and slide to the neighbouring key to correct a mis-tap.
-- Swipe typing for prose prompts without leaving the coding keyboard (for now: the globe
-  key, then the phone's keyboard in the text field, with dictation).
+- Swipe typing for prose prompts without leaving the coding keyboard (for now: a flick up on
+  the hide key, then the phone's keyboard in the text field, with dictation).

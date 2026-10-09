@@ -53,6 +53,8 @@ export type TerminalViewProps = {
   onResize: (size: TerminalSize) => void;
   onTitleChange: (title: string) => void;
   onOpenLink: (url: string) => void;
+  /** A tap on the terminal (not a scroll or a selection), after any cursor move it makes. */
+  onTap?: () => void;
   dom?: DOMProps;
 };
 
@@ -84,6 +86,7 @@ export default function TerminalView({
   onResize,
   onTitleChange,
   onOpenLink,
+  onTap,
 }: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -122,6 +125,7 @@ export default function TerminalView({
   const resize = useEffectEvent((size: TerminalSize) => onResize(size));
   const titleChange = useEffectEvent((title: string) => onTitleChange(title));
   const openLink = useEffectEvent((url: string) => onOpenLink(url));
+  const tap = useEffectEvent(() => onTap?.());
   const initialOptions = useEffectEvent(() => ({ theme, fontSize }));
 
   useEffect(() => {
@@ -147,7 +151,7 @@ export default function TerminalView({
     const textarea = terminal.textarea;
     textarea?.setAttribute('inputmode', 'none');
     textarea?.focus();
-    const stopTaps = moveCursorOnTap(terminal);
+    const stopTaps = moveCursorOnTap(terminal, () => tap());
 
     const subscriptions = [
       terminal.onData((data) => input(data)),
@@ -197,7 +201,7 @@ const TAP_MAX_MS = 400;
  * that read the mouse themselves (tmux with mouse on, vim with mouse=a), and full-screen
  * programs, get the tap as xterm.js reports it instead.
  */
-function moveCursorOnTap(terminal: Terminal): () => void {
+function moveCursorOnTap(terminal: Terminal, onTap: () => void): () => void {
   const element = terminal.element;
   if (!element) return () => {};
   let down: { id: number; x: number; y: number; at: number } | null = null;
@@ -211,6 +215,10 @@ function moveCursorOnTap(terminal: Terminal): () => void {
     if (!start || start.id !== event.pointerId || event.button > 0) return;
     const moved = Math.hypot(event.clientX - start.x, event.clientY - start.y);
     if (moved > TAP_SLOP_PX || event.timeStamp - start.at > TAP_MAX_MS) return;
+    moveCursor(event);
+    onTap();
+  };
+  const moveCursor = (event: PointerEvent) => {
     const buffer = terminal.buffer.active;
     if (buffer.type !== 'normal' || terminal.modes.mouseTrackingMode !== 'none') return;
     if (terminal.hasSelection()) return;

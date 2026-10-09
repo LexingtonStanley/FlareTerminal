@@ -79,13 +79,16 @@ describe('the coding keyboard', () => {
     }
   });
 
-  it('keeps the bar on top, with the globe key to go back', () => {
+  it('keeps the bar on top, ending with the key that hides the keyboard', () => {
     for (const layer of LAYERS) {
       const [top] = keyboardRows(layer);
       expect(top.keys.map((key) => key.name).slice(0, -1)).toEqual(
         BAR_ROWS[0].keys.map((key) => key.name).slice(0, -1)
       );
-      expect(top.keys.at(-1)?.tap).toEqual({ type: 'switch', to: 'system' });
+      const last = top.keys.at(-1);
+      expect(last?.tap).toEqual({ type: 'switch', to: 'hidden' });
+      // A flick up opens the phone's keyboard instead.
+      expect(last?.flicks.up?.action).toEqual({ type: 'switch', to: 'system' });
     }
   });
 

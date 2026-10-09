@@ -116,7 +116,11 @@ export default function KeyboardPreviewScreen() {
             ) : null}
           </>
         ) : (
-          <CodingKeyboard {...keyboardProps} onUseSystemKeyboard={() => setMode('bar')} />
+          <CodingKeyboard
+            {...keyboardProps}
+            onHide={() => setMode('bar')}
+            onUseSystemKeyboard={() => setMode('bar')}
+          />
         )}
       </KeyboardAvoidingView>
     </Screen>

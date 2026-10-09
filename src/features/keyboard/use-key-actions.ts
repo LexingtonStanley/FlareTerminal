@@ -5,6 +5,7 @@ import type { SpecialKey } from '@/features/terminal/keys';
 import { playHaptic } from './haptics';
 import { INITIAL_KEYBOARD, resolveAction, type KeyboardState } from './keyboard-state';
 import type { KeyActionHandler } from './key-surface';
+import type { KeyboardTarget } from './layout';
 import type { ModifierState } from './modifiers';
 
 /** What both keyboards need from the terminal session. */
@@ -21,7 +22,7 @@ export type KeyboardInputProps = {
 /** Wires resolved key actions to the props, keeping Shift and the layer as local state. */
 export function useKeyActions(
   { modifiers, onModifiersChange, onKey, onText }: KeyboardInputProps,
-  onSwitch: (to: 'coding' | 'system') => void
+  onSwitch: (to: KeyboardTarget) => void
 ) {
   const [keyboard, setKeyboard] = useState<KeyboardState>(INITIAL_KEYBOARD);
   // One touch event can resolve several actions before React re-renders (a rollover

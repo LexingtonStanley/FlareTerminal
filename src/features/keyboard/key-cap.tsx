@@ -20,7 +20,11 @@ type SymbolName = SymbolViewProps['name'];
 
 const ICONS = {
   keyboard: { ios: 'keyboard', android: 'keyboard', web: 'keyboard' },
-  globe: { ios: 'globe', android: 'language', web: 'language' },
+  hide: {
+    ios: 'keyboard.chevron.compact.down',
+    android: 'keyboard_hide',
+    web: 'keyboard_hide',
+  },
   backspace: { ios: 'delete.left', android: 'backspace', web: 'backspace' },
   return: { ios: 'return', android: 'keyboard_return', web: 'keyboard_return' },
   shift: { ios: 'shift', android: 'shift', web: 'shift' },
