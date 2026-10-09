@@ -15,6 +15,7 @@ import { Spacing } from '@/constants/theme';
 import { useConnections } from '@/features/connections/connections-provider';
 import { SessionHealthStrip } from '@/features/health/health-strip';
 import { parseLocalUrl, type LocalAddress } from '@/features/preview/local-urls';
+import { ReadingPill } from '@/features/reading/reading-pill';
 import { ScrollHint } from '@/features/sessions/scroll-hint';
 import { SessionGate } from '@/features/sessions/session-gate';
 import { StatusBadge } from '@/features/sessions/session-status';
@@ -70,6 +71,8 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
   const writing = input === 'writing';
   // When the last swipe couldn't scroll; a new one shows the hint afresh.
   const [unscrollableAt, setUnscrollableAt] = useState<number | null>(null);
+  // When the last swipe went back into the history; a new one keeps reading mode offered.
+  const [scrolledBackAt, setScrolledBackAt] = useState<number | null>(null);
   const keys = {
     modifiers: view.modifiers,
     onModifiersChange: view.setModifiers,
@@ -81,6 +84,12 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
     manager.close(session.id);
     if (router.canGoBack()) router.back();
     else router.replace('/');
+  }
+
+  function read() {
+    setUnscrollableAt(null);
+    setScrolledBackAt(null);
+    router.push({ pathname: '/session/[id]/reading', params: { id: session.id } });
   }
 
   function preview(address?: LocalAddress) {
@@ -136,6 +145,7 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
             onOpenLink={openTerminalLink}
             onTap={() => setInput((current) => (current === 'hidden' ? 'keys' : current))}
             onScrollUnavailable={() => setUnscrollableAt(Date.now())}
+            onScrollBack={() => setScrolledBackAt(Date.now())}
             dom={{
               style: styles.flex,
               scrollEnabled: false,
@@ -145,7 +155,17 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
             }}
           />
           {unscrollableAt !== null ? (
-            <ScrollHint key={unscrollableAt} onDismiss={() => setUnscrollableAt(null)} />
+            <ScrollHint
+              key={unscrollableAt}
+              onRead={read}
+              onDismiss={() => setUnscrollableAt(null)}
+            />
+          ) : scrolledBackAt !== null ? (
+            <ReadingPill
+              key={scrolledBackAt}
+              onOpen={read}
+              onDismiss={() => setScrolledBackAt(null)}
+            />
           ) : null}
           {session.status.state === 'closed' ? (
             <ThemedView

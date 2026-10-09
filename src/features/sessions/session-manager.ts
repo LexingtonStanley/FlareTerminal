@@ -1,6 +1,7 @@
 import { SerializeAddon } from '@xterm/addon-serialize';
 import { Terminal, type HeadlessTerminal } from './headless-terminal';
 
+import type { HistorySource } from '@/features/reading/capture';
 import type {
   InputMode,
   SessionStatus,
@@ -67,6 +68,11 @@ export type SessionSnapshot = SessionTarget & {
   prompt: AgentPrompt | null;
   /** The connection dropped and a reconnect is scheduled. */
   reconnecting: boolean;
+  /**
+   * The tmux or zellij session whose history reading mode shows, once the person picked one
+   * (null: this screen). Until then reading mode goes by the command.
+   */
+  history?: HistorySource | null;
 };
 
 /** Where a session's output goes while a terminal view shows it. */
@@ -368,6 +374,10 @@ class Session {
     return 'sent';
   }
 
+  setHistory(history: HistorySource | null) {
+    this.update({ history });
+  }
+
   detach(view: ViewSink) {
     if (this.view === view) this.view = null;
     this.replayBuffer = null;
@@ -560,6 +570,11 @@ export class SessionManager {
 
   reconnect(id: string) {
     this.sessions.get(id)?.reconnect();
+  }
+
+  /** Remembers where reading mode reads the session's history from. */
+  setHistory(id: string, history: HistorySource | null) {
+    this.sessions.get(id)?.setHistory(history);
   }
 
   /** Opens a tunnel to `port` on the session's host (see TerminalTransport.openTunnel). */

@@ -136,6 +136,10 @@ function ThemedApp() {
                       name="session/[id]/preview"
                       options={{ headerShown: true, title: 'Preview' }}
                     />
+                    <Stack.Screen
+                      name="session/[id]/reading"
+                      options={{ headerShown: true, title: 'Reading mode' }}
+                    />
                   </Stack>
                   <AttentionBanner />
                   <AccessGuard />

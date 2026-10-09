@@ -58,6 +58,8 @@ export type TerminalViewProps = {
   onTap?: () => void;
   /** A swipe on a full-screen program that keeps its history to itself (tmux, mouse off). */
   onScrollUnavailable?: () => void;
+  /** A swipe went back into the history (once per swipe): the scrollback, tmux or zellij's. */
+  onScrollBack?: () => void;
   dom?: DOMProps;
 };
 
@@ -91,6 +93,7 @@ export default function TerminalView({
   onOpenLink,
   onTap,
   onScrollUnavailable,
+  onScrollBack,
 }: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -131,6 +134,7 @@ export default function TerminalView({
   const openLink = useEffectEvent((url: string) => onOpenLink(url));
   const tap = useEffectEvent(() => onTap?.());
   const scrollUnavailable = useEffectEvent(() => onScrollUnavailable?.());
+  const scrollBack = useEffectEvent(() => onScrollBack?.());
   const initialOptions = useEffectEvent(() => ({ theme, fontSize }));
 
   useEffect(() => {
@@ -157,7 +161,10 @@ export default function TerminalView({
     textarea?.setAttribute('inputmode', 'none');
     textarea?.focus();
     const stopTaps = moveCursorOnTap(terminal, () => tap());
-    const stopScrolling = scrollByTouch(terminal, () => scrollUnavailable());
+    const stopScrolling = scrollByTouch(terminal, {
+      onUnavailable: () => scrollUnavailable(),
+      onBack: () => scrollBack(),
+    });
 
     const subscriptions = [
       terminal.onData((data) => input(data)),
@@ -277,7 +284,10 @@ const UNAVAILABLE_LINES = 2;
  * Scrolls by touch: the scrollback, or wheel reports for a program that reads the mouse
  * (see touch-scroll.ts). Only fingers: a mouse drag still selects text.
  */
-function scrollByTouch(terminal: Terminal, onUnavailable: () => void): () => void {
+function scrollByTouch(
+  terminal: Terminal,
+  { onUnavailable, onBack }: { onUnavailable(): void; onBack(): void }
+): () => void {
   const element = terminal.element;
   if (!element) return () => {};
   // The view handles drags itself; the browser mustn't pan or zoom instead.
@@ -286,6 +296,7 @@ function scrollByTouch(terminal: Terminal, onUnavailable: () => void): () => voi
   let mode: ScrollMode = 'none';
   let at = { x: 0, y: 0 };
   let blocked = 0;
+  let wentBack = false;
 
   const lineHeight = () => {
     const screen = element.querySelector('.xterm-screen');
@@ -311,6 +322,10 @@ function scrollByTouch(terminal: Terminal, onUnavailable: () => void): () => voi
     onScroll: (steps) => {
       if (mode === 'scrollback') terminal.scrollLines(steps);
       else if (mode === 'wheel') wheel(steps);
+      if (steps < 0 && !wentBack) {
+        wentBack = true;
+        onBack();
+      }
     },
     requestFrame: (callback) => {
       const id = requestAnimationFrame(callback);
@@ -327,6 +342,7 @@ function scrollByTouch(terminal: Terminal, onUnavailable: () => void): () => voi
       mouseTracking: terminal.modes.mouseTrackingMode,
     });
     blocked = 0;
+    wentBack = false;
     scroller.start(event.clientY, event.timeStamp);
   };
   const onMove = (event: PointerEvent) => {

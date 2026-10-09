@@ -44,6 +44,9 @@ const ICONS = {
   back: { ios: 'chevron.backward', android: 'arrow_back', web: 'arrow_back' },
   forward: { ios: 'chevron.forward', android: 'arrow_forward', web: 'arrow_forward' },
   external: { ios: 'arrow.up.forward.square', android: 'open_in_new', web: 'open_in_new' },
+  read: { ios: 'text.book.closed', android: 'menu_book', web: 'menu_book' },
+  expand: { ios: 'chevron.down', android: 'expand_more', web: 'expand_more' },
+  collapse: { ios: 'chevron.up', android: 'expand_less', web: 'expand_less' },
 } satisfies Record<string, SymbolViewProps['name']>;
 
 export type IconName = keyof typeof ICONS;

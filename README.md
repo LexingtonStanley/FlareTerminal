@@ -14,6 +14,12 @@ web build), started from the RapidAppToolkit template.
   screen exactly. On Android they stay connected while you use other apps, and a dropped
   connection reconnects by itself. Swipe to scroll back, with a fling; inside tmux (with
   mouse mode on, as agent shortcuts set it) and zellij a swipe scrolls their own history.
+- **Reading mode.** Swipe back through an agent's output and a Reading mode button appears:
+  the history as text that wraps to the phone, in the terminal's colours, with each tool
+  call's output folded to its first lines, to select or copy all as Markdown. When the agent
+  runs in tmux or zellij over SSH, it reads their whole history (the newest 10,000 lines), not
+  just the screen, with one read-only `sh` script beside the session
+  (`src/features/reading/capture.ts`); chips at the top switch to the host's other sessions.
 - **Shortcuts.** One tap connects and runs a command. An agent shortcut takes a folder, a
   name, the agent (Claude Code, Codex, Hermes or pi), a tmux or zellij session and whether to
   skip permission prompts, and writes the command, which stays yours to edit. Any other
@@ -202,6 +208,11 @@ host at `/keyboard-preview`.
   against OpenSSH 9.6 and Go's `x/crypto/ssh`. `ttyd.ts` implements ttyd's protocol, checked
   by hand against ttyd 1.7.7; Playwright drives it against a fake host
   (`e2e/web/fake-ttyd.ts`).
+- `src/features/reading/` is reading mode. Over SSH it asks tmux (`capture-pane`) or zellij
+  (`dump-screen`) for the history, reads its colour codes itself (`history.ts`, many times
+  quicker on a phone than a terminal parser), and finds agents' tool calls by their shapes
+  (`transcript.ts`). Without a multiplexer, or over ttyd, it reads the session's headless
+  terminal.
 - `src/features/preview/` forwards a port for the dev server preview: a listener on the
   phone's 127.0.0.1 (`local-server.ts`) whose connections each open an SSH `direct-tcpip`
   channel to `localhost:<port>` on the host (`forward.ts`), shown in react-native-webview.
