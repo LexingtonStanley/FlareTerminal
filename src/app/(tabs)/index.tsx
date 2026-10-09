@@ -1,4 +1,5 @@
 import { useRouter } from 'expo-router';
+import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -10,6 +11,8 @@ import { Screen } from '@/components/ui/screen';
 import { mono, Radius, Spacing } from '@/constants/theme';
 import { connectionLabel } from '@/features/connections/connections';
 import { useConnections } from '@/features/connections/connections-provider';
+import { ALL_GROUPS, GroupTabs } from '@/features/groups/group-tabs';
+import { useGroups } from '@/features/groups/groups-provider';
 import type { SessionTarget } from '@/features/sessions/session-manager';
 import { STATUS_LABELS, StatusDot } from '@/features/sessions/session-status';
 import {
@@ -20,12 +23,23 @@ import {
 import { NewShortcutTile, ShortcutTile } from '@/features/shortcuts/shortcut-tile';
 import { groupShortcuts, startupCommand, type Shortcut } from '@/features/shortcuts/shortcuts';
 import { useShortcuts } from '@/features/shortcuts/shortcuts-provider';
+import { useProtection } from '@/features/vault/use-protection';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function HomeScreen() {
-  const { connections } = useConnections();
-  const { shortcuts } = useShortcuts();
-  const sessions = useSessions();
+  const { connections: allConnections } = useConnections();
+  const { shortcuts: allShortcuts } = useShortcuts();
+  const { groups } = useGroups();
+  const allSessions = useSessions();
+  const scopeOf = useProtection();
+  const [selectedGroup, setSelectedGroup] = useState(ALL_GROUPS);
+  // A deleted group falls back to everything.
+  const group = groups.find(({ id }) => id === selectedGroup) ?? null;
+  const inGroup = (connectionId: string) =>
+    !group || allConnections.some(({ id, groupId }) => id === connectionId && groupId === group.id);
+  const connections = allConnections.filter(({ id }) => inGroup(id));
+  const shortcuts = allShortcuts.filter(({ connectionId }) => inGroup(connectionId));
+  const sessions = allSessions.filter(({ connectionId }) => inGroup(connectionId));
   const manager = useSessionManager();
   const startSession = useStartSession();
   const router = useRouter();
@@ -33,14 +47,14 @@ export default function HomeScreen() {
 
   const openSession = (id: string) => router.push({ pathname: '/session/[id]', params: { id } });
   const start = (target: SessionTarget) => openSession(startSession(target));
-  const waiting = sessions.filter((session) => session.attention).length;
-  const { groups, ungrouped } = groupShortcuts(shortcuts);
+  const waiting = allSessions.filter((session) => session.attention).length;
+  const { groups: shortcutGroups, ungrouped } = groupShortcuts(shortcuts);
 
   const tile = (shortcut: Shortcut) => (
     <ShortcutTile
       key={shortcut.id}
       shortcut={shortcut}
-      connectionName={connections.find(({ id }) => id === shortcut.connectionId)?.name}
+      connectionName={allConnections.find(({ id }) => id === shortcut.connectionId)?.name}
       onRun={() =>
         start({
           connectionId: shortcut.connectionId,
@@ -62,12 +76,16 @@ export default function HomeScreen() {
           <View style={[styles.cursor, { backgroundColor: theme.primary }]} />
         </View>
         <ThemedText type="small" themeColor="textSecondary">
-          {sessions.length === 0
+          {allSessions.length === 0
             ? 'A terminal for your coding agents'
-            : `${sessions.length} ${sessions.length === 1 ? 'session' : 'sessions'} open` +
+            : `${allSessions.length} ${allSessions.length === 1 ? 'session' : 'sessions'} open` +
               (waiting ? ` · ${waiting} ${waiting === 1 ? 'needs' : 'need'} you` : '')}
         </ThemedText>
       </View>
+
+      {allConnections.length || groups.length ? (
+        <GroupTabs groups={groups} selected={group?.id ?? ALL_GROUPS} onSelect={setSelectedGroup} />
+      ) : null}
 
       {sessions.length ? (
         <Section title="Sessions">
@@ -97,15 +115,22 @@ export default function HomeScreen() {
                       <View style={styles.inline}>
                         {session.attention ? (
                           <Icon name="bell" size={14} color="attention" />
+                        ) : scopeOf(session.connectionId) ? (
+                          <Icon name="lock" size={13} />
                         ) : null}
                         <ThemedText
                           type="small"
                           themeColor={session.attention ? 'attention' : 'textSecondary'}
                           numberOfLines={1}
                           style={styles.shrink}>
-                          {session.attention?.body ??
-                            session.title ??
-                            STATUS_LABELS[session.status.state]}
+                          {scopeOf(session.connectionId)
+                            ? // A protected session's screen stays out of lists.
+                              session.attention
+                              ? 'Needs your attention'
+                              : STATUS_LABELS[session.status.state]
+                            : (session.attention?.body ??
+                              session.title ??
+                              STATUS_LABELS[session.status.state])}
                         </ThemedText>
                       </View>
                     </View>
@@ -124,11 +149,11 @@ export default function HomeScreen() {
         </Section>
       ) : null}
 
-      {connections.length ? (
+      {allConnections.length ? (
         <>
-          {groups.map((group) => (
-            <Section key={group.name} title={group.name}>
-              <View style={styles.grid}>{group.shortcuts.map(tile)}</View>
+          {shortcutGroups.map((shortcutGroup) => (
+            <Section key={shortcutGroup.name} title={shortcutGroup.name}>
+              <View style={styles.grid}>{shortcutGroup.shortcuts.map(tile)}</View>
             </Section>
           ))}
           <Section title="Shortcuts">
@@ -145,8 +170,26 @@ export default function HomeScreen() {
         </>
       ) : null}
 
-      <Section title="Connections">
-        {connections.length === 0 ? (
+      <Section
+        title={group ? group.name : 'Connections'}
+        accessory={
+          group ? (
+            <IconButton
+              icon="edit"
+              size={16}
+              label={`Edit group ${group.name}`}
+              onPress={() => router.push({ pathname: '/groups/[id]', params: { id: group.id } })}
+            />
+          ) : null
+        }>
+        {group && connections.length === 0 ? (
+          <Card>
+            <ThemedText type="small" themeColor="textSecondary">
+              No connections in {group.name} yet. Add one here, or pick this group when editing a
+              connection.
+            </ThemedText>
+          </Card>
+        ) : connections.length === 0 ? (
           <Card style={styles.empty}>
             <View
               style={[
@@ -202,9 +245,12 @@ export default function HomeScreen() {
                       </ThemedText>
                     </View>
                     <View style={styles.rowText}>
-                      <ThemedText type="headline" numberOfLines={1}>
-                        {connection.name}
-                      </ThemedText>
+                      <View style={styles.inline}>
+                        <ThemedText type="headline" numberOfLines={1} style={styles.shrink}>
+                          {connection.name}
+                        </ThemedText>
+                        {scopeOf(connection.id) ? <Icon name="lock" size={13} /> : null}
+                      </View>
                       <ThemedText type="code" themeColor="textSecondary" numberOfLines={1}>
                         {connection.kind === 'ttyd'
                           ? `ttyd · ${connectionLabel(connection)}`
@@ -234,7 +280,13 @@ export default function HomeScreen() {
           title="New connection"
           icon="add"
           variant={connections.length ? 'secondary' : 'primary'}
-          onPress={() => router.push('/connections/new')}
+          onPress={() =>
+            router.push(
+              group
+                ? { pathname: '/connections/new', params: { groupId: group.id } }
+                : '/connections/new'
+            )
+          }
         />
       </Section>
     </Screen>

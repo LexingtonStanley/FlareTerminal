@@ -9,10 +9,18 @@
 
 const values = new Map<string, string>();
 export const secrets = new Map<string, string>();
+const vaultItems = new Map<string, string>();
+const biometricItems = new Map<string, string>();
+
+/** The pretend phone's biometrics: whether it has them, and whether the next scan passes. */
+export const biometrics = { supported: false, approve: true, prompts: [] as string[] };
 
 export function clearMemoryStorage() {
   values.clear();
   secrets.clear();
+  vaultItems.clear();
+  biometricItems.clear();
+  Object.assign(biometrics, { supported: false, approve: true, prompts: [] });
 }
 
 export function readJson<T>(key: string): T | null {
@@ -33,4 +41,31 @@ export function getSecret(name: string) {
 export function setSecret(name: string, value: string | null) {
   if (value) secrets.set(name, value);
   else secrets.delete(name);
+}
+
+export function resealSecrets(change: () => void) {
+  change();
+}
+
+export function getVaultItem(name: string) {
+  return vaultItems.get(name) ?? null;
+}
+
+export function setVaultItem(name: string, value: string | null) {
+  if (value) vaultItems.set(name, value);
+  else vaultItems.delete(name);
+}
+
+export function biometricsSupported() {
+  return biometrics.supported;
+}
+
+export async function setBiometricItem(name: string, value: string | null) {
+  if (value) biometricItems.set(name, value);
+  else biometricItems.delete(name);
+}
+
+export async function getBiometricItem(name: string, prompt: string) {
+  biometrics.prompts.push(prompt);
+  return biometrics.approve ? (biometricItems.get(name) ?? null) : null;
 }

@@ -1,8 +1,10 @@
 import Constants from 'expo-constants';
-import { StyleSheet, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Card, Divider, Section } from '@/components/ui/card';
+import { Icon } from '@/components/ui/icon';
 import { IconButton } from '@/components/ui/icon-button';
 import { Screen } from '@/components/ui/screen';
 import { mono, Spacing } from '@/constants/theme';
@@ -10,6 +12,7 @@ import { FONT_SIZE, usePreferences } from '@/features/settings/preferences-provi
 import { TerminalPreview, TerminalSchemePicker } from '@/features/settings/terminal-scheme-picker';
 import { useTerminalTheme } from '@/features/settings/use-terminal-theme';
 import { AppKeyCard } from '@/features/ssh/app-key-card';
+import { useLock } from '@/features/vault/lock-provider';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function SettingsScreen() {
@@ -17,6 +20,8 @@ export default function SettingsScreen() {
   const terminalTheme = useTerminalTheme();
   const theme = useTheme();
   const { version, extra } = Constants.expoConfig ?? {};
+  const { settings: lock } = useLock();
+  const router = useRouter();
 
   return (
     <Screen scroll style={styles.screen}>
@@ -62,6 +67,30 @@ export default function SettingsScreen() {
               Each scheme has a light and a dark version that follows your phone&apos;s appearance.
             </ThemedText>
           </View>
+        </Card>
+      </Section>
+
+      <Section title="Security">
+        <Card flush>
+          <Pressable
+            role="button"
+            aria-label="App lock"
+            onPress={() => router.push('/security')}
+            style={({ pressed }) => [
+              styles.row,
+              pressed && { backgroundColor: theme.backgroundSelected },
+            ]}>
+            <Icon name="lock" size={18} color={lock ? 'primary' : 'textSecondary'} />
+            <View style={styles.grow}>
+              <ThemedText type="smallBold">App lock</ThemedText>
+              <ThemedText type="caption" themeColor="textSecondary">
+                {lock
+                  ? `${lock.kind === 'pin' ? 'PIN' : 'Password'}${lock.biometrics ? ' and biometrics' : ''} · vault encrypted`
+                  : 'Off · protect the app, passwords and keys'}
+              </ThemedText>
+            </View>
+            <Icon name="chevron" size={16} />
+          </Pressable>
         </Card>
       </Section>
 

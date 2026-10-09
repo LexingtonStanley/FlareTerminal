@@ -7,7 +7,17 @@ import { isPrivateHost, ttydSocketUrl } from '@/features/terminal/ttyd';
 
 export type ConnectionKind = 'ssh' | 'ttyd';
 
-export type SshConnection = {
+/** Settings every kind shares. Absent in records saved before they existed. */
+type ConnectionAccess = {
+  /** The group it is listed under, if any. */
+  groupId?: string | null;
+  /** Ask for the app lock each time the person comes back to its sessions. */
+  protected?: boolean;
+  /** False: its sessions close when the person leaves them or the app. */
+  keepAlive?: boolean;
+};
+
+export type SshConnection = ConnectionAccess & {
   id: string;
   kind: 'ssh';
   name: string;
@@ -16,7 +26,7 @@ export type SshConnection = {
   username: string;
 };
 
-export type TtydConnection = {
+export type TtydConnection = ConnectionAccess & {
   id: string;
   kind: 'ttyd';
   name: string;
@@ -37,7 +47,14 @@ export type ConnectionInput = {
   url: string;
   username: string;
   password: string;
+  /** '' for no group. */
+  groupId: string;
+  protected: boolean;
+  keepAlive: boolean;
 };
+
+/** The form's fields that are typed into a text field. */
+export type ConnectionTextField = 'name' | 'host' | 'port' | 'url' | 'username' | 'password';
 
 export type ConnectionErrors = Partial<Record<keyof ConnectionInput, string>>;
 
@@ -49,6 +66,9 @@ export const EMPTY_CONNECTION_INPUT: ConnectionInput = {
   url: '',
   username: '',
   password: '',
+  groupId: '',
+  protected: false,
+  keepAlive: true,
 };
 
 /** What to run on the computer for ttyd: writable (-W), password-protected (-c), lasting tmux. */
@@ -115,20 +135,41 @@ export function connectionLabel(connection: Connection): string {
 
 /** Builds the saved record from valid form input. */
 export function toConnection(input: ConnectionInput, id: string): Connection {
+  const access: ConnectionAccess = {
+    groupId: input.groupId || null,
+    protected: input.protected,
+    keepAlive: input.keepAlive,
+  };
   if (input.kind === 'ssh') {
     const fields = sshFields(input);
-    const connection: SshConnection = { id, kind: 'ssh', name: '', ...fields };
+    const connection: SshConnection = { id, kind: 'ssh', name: '', ...fields, ...access };
     return { ...connection, name: input.name.trim() || connectionLabel(connection) };
   }
   const url = input.url.trim();
-  return { id, kind: 'ttyd', name: input.name.trim() || url, url, username: input.username.trim() };
+  return {
+    id,
+    kind: 'ttyd',
+    name: input.name.trim() || url,
+    url,
+    username: input.username.trim(),
+    ...access,
+  };
 }
+
+/** Whether leaving a session on this connection keeps it running (the default). */
+export const keepsAlive = (connection: Connection) => connection.keepAlive !== false;
 
 /** The form's values for a saved connection. */
 export function toInput(connection: Connection, password: string | null): ConnectionInput {
+  const access = {
+    groupId: connection.groupId ?? '',
+    protected: connection.protected === true,
+    keepAlive: keepsAlive(connection),
+  };
   return connection.kind === 'ssh'
     ? {
         ...EMPTY_CONNECTION_INPUT,
+        ...access,
         kind: 'ssh',
         name: connection.name,
         host: connection.host,
@@ -138,6 +179,7 @@ export function toInput(connection: Connection, password: string | null): Connec
       }
     : {
         ...EMPTY_CONNECTION_INPUT,
+        ...access,
         kind: 'ttyd',
         name: connection.name,
         url: connection.url,
