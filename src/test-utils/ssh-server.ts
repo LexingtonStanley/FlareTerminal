@@ -22,6 +22,23 @@ export type TestServer = {
   close: () => Promise<void>;
 };
 
+/**
+ * About 1 in 125 Ed25519 keys that ssh2 generates can't be read back by ssh2's own parser
+ * ("Malformed OpenSSH private key"), which failed a test run now and then. Generate until
+ * it can.
+ */
+function generateHostKey(type: HostKeyType) {
+  for (;;) {
+    const keys =
+      type === 'rsa'
+        ? utils.generateKeyPairSync('rsa', { bits: 2048 })
+        : type === 'ecdsa'
+          ? utils.generateKeyPairSync('ecdsa', { bits: 256 })
+          : utils.generateKeyPairSync('ed25519');
+    if (!(utils.parseKey(keys.private) instanceof Error)) return keys;
+  }
+}
+
 export async function startTestSshServer({
   hostKey = 'ed25519',
   algorithms,
@@ -34,12 +51,7 @@ export async function startTestSshServer({
   algorithms?: ConstructorParameters<typeof Server>[0]['algorithms'];
   authenticate?: (ctx: AuthContext) => void;
 } = {}): Promise<TestServer> {
-  const keys =
-    hostKey === 'rsa'
-      ? utils.generateKeyPairSync('rsa', { bits: 2048 })
-      : hostKey === 'ecdsa'
-        ? utils.generateKeyPairSync('ecdsa', { bits: 256 })
-        : utils.generateKeyPairSync('ed25519');
+  const keys = generateHostKey(hostKey);
 
   let latestShell: ServerChannel | null = null;
   let latestConnection: { rekey(cb: (err?: Error) => void): void } | null = null;
