@@ -11,6 +11,7 @@ import type {
 
 import { parseOsc777, parseOsc9, parseOsc99, type AgentAlert } from './alerts';
 import { contentLines, type SessionActivity } from './inbox';
+import { detectPrompt, samePrompt, type DetectedPrompt } from './prompts';
 
 /**
  * Open terminal sessions, kept alive while the person looks elsewhere (another session,
@@ -29,6 +30,9 @@ export type SessionTarget = {
 
 export type Attention = { title: string; body: string; at: number };
 
+/** A question on the session's screen, waiting for an answer (see prompts.ts). */
+export type AgentPrompt = DetectedPrompt & { at: number };
+
 export type SessionSnapshot = SessionTarget & {
   id: string;
   status: SessionStatus;
@@ -37,6 +41,8 @@ export type SessionSnapshot = SessionTarget & {
   inputMode: InputMode;
   /** An alert the person hasn't seen yet. Cleared when they open the session. */
   attention: Attention | null;
+  /** A question on screen that waits for the person, until it leaves the screen. */
+  prompt: AgentPrompt | null;
   /** The connection dropped and a reconnect is scheduled. */
   reconnecting: boolean;
 };
@@ -89,6 +95,8 @@ class Session {
   private lastOutputAt: number;
   private screenText = '';
   private changedAt: number;
+  private writes = 0;
+  private closed = false;
   snapshot: SessionSnapshot;
 
   constructor(
@@ -103,6 +111,7 @@ class Session {
       title: null,
       inputMode: 'normal',
       attention: null,
+      prompt: null,
       reconnecting: false,
     };
     this.lastOutputAt = this.changedAt = manager.now();
@@ -134,8 +143,7 @@ class Session {
     this.manager.changed();
   }
 
-  private alert({ title, body }: AgentAlert, bell = false) {
-    const now = this.manager.now();
+  private alert({ title, body }: AgentAlert, bell = false, now = this.manager.now()) {
     const watching = this.manager.isWatching(this.snapshot.id);
     if (watching) return;
     const recent = now - this.lastAlertAt < ALERT_INTERVAL_MS;
@@ -152,7 +160,11 @@ class Session {
 
   private output(text: string) {
     this.lastOutputAt = this.manager.now();
-    this.headless.write(text);
+    // Look for a prompt once the screen has settled: after the last write of a burst.
+    const write = ++this.writes;
+    this.headless.write(text, () => {
+      if (write === this.writes) this.checkPrompt();
+    });
     if (this.view) this.view.write(text);
     else this.replayBuffer?.push(text);
   }
@@ -186,18 +198,49 @@ class Session {
    * Chrome such as a status bar's clock doesn't count, so it can't make a session look busy.
    */
   activity(): SessionActivity {
-    const buffer = this.headless.buffer.active;
-    const lines: string[] = [];
-    for (let y = buffer.baseY; y < buffer.baseY + this.headless.rows; y++) {
-      lines.push(buffer.getLine(y)?.translateToString(true) ?? '');
-    }
-    const content = contentLines(lines);
+    const content = contentLines(this.screenLines());
     const text = content.join('\n');
     if (text !== this.screenText) {
       this.screenText = text;
       this.changedAt = this.lastOutputAt;
     }
     return { preview: content.at(-1) ?? null, changedAt: this.changedAt };
+  }
+
+  /** The rows on screen now, top to bottom. */
+  private screenLines(): string[] {
+    const buffer = this.headless.buffer.active;
+    const lines: string[] = [];
+    for (let y = buffer.baseY; y < buffer.baseY + this.headless.rows; y++) {
+      lines.push(buffer.getLine(y)?.translateToString(true) ?? '');
+    }
+    return lines;
+  }
+
+  /**
+   * Notices a question on screen (an agent's approval menu, a `[y/N]`) and treats it like an
+   * alert, for agents and programs that don't ring the bell. When it leaves the screen
+   * (answered here or elsewhere) the alert it raised goes too.
+   */
+  private checkPrompt() {
+    if (this.closed) return;
+    const detected = detectPrompt(this.screenLines());
+    const current = this.snapshot.prompt;
+    if (!detected) {
+      if (!current) return;
+      const raised = this.snapshot.attention?.at === current.at;
+      this.update({ prompt: null, ...(raised ? { attention: null } : {}) });
+      return;
+    }
+    if (current && samePrompt(current, detected)) return;
+    const prompt = { ...detected, at: this.manager.now() };
+    this.update({ prompt });
+    // A message the agent sent itself says more than the question ("needs your permission
+    // to use Bash"), so it stays; a bare bell says less.
+    if (!this.snapshot.attention || this.lastAlertWasBell) {
+      // At the prompt's time, so the alert can be matched to it when the prompt goes.
+      this.alert({ title: null, body: prompt.question }, false, prompt.at);
+    }
   }
 
   detach(view: ViewSink) {
@@ -288,6 +331,7 @@ class Session {
   }
 
   close() {
+    this.closed = true;
     this.cancelRetry?.();
     this.cancelRetry = null;
     this.transport?.close();

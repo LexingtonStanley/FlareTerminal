@@ -11,6 +11,7 @@ import { useConnections } from '@/features/connections/connections-provider';
 import {
   formatSince,
   inboxGroup,
+  waitingFor,
   type InboxGroup,
   type SessionActivity,
 } from '@/features/sessions/inbox';
@@ -66,7 +67,7 @@ export default function InboxScreen() {
   /** When the session last did something that matters for its group. */
   const since = (session: SessionSnapshot, group: InboxGroup) => {
     if (group === 'needs-you') {
-      const waited = formatSince(now - session.attention!.at);
+      const waited = formatSince(now - waitingFor(session)!.since);
       return waited === 'now' ? 'just now' : `waiting ${waited}`;
     }
     if (group === 'working') return 'active';
@@ -86,7 +87,7 @@ export default function InboxScreen() {
       group === 'needs-you'
         ? locked
           ? 'Needs your attention'
-          : session.attention!.body || 'Needs your attention'
+          : waitingFor(session)!.message
         : null;
     const when = since(session, group);
     return (
@@ -184,7 +185,7 @@ export default function InboxScreen() {
             .filter((session) => groupOf(session) === group)
             .sort((a, b) =>
               group === 'needs-you'
-                ? a.attention!.at - b.attention!.at
+                ? waitingFor(a)!.since - waitingFor(b)!.since
                 : (activityOf(b.id)?.changedAt ?? 0) - (activityOf(a.id)?.changedAt ?? 0)
             );
           if (!members.length) return null;

@@ -3,12 +3,13 @@ import { SymbolView } from 'expo-symbols';
 import { StyleSheet } from 'react-native';
 
 import { sans } from '@/constants/theme';
+import { waitingFor } from '@/features/sessions/inbox';
 import { useSessions } from '@/features/sessions/sessions-provider';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function TabsLayout() {
   const theme = useTheme();
-  const waiting = useSessions().filter((session) => session.attention).length;
+  const waiting = useSessions().filter((session) => waitingFor(session)).length;
 
   return (
     <Tabs

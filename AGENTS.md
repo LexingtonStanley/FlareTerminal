@@ -136,7 +136,8 @@ src/features/terminal/   terminal-view ('use dom' xterm.js), transport.ts (inter
 src/features/ssh/        SSH-2 client (client.ts), packets and ciphers, host and user keys,
                          known hosts, the app's key, socket.ts (TCP; socket.web.ts refuses)
 src/features/sessions/   SessionManager (every open session, headless xterm), alerts, inbox.ts
-                         (screen preview, needs you/working/idle), provider,
+                         (screen preview, needs you/working/idle), prompts.ts (questions read
+                         off the screen: agent approval menus, [y/N]), provider,
                          useSessionView, session strip, status, attention banner
 src/features/keyboard/   Accessory bar and coding keyboard: layout, gestures, touch tracking,
                          modifiers, haptics (docs/keyboard.md explains the design)
