@@ -8,7 +8,12 @@ import type {
   TransportListener,
 } from '@/features/terminal/transport';
 
-import { SessionManager, type Attention, type SessionSnapshot } from './session-manager';
+import {
+  RECONNECT_DELAYS_MS,
+  SessionManager,
+  type Attention,
+  type SessionSnapshot,
+} from './session-manager';
 
 class FakeTransport implements TerminalTransport {
   size: TerminalSize | null = null;
@@ -40,6 +45,7 @@ class FakeTransport implements TerminalTransport {
 function setup({ connections = ['box'] } = {}) {
   const transports: FakeTransport[] = [];
   const alerts: { session: SessionSnapshot; attention: Attention; appActive: boolean }[] = [];
+  const timers: { ms: number; run: () => void; cancelled: boolean }[] = [];
   let now = 1_000_000;
   const manager = new SessionManager({
     openTransport: (connectionId, listener) => {
@@ -50,6 +56,11 @@ function setup({ connections = ['box'] } = {}) {
     },
     onAttention: (session, attention, appActive) => alerts.push({ session, attention, appActive }),
     now: () => now,
+    delay: (run, ms) => {
+      const timer = { ms, run, cancelled: false };
+      timers.push(timer);
+      return () => (timer.cancelled = true);
+    },
   });
   const view = () => {
     const sink = {
@@ -64,6 +75,7 @@ function setup({ connections = ['box'] } = {}) {
     manager,
     transports,
     alerts,
+    timers,
     view,
     advance: (ms: number) => (now += ms),
     session: (id: string) => manager.getSnapshot().find((s) => s.id === id)!,
@@ -124,6 +136,62 @@ describe('SessionManager', () => {
     transports[1].status({ state: 'connected' });
     expect(transports[0].closed).toBe(true);
     expect(transports[1].written).toEqual(['claude\r']);
+  });
+
+  it('reconnects a session whose connection dropped, backing off, then waits', () => {
+    const { manager, transports, timers, view, session } = setup();
+    const id = manager.start({ connectionId: 'box', name: 'Claude', command: 'claude' });
+    manager.attach(id, view(), SIZE);
+    transports[0].status({ state: 'connected' });
+
+    transports[0].status({ state: 'closed', message: 'Connection lost', retry: true });
+    expect(session(id).reconnecting).toBe(true);
+    for (const [attempt, ms] of RECONNECT_DELAYS_MS.entries()) {
+      expect(timers.at(-1)?.ms).toBe(ms);
+      timers.at(-1)!.run();
+      expect(transports).toHaveLength(attempt + 2);
+      expect(session(id).reconnecting).toBe(false);
+      const transport = transports[attempt + 1];
+      transport.status({ state: 'closed', message: "Couldn't reach box", retry: true });
+    }
+    // Out of retries: it waits, until the app comes back on screen.
+    expect(timers).toHaveLength(RECONNECT_DELAYS_MS.length);
+    expect(session(id).status).toMatchObject({ state: 'closed' });
+    manager.setAppActive(false);
+    manager.setAppActive(true);
+    expect(transports).toHaveLength(RECONNECT_DELAYS_MS.length + 2);
+
+    // Connected again: the command reattaches (tmux new -A, zellij attach -c).
+    transports.at(-1)!.status({ state: 'connected' });
+    expect(transports.at(-1)!.written).toEqual(['claude\r']);
+  });
+
+  it('leaves sessions that ended, were refused or never connected', () => {
+    const { manager, transports, timers, view } = setup();
+    const ended = manager.start({ connectionId: 'box', name: 'Box', command: null });
+    manager.attach(ended, view(), SIZE);
+    transports[0].status({ state: 'connected' });
+    transports[0].status({ state: 'closed', message: 'Session ended' });
+
+    const unreachable = manager.start({ connectionId: 'box', name: 'Box', command: null });
+    manager.attach(unreachable, view(), SIZE);
+    transports[1].status({ state: 'closed', message: "Couldn't reach box", retry: true });
+
+    manager.setAppActive(true);
+    expect(timers).toHaveLength(0);
+    expect(transports).toHaveLength(2);
+  });
+
+  it('cancels a scheduled reconnect when the session is closed', () => {
+    const { manager, transports, timers, view } = setup();
+    const id = manager.start({ connectionId: 'box', name: 'Box', command: null });
+    manager.attach(id, view(), SIZE);
+    transports[0].status({ state: 'connected' });
+    transports[0].status({ state: 'closed', message: 'Connection lost', retry: true });
+
+    manager.close(id);
+
+    expect(timers[0].cancelled).toBe(true);
   });
 
   it('turns the bell and notification sequences into attention when not watched', async () => {

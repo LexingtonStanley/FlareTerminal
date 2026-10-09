@@ -56,7 +56,13 @@
           }
         }
       ],
-      "expo-notifications"
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/android-icon-monochrome.png"
+        }
+      ],
+      "./plugins/with-background-sessions"
     ],
     "experiments": {
       "typedRoutes": true,

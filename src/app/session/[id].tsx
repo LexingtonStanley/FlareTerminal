@@ -130,7 +130,9 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
           {session.status.state === 'closed' ? (
             <ThemedView type="backgroundElement" style={styles.banner}>
               <ThemedText type="small" role="alert">
-                {session.status.message}
+                {session.reconnecting
+                  ? `${session.status.message}. Reconnecting…`
+                  : session.status.message}
               </ThemedText>
               <Button title="Reconnect" onPress={() => manager.reconnect(session.id)} />
             </ThemedView>

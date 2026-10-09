@@ -15,6 +15,7 @@ import {
 } from '@/features/notifications/notify';
 import { openTransport } from '@/features/terminal/open-transport';
 
+import { keepSessionsAlive } from './background';
 import { SessionManager, type SessionTarget } from './session-manager';
 
 const SessionsContext = createContext<SessionManager | null>(null);
@@ -49,8 +50,20 @@ export function SessionsProvider({ children }: PropsWithChildren) {
     return () => {
       subscription.remove();
       manager.closeAll();
+      keepSessionsAlive(0);
     };
   }, [manager]);
+
+  // Keep the app running in the background while any session is connected (Android).
+  const sessions = useSyncExternalStore(
+    manager.subscribe,
+    manager.getSnapshot,
+    manager.getSnapshot
+  );
+  const live = sessions.filter(
+    ({ status, reconnecting }) => status.state !== 'closed' || reconnecting
+  ).length;
+  useEffect(() => keepSessionsAlive(live), [live]);
 
   return <SessionsContext value={manager}>{children}</SessionsContext>;
 }

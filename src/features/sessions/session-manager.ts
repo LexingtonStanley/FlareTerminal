@@ -36,6 +36,8 @@ export type SessionSnapshot = SessionTarget & {
   inputMode: InputMode;
   /** An alert the person hasn't seen yet. Cleared when they open the session. */
   attention: Attention | null;
+  /** The connection dropped and a reconnect is scheduled. */
+  reconnecting: boolean;
 };
 
 /** Where a session's output goes while a terminal view shows it. */
@@ -56,12 +58,20 @@ export type SessionManagerDeps = {
   /** Called for alerts from sessions the person isn't looking at. */
   onAttention(session: SessionSnapshot, attention: Attention, appActive: boolean): void;
   now?: () => number;
+  /** Runs `callback` after `ms`; returns a cancel function. Defaults to setTimeout. */
+  delay?: (callback: () => void, ms: number) => () => void;
 };
 
 const SCROLLBACK = 5000;
 const REPLAY_SCROLLBACK = 2000;
 /** Bells come in bursts (tab completion); notify at most this often per session. */
 const ALERT_INTERVAL_MS = 15_000;
+/**
+ * When a session that was connected loses its connection, it reconnects after each of these
+ * delays in turn (its command, e.g. `tmux new -A`, reattaches). After that it waits for the
+ * person, or for the app to come back on screen, when it tries again.
+ */
+export const RECONNECT_DELAYS_MS = [1_000, 5_000, 15_000];
 
 class Session {
   readonly headless: HeadlessTerminal;
@@ -72,6 +82,9 @@ class Session {
   private size: TerminalSize = { cols: 80, rows: 24 };
   private lastAlertAt = -Infinity;
   private lastAlertWasBell = false;
+  private everConnected = false;
+  private retries = 0;
+  private cancelRetry: (() => void) | null = null;
   snapshot: SessionSnapshot;
 
   constructor(
@@ -86,6 +99,7 @@ class Session {
       title: null,
       inputMode: 'normal',
       attention: null,
+      reconnecting: false,
     };
     this.headless = new Terminal({
       cols: 80,
@@ -176,9 +190,38 @@ class Session {
     this.transport?.resize(size);
   }
 
+  /** Reconnects now, e.g. from the Reconnect button: a fresh run of retries if it fails. */
   reconnect() {
+    this.retries = 0;
+    this.retryNow();
+  }
+
+  /** The app is back on screen: reconnect if the connection was lost while it was away. */
+  resume() {
+    const { status } = this.snapshot;
+    if (status.state === 'closed' && status.retry && this.everConnected && !this.cancelRetry) {
+      this.reconnect();
+    }
+  }
+
+  private retryNow() {
+    this.cancelRetry?.();
+    this.cancelRetry = null;
+    if (this.snapshot.reconnecting) this.update({ reconnecting: false });
     this.output('\r\n');
     this.connect();
+  }
+
+  private scheduleRetry(status: SessionStatus) {
+    if (status.state !== 'closed' || !status.retry || !this.everConnected) return;
+    const delay = RECONNECT_DELAYS_MS[this.retries];
+    if (delay === undefined) return;
+    this.retries++;
+    this.update({ reconnecting: true });
+    this.cancelRetry = this.manager.delay(() => {
+      this.cancelRetry = null;
+      this.retryNow();
+    }, delay);
   }
 
   connect() {
@@ -198,6 +241,11 @@ class Session {
       onStatus: (status) => {
         if (!isCurrent()) return;
         this.update({ status, inputMode: 'normal' });
+        if (status.state === 'connected') {
+          this.everConnected = true;
+          this.retries = 0;
+        }
+        this.scheduleRetry(status);
         const { command } = this.snapshot;
         if (status.state === 'connected' && command && !sentCommand) {
           sentCommand = true;
@@ -214,6 +262,8 @@ class Session {
   }
 
   close() {
+    this.cancelRetry?.();
+    this.cancelRetry = null;
     this.transport?.close();
     this.transport = null;
     this.view = null;
@@ -313,6 +363,7 @@ export class SessionManager {
 
   setAppActive(active: boolean) {
     this.appActive = active;
+    if (active) this.sessions.forEach((session) => session.resume());
   }
 
   /** @internal */
@@ -328,6 +379,13 @@ export class SessionManager {
   /** @internal */
   now() {
     return (this.deps.now ?? Date.now)();
+  }
+
+  /** @internal */
+  delay(callback: () => void, ms: number): () => void {
+    if (this.deps.delay) return this.deps.delay(callback, ms);
+    const timer = setTimeout(callback, ms);
+    return () => clearTimeout(timer);
   }
 
   closeAll() {

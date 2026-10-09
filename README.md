@@ -11,7 +11,8 @@ web build), started from the RapidAppToolkit template.
   Keystore. Host keys are checked on every connect (trust on first use, with the fingerprint).
 - **Sessions that keep running.** Open several at once and switch from the strip at the top
   of a session or from Home. Leaving a session doesn't close it, and coming back replays its
-  screen exactly.
+  screen exactly. On Android they stay connected while you use other apps, and a dropped
+  connection reconnects by itself.
 - **Shortcuts.** One tap connects and runs a command, e.g. Claude in tmux
   (`tmux new -A -s claude claude`) or zellij (`zellij attach -c claude -- claude`), optionally
   in a folder. Presets for Claude, `claude --continue` and plain tmux.
@@ -83,9 +84,15 @@ The computer needs an SSH server, which most already have:
 **Sign in with a key (optional).** Settings → SSH key creates an Ed25519 key that never leaves
 the phone, and shows the one command to run on each computer to accept it.
 
-**Keep agents running.** Phones suspend apps soon after they leave the screen, which ends SSH
-connections. Run agents inside tmux or zellij (the shortcut presets do) and they keep going;
-reconnect and you're back where you were.
+**In the background.** On Android, while a session is open the app runs as a foreground service
+(the "1 session connected" notification), so sessions stay connected and agent alerts keep
+coming while you use other apps. Android needs notification permission to show it, which the
+app asks for with the first session. iOS suspends apps soon after they leave the screen, so
+there sessions drop and reconnect when you come back.
+
+**Keep agents running.** If a connection drops (a network change, the phone out of signal),
+the app reconnects by itself, and a shortcut's command runs again: run agents inside tmux or
+zellij (the presets do) and that reattaches you to the same agent, still running.
 
 **Alerts from Claude Code.** Out of the box, Claude Code only sends alerts to the terminals it
 recognises (iTerm2, Ghostty, Kitty), and it can't tell what's on the other end of SSH. Tell it
@@ -97,8 +104,8 @@ once, on the computer, in `~/.claude/settings.json` (or `/config` → Local noti
 
 That sends a message (OSC 9) and rings the bell. Inside tmux the message needs
 `set -g allow-passthrough on` in `~/.tmux.conf`; without it tmux passes only the bell, and the
-alert says "Needs your attention". Phone notifications arrive while the app is open or recently
-left; once the system suspends it, they wait until you reopen it.
+alert says "Needs your attention". On iOS, phone notifications arrive only while the app is open
+or recently left.
 
 ### ttyd (and the web build)
 

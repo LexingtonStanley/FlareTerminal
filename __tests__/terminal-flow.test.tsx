@@ -1,4 +1,4 @@
-import { act, fireEvent, userEvent } from '@testing-library/react-native';
+import { act, fireEvent, userEvent, waitFor } from '@testing-library/react-native';
 import { router } from 'expo-router';
 import { screen } from 'expo-router/testing-library';
 
@@ -238,6 +238,17 @@ describe('terminal', () => {
     // The old transport can no longer change what the screen shows.
     await act(() => transport.status({ state: 'closed', message: 'stale' }));
     expect(screen.queryByText('stale')).not.toBeOnTheScreen();
+  });
+
+  it('reconnects by itself when the connection drops', async () => {
+    const { transport } = await openDevbox();
+
+    await act(() => transport.status({ state: 'closed', message: 'Connection lost', retry: true }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Connection lost. Reconnecting…');
+    await waitFor(() => expect(transports).toHaveLength(2), { timeout: 3000 });
+    await act(() => transports[1].status({ state: 'connected' }));
+    expect(screen.queryByRole('alert')).not.toBeOnTheScreen();
   });
 
   it('keeps the session running after leaving, and resumes it with its screen', async () => {

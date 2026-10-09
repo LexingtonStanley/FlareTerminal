@@ -158,6 +158,12 @@ app.json / app.config.ts Identity / build variants (APP_VARIANT = development | 
   output per frame, modifiers). A new way to reach a host (mosh, a relay) is a new transport
   behind the same interface, chosen in `open-transport.ts`. Keep byte-level logic pure and
   unit-tested (`keys.ts`, the ttyd framing, the SSH packets).
+- **Background**: a transport marks a closed status `retry` when the network failed (not when
+  the session ended or was refused); `SessionManager` then reconnects on a backoff, and again
+  when the app returns to the screen. On Android, `sessions/background.android.ts` runs a
+  foreground service (react-native-background-actions, declared as `specialUse` by
+  `plugins/with-background-sessions.js`) while sessions are live; `background.ts` is the
+  no-op for iOS and the web.
 - **SSH is security code.** Never weaken host-key checking (a changed key refuses to connect),
   add algorithms without a reason, or log secrets. `client.test.ts` runs against a real SSH
   server (`ssh2`); a change to the protocol also gets a manual run against OpenSSH.
@@ -178,7 +184,7 @@ app.json / app.config.ts Identity / build variants (APP_VARIANT = development | 
   - `testID` is only for Maestro flows (`.maestro/`).
 - **Limits of the web check**: it can't catch native-only behaviour (the WebView hosting the
   terminal, TCP sockets, soft keyboards and IMEs, `inputmode="none"`, Keychain/Keystore,
-  cleartext networking, notifications, haptics, multi-touch). Cover
+  cleartext networking, notifications, the foreground service, haptics, multi-touch). Cover
   those with a Maestro flow and say in your summary that they need a device run.
 - **Checking against a real ttyd**: download a release binary from
   https://github.com/tsl0922/ttyd/releases, run `ttyd -W -i lo -p 7690 bash`, serve the web
