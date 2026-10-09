@@ -58,7 +58,7 @@ export class SshTransport implements TerminalTransport {
   private finished = false;
   private closeMessage: string | null = null;
   private readonly decoder = new TextDecoder();
-  /** Ends each open tunnel; the client drops its channels silently with the connection. */
+  /** Ends each tunnel and command; the client drops channels silently with the connection. */
   private readonly tunnels = new Set<() => void>();
 
   constructor(
@@ -89,12 +89,25 @@ export class SshTransport implements TerminalTransport {
   }
 
   async openTunnel(port: number, events: TunnelEvents): Promise<Tunnel> {
-    // Only once signed in: a shell channel means the session is up.
+    const client = this.connectedClient();
+    // "localhost" as the host resolves it: a dev server may listen on IPv4 or IPv6 only.
+    return this.track(await client.openDirectTcpip('localhost', port), events);
+  }
+
+  async runCommand(command: string, events: TunnelEvents): Promise<Tunnel> {
+    return this.track(await this.connectedClient().openExec(command), events);
+  }
+
+  /** Only once signed in: a shell channel means the session is up. */
+  private connectedClient(): SshClient {
     if (!this.client || !this.channel || this.finished || this.closedByUs) {
       throw new Error('Not connected');
     }
-    // "localhost" as the host resolves it: a dev server may listen on IPv4 or IPv6 only.
-    const channel = await this.client.openDirectTcpip('localhost', port);
+    return this.client;
+  }
+
+  /** A channel beside the shell as a Tunnel, ended with the connection. */
+  private track(channel: SshChannel, events: TunnelEvents): Tunnel {
     // The connection can end while the channel opens.
     if (this.finished || this.closedByUs || channel.closed) {
       channel.close();
@@ -115,7 +128,8 @@ export class SshTransport implements TerminalTransport {
         end();
       }
     };
-    // The dev server closed its connection (EOF), or the channel closed.
+    // The other end finished (EOF: a dev server closed its connection, a command ended),
+    // or the channel closed.
     channel.onEof = end;
     channel.onClose = end;
     return {

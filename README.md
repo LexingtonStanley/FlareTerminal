@@ -25,6 +25,10 @@ web build), started from the RapidAppToolkit template.
   `http://localhost:5173`, tap the link (or the preview button) and the page opens in the app,
   forwarded through the session's SSH connection like `ssh -L`. Back, forward, reload and the
   address bar work as in a browser, and the port closes when you leave.
+- **Host health.** A line above an SSH session shows the computer's load, memory, disk and
+  uptime, refreshed every 10 seconds, with anything nearly full in red. Nothing to install:
+  while the session is on screen, the app runs one small read-only `sh` script beside it
+  (`src/features/health/health.ts`; Linux and macOS). Settings turns it off.
 - **A coding keyboard** in place of the phone's: no autocorrect, every key reaches the
   terminal. Esc, Tab/Shift+Tab, sticky Ctrl and Alt, an arrows joystick, Home/End and the
   symbols phones bury, all fixed in place. Tap the line you're editing to move the cursor

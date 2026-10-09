@@ -11,6 +11,14 @@ import type {
 /** A tunnel the app opened, played from the host's side. */
 export type FakeTunnel = { port: number; events: TunnelEvents; sent: string[]; closed: boolean };
 
+/** A command the app ran beside the terminal, played from the host's side. */
+export type FakeCommand = {
+  command: string;
+  events: TunnelEvents;
+  sent: string[];
+  closed: boolean;
+};
+
 /**
  * Replaces src/features/terminal/open-transport.ts. Every transport the app opens is
  * recorded in `transports`, so a test can play the host:
@@ -26,8 +34,10 @@ export class FakeTransport implements TerminalTransport {
   tunnels: FakeTunnel[] = [];
   /** Set to make tunnels fail, as a host does when nothing listens on the port. */
   refuseTunnels: Error | null = null;
-  /** Like the real transports: SSH can forward ports, ttyd can't. */
+  commands: FakeCommand[] = [];
+  /** Like the real transports: SSH can forward ports and run commands, ttyd can't. */
   openTunnel?: (port: number, events: TunnelEvents) => Promise<Tunnel>;
+  runCommand?: (command: string, events: TunnelEvents) => Promise<Tunnel>;
 
   constructor(
     readonly connection: Connection,
@@ -42,6 +52,14 @@ export class FakeTransport implements TerminalTransport {
         return {
           write: (bytes) => tunnel.sent.push(new TextDecoder().decode(bytes)),
           close: () => (tunnel.closed = true),
+        };
+      };
+      this.runCommand = async (command, events) => {
+        const run: FakeCommand = { command, events, sent: [], closed: false };
+        this.commands.push(run);
+        return {
+          write: (bytes) => run.sent.push(new TextDecoder().decode(bytes)),
+          close: () => (run.closed = true),
         };
       };
     }

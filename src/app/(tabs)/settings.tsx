@@ -3,11 +3,12 @@ import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Card, Section } from '@/components/ui/card';
+import { Card, Divider, Section } from '@/components/ui/card';
 import { Icon } from '@/components/ui/icon';
 import { IconButton } from '@/components/ui/icon-button';
 import { Screen } from '@/components/ui/screen';
 import { SegmentedControl } from '@/components/ui/segmented-control';
+import { ToggleRow } from '@/components/ui/toggle-row';
 import { Spacing } from '@/constants/theme';
 import {
   FONT_SIZE,
@@ -27,8 +28,16 @@ const APPEARANCE_OPTIONS: { value: Appearance; label: string }[] = [
 ];
 
 export default function SettingsScreen() {
-  const { fontSize, setFontSize, appTheme, setAppTheme, appearance, setAppearance } =
-    usePreferences();
+  const {
+    fontSize,
+    setFontSize,
+    appTheme,
+    setAppTheme,
+    appearance,
+    setAppearance,
+    hostHealth,
+    setHostHealth,
+  } = usePreferences();
   const terminalTheme = useTerminalTheme();
   const theme = useTheme();
   const shape = useShape();
@@ -97,6 +106,13 @@ export default function SettingsScreen() {
               />
             </View>
           </View>
+          <Divider inset={Spacing.three} />
+          <ToggleRow
+            title="Host health"
+            caption="Load, memory, disk and uptime above SSH sessions, read every 10 seconds"
+            value={hostHealth}
+            onChange={setHostHealth}
+          />
         </Card>
       </Section>
 

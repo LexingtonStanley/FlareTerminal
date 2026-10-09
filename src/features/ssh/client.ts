@@ -833,6 +833,20 @@ export class SshClient {
   }
 
   /**
+   * Runs `command` on the host without a terminal, like `ssh host command` (RFC 4254
+   * section 6.5): the channel carries its input and output (stderr included), and ends
+   * with it. The host runs it with the person's login shell.
+   */
+  async openExec(command: string): Promise<SshChannel> {
+    const channel = await this.openChannel('session');
+    if (!(await this.channelRequest(channel, 'exec', true, (w) => w.string(command)))) {
+      channel.close();
+      throw new SshError('The host refused to run a command');
+    }
+    return channel;
+  }
+
+  /**
    * A byte stream to `host`:`port` as the host sees them (RFC 4254 section 7.2), like
    * `ssh -L`: `localhost` is the host itself. Rejects with a ChannelOpenError when the host
    * doesn't allow forwarding or nothing answers there.

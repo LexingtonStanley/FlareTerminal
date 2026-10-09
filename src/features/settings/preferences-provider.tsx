@@ -38,6 +38,7 @@ export function PreferencesProvider({ children }: PropsWithChildren) {
       appTheme: isAppThemeId(theme) ? theme : DEFAULT_APP_THEME,
       appearance: isAppearance(stored?.appearance) ? stored.appearance : 'system',
       fontSize: typeof fontSize === 'number' ? clampFontSize(fontSize) : FONT_SIZE.default,
+      hostHealth: stored?.hostHealth !== false,
     };
   });
 
@@ -59,6 +60,7 @@ export function PreferencesProvider({ children }: PropsWithChildren) {
     setAppTheme: (appTheme) => update({ appTheme }),
     setAppearance: (appearance) => update({ appearance }),
     setFontSize: (size) => update({ fontSize: clampFontSize(size) }),
+    setHostHealth: (hostHealth) => update({ hostHealth }),
   };
 
   return <PreferencesContext value={value}>{children}</PreferencesContext>;

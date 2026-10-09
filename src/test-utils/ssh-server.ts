@@ -2,6 +2,7 @@
 // the protocol) on a random localhost port, with a shell that echoes input back as
 // `echo:<input>`. Use in Jest files marked `@jest-environment node`, and call
 // stopTestSshServers() in afterEach.
+import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { createConnection, type AddressInfo, type Socket } from 'node:net';
 import { Server, utils, type AuthContext, type ServerChannel } from 'ssh2';
@@ -18,6 +19,8 @@ export type TestServer = {
   received: string[];
   /** Where clients asked to be forwarded (direct-tcpip), in order. */
   tunnels: { host: string; port: number }[];
+  /** Commands clients ran (exec), in order. */
+  commands: string[];
   /** The server side of the latest shell. */
   shell: () => ServerChannel;
   rekey: () => Promise<void>;
@@ -45,6 +48,7 @@ export async function startTestSshServer({
   hostKey = 'ed25519',
   algorithms,
   forwarding = true,
+  commands = true,
   authenticate = (ctx) =>
     ctx.method === 'password' && ctx.password === 'correct-horse'
       ? ctx.accept()
@@ -54,6 +58,8 @@ export async function startTestSshServer({
   algorithms?: ConstructorParameters<typeof Server>[0]['algorithms'];
   /** Whether it forwards ports (direct-tcpip), connecting from this machine like sshd. */
   forwarding?: boolean;
+  /** Whether it runs commands (exec) with this machine's /bin/sh, like sshd. */
+  commands?: boolean;
   authenticate?: (ctx: AuthContext) => void;
 } = {}): Promise<TestServer> {
   const keys = generateHostKey(hostKey);
@@ -65,6 +71,7 @@ export async function startTestSshServer({
     resizes: [] as TestServer['resizes'],
     received: [] as string[],
     tunnels: [] as TestServer['tunnels'],
+    commands: [] as string[],
   };
 
   const server = new Server({ hostKeys: [keys.private], algorithms }, (connection) => {
@@ -98,6 +105,27 @@ export async function startTestSshServer({
         session.on('window-change', (acceptResize, _reject, info) => {
           state.resizes.push({ cols: info.cols, rows: info.rows });
           acceptResize?.();
+        });
+        session.on('exec', (acceptExec, rejectExec, info) => {
+          state.commands.push(info.command);
+          if (!commands) return rejectExec?.();
+          const stream = acceptExec();
+          // Its own process group, so closing the channel stops everything it started.
+          const child = spawn('/bin/sh', ['-c', info.command], { detached: true });
+          stream.pipe(child.stdin).on('error', () => {});
+          child.stdout.pipe(stream, { end: false });
+          child.stderr.pipe(stream.stderr, { end: false });
+          child.on('close', (code) => {
+            stream.exit(code ?? 1);
+            stream.end();
+          });
+          stream.on('close', () => {
+            try {
+              process.kill(-child.pid!, 'SIGHUP');
+            } catch {
+              // Already ended.
+            }
+          });
         });
         session.on('shell', (acceptShell) => {
           const shell = acceptShell();
