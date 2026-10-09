@@ -38,6 +38,8 @@ const ICONS = {
   biometrics: { ios: 'faceid', android: 'fingerprint', web: 'fingerprint' },
   folder: { ios: 'folder.fill', android: 'folder', web: 'folder' },
   inbox: { ios: 'tray.fill', android: 'inbox', web: 'inbox' },
+  share: { ios: 'square.and.arrow.up', android: 'share', web: 'share' },
+  paste: { ios: 'doc.on.clipboard', android: 'content_paste', web: 'content_paste' },
 } satisfies Record<string, SymbolViewProps['name']>;
 
 export type IconName = keyof typeof ICONS;

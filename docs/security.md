@@ -44,6 +44,28 @@ anywhere else, or leaving the app, does.
 A connection can also be set not to stay connected: its sessions close when you leave them or
 the app.
 
+## SSH keys
+
+- **Where they come from.** The Flare key is an Ed25519 key made on the phone. Other keys are
+  imported from OpenSSH key files (`-----BEGIN OPENSSH PRIVATE KEY-----`,
+  `src/features/ssh/private-key.ts`): Ed25519, ECDSA (P-256, P-384, P-521) and RSA. Older PEM
+  files, PuTTY keys and security keys (`sk-…`) get a message saying how to convert them.
+- **Passphrases** decrypt a key once, at import (bcrypt_pbkdf and AES, as OpenSSH does), and are
+  never kept. From then on the private half is a secret like a password: in the Keychain or
+  Keystore, sealed with the vault key while an app lock is set. The app lock is what protects
+  it afterwards, so a key with a passphrase is best paired with one. An imported key's public
+  half, name and fingerprint are plain storage, so lists show them without unlocking.
+- **Signing.** Ed25519 and ECDSA come from @noble (ECDSA with RFC 6979 nonces, so no random
+  number to get wrong). RSA signs `rsa-sha2-512` or `rsa-sha2-256`, never SHA-1; it is
+  blinded, so how long it takes doesn't depend on what it signs, and each signature is checked
+  before it is sent, since a miscalculated one would give the key away.
+- **What a host sees.** A connection offers its chosen key, or every key (the Flare key first)
+  when none is chosen. Flare asks the host about each key before signing (RFC 4252), so a host
+  only gets a signature from a key it accepts. It still learns the public keys offered; choose
+  a key for a connection, or None, to offer fewer.
+- **Leaving the phone.** Only public halves can be copied or shared. A key pasted with the
+  Paste button is cleared from the clipboard once imported.
+
 ## Limits
 
 - A 6-digit PIN can't resist an offline guessing attack on its own: someone with the phone's

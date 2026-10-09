@@ -1,5 +1,5 @@
 import type { Connection } from '@/features/connections/connections';
-import { loadAppKey } from '@/features/ssh/app-key';
+import { keysForConnection } from '@/features/ssh/keys';
 import { knownHosts } from '@/features/ssh/known-hosts';
 import { openSocket } from '@/features/ssh/socket';
 
@@ -20,7 +20,7 @@ export function openTransport(
         port: connection.port,
         username: connection.username,
         password,
-        userKey: loadAppKey(),
+        userKeys: keysForConnection(connection.keyId),
         knownHosts,
         openSocket,
       },

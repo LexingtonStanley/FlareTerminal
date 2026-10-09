@@ -24,6 +24,8 @@ export type SshConnection = ConnectionAccess & {
   host: string;
   port: number;
   username: string;
+  /** The SSH key to offer: a key's id, NO_KEY for none, absent for every key. */
+  keyId?: string | null;
 };
 
 export type TtydConnection = ConnectionAccess & {
@@ -49,6 +51,8 @@ export type ConnectionInput = {
   password: string;
   /** '' for no group. */
   groupId: string;
+  /** SSH: '' to offer every key, else as SshConnection.keyId. */
+  keyId: string;
   protected: boolean;
   keepAlive: boolean;
 };
@@ -67,6 +71,7 @@ export const EMPTY_CONNECTION_INPUT: ConnectionInput = {
   username: '',
   password: '',
   groupId: '',
+  keyId: '',
   protected: false,
   keepAlive: true,
 };
@@ -142,7 +147,14 @@ export function toConnection(input: ConnectionInput, id: string): Connection {
   };
   if (input.kind === 'ssh') {
     const fields = sshFields(input);
-    const connection: SshConnection = { id, kind: 'ssh', name: '', ...fields, ...access };
+    const connection: SshConnection = {
+      id,
+      kind: 'ssh',
+      name: '',
+      ...fields,
+      keyId: input.keyId || null,
+      ...access,
+    };
     return { ...connection, name: input.name.trim() || connectionLabel(connection) };
   }
   const url = input.url.trim();
@@ -176,6 +188,7 @@ export function toInput(connection: Connection, password: string | null): Connec
         port: String(connection.port),
         username: connection.username,
         password: password ?? '',
+        keyId: connection.keyId ?? '',
       }
     : {
         ...EMPTY_CONNECTION_INPUT,

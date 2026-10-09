@@ -11,6 +11,8 @@ import { TextField } from '@/components/ui/text-field';
 import { ToggleRow } from '@/components/ui/toggle-row';
 import { Radius, sans, Spacing } from '@/constants/theme';
 import { useGroups } from '@/features/groups/groups-provider';
+import { NO_KEY } from '@/features/ssh/keys';
+import { useKeys } from '@/features/ssh/keys-provider';
 import { useLock } from '@/features/vault/lock-provider';
 import { useTheme } from '@/hooks/use-theme';
 import { secretsSupported } from '@/lib/secrets';
@@ -54,8 +56,12 @@ export function ConnectionForm({
   const isSsh = values.kind === 'ssh';
 
   const { groups } = useGroups();
+  const { keys } = useKeys();
   const lock = useLock();
   const group = groups.find(({ id }) => id === values.groupId);
+  // A deleted key leaves the connection offering every key.
+  const keyChoice =
+    values.keyId === NO_KEY || keys.some(({ id }) => id === values.keyId) ? values.keyId : '';
 
   const field = (name: ConnectionTextField) => ({
     value: values[name],
@@ -174,36 +180,35 @@ export function ConnectionForm({
         </Callout>
       ) : null}
 
-      {groups.length ? (
+      {isSsh && secretsSupported && keys.length ? (
         <View style={styles.field}>
-          <ThemedText type="eyebrow" themeColor="textSecondary">
-            Group
+          <Chips
+            label="SSH key"
+            options={[
+              { id: '', name: 'Any key' },
+              ...keys.map(({ id, name }) => ({ id, name })),
+              { id: NO_KEY, name: 'None' },
+            ]}
+            value={keyChoice}
+            onChange={(keyId) => setValues((current) => ({ ...current, keyId }))}
+          />
+          <ThemedText type="caption" themeColor="textSecondary">
+            {keyChoice === ''
+              ? 'Offers each of your keys, then the password'
+              : keyChoice === NO_KEY
+                ? 'Signs in with the password only'
+                : 'Offers only this key, then the password'}
           </ThemedText>
-          <View role="radiogroup" aria-label="Group" style={styles.chips}>
-            {[{ id: '', name: 'None' }, ...groups].map((option) => {
-              const selected = option.id === values.groupId;
-              return (
-                <Pressable
-                  key={option.id}
-                  role="radio"
-                  aria-checked={selected}
-                  aria-label={option.name}
-                  onPress={() => setValues((current) => ({ ...current, groupId: option.id }))}
-                  style={[
-                    styles.chip,
-                    {
-                      backgroundColor: selected ? theme.primaryMuted : theme.backgroundElement,
-                      borderColor: selected ? theme.primary : theme.border,
-                    },
-                  ]}>
-                  <Text style={[styles.chipText, { color: selected ? theme.primary : theme.text }]}>
-                    {option.name}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
         </View>
+      ) : null}
+
+      {groups.length ? (
+        <Chips
+          label="Group"
+          options={[{ id: '', name: 'None' }, ...groups]}
+          value={values.groupId}
+          onChange={(groupId) => setValues((current) => ({ ...current, groupId }))}
+        />
       ) : null}
 
       <Section title="Access">
@@ -269,6 +274,52 @@ export function ConnectionForm({
         ) : null}
       </View>
     </Screen>
+  );
+}
+
+/** One choice from a few named options, as a row of chips. */
+function Chips({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: { id: string; name: string }[];
+  value: string;
+  onChange(id: string): void;
+}) {
+  const theme = useTheme();
+  return (
+    <View style={styles.field}>
+      <ThemedText type="eyebrow" themeColor="textSecondary">
+        {label}
+      </ThemedText>
+      <View role="radiogroup" aria-label={label} style={styles.chips}>
+        {options.map((option) => {
+          const selected = option.id === value;
+          return (
+            <Pressable
+              key={option.id}
+              role="radio"
+              aria-checked={selected}
+              aria-label={option.name}
+              onPress={() => onChange(option.id)}
+              style={[
+                styles.chip,
+                {
+                  backgroundColor: selected ? theme.primaryMuted : theme.backgroundElement,
+                  borderColor: selected ? theme.primary : theme.border,
+                },
+              ]}>
+              <Text style={[styles.chipText, { color: selected ? theme.primary : theme.text }]}>
+                {option.name}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
   );
 }
 

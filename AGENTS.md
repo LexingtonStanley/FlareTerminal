@@ -117,13 +117,14 @@ Traps already hit in this exact stack:
 ```
 src/app/                 Routes only. Every file here is a screen; never put tests or helpers here.
   _layout.tsx            Providers (preferences, connections, groups, shortcuts, sessions,
-                         lock), stack, attention banner, access guard, root ErrorBoundary
+                         lock, keys), stack, attention banner, access guard, root ErrorBoundary
   (tabs)/                Tab navigator: index (Home: sessions, shortcuts, connections), inbox
                          (every session by what it needs), settings
   connections/           new.tsx, [id].tsx (edit): the connection form
   shortcuts/             new.tsx, [id].tsx (edit): the shortcut form
   groups/                new.tsx, [id].tsx (edit): the group form
   security.tsx           App lock: set up, change or turn off the PIN/password, biometrics
+  keys/                  new.tsx (import a key), [id].tsx (a key: public half, share, delete)
   session/[id].tsx       A session: session strip, view, coding keyboard (or, for writing,
                          the key bar and composer with the phone's keyboard)
   keyboard-preview.tsx   Both keyboards against a pretend shell, no host needed
@@ -133,8 +134,11 @@ src/components/          ThemedText, ThemedView, ExternalLink
 src/features/terminal/   terminal-view ('use dom' xterm.js), transport.ts (interface), ttyd.ts,
                          ssh-transport.ts, open-transport.ts, keys.ts (bytes for keys), composer,
                          cursor-tap.ts (a tap on the edited line as arrow keys)
-src/features/ssh/        SSH-2 client (client.ts), packets and ciphers, host and user keys,
-                         known hosts, the app's key, socket.ts (TCP; socket.web.ts refuses)
+src/features/ssh/        SSH-2 client (client.ts), packets and ciphers, host keys, user keys
+                         (user-key.ts: Ed25519, ECDSA, RSA signing), OpenSSH key files
+                         (private-key.ts, bcrypt-pbkdf.ts), the person's keys (keys.ts, provider,
+                         Settings card, import form), the app's key, known hosts, socket.ts (TCP;
+                         socket.web.ts refuses)
 src/features/sessions/   SessionManager (every open session, headless xterm), alerts, inbox.ts
                          (screen preview, needs you/finished/working/idle), prompts.ts
                          (read off the screen: approval menus, [y/N], an agent's working
@@ -156,7 +160,8 @@ src/features/<name>/     Feature logic and its colocated *.test.ts(x)
 src/lib/                 storage.ts (JSON in localStorage / SQLite), secrets.ts (Keychain/Keystore),
                          vault-key.ts (seals secrets while an app lock is set)
 src/test-utils/          Jest helpers: renderApp, memory-storage, fake-terminal-view, fake-transport,
-                         fake-notify, ssh-server (a real SSH server from ssh2)
+                         fake-notify, ssh-server (a real SSH server from ssh2), ssh-keys (OpenSSH
+                         key files written by ssh2, so no key is checked in)
 __tests__/               Router-level Jest tests (render the real src/app tree)
 e2e/web/                 Playwright specs; fake-ttyd.ts plays a ttyd host via page.routeWebSocket
 .maestro/                Device flows, run on EAS

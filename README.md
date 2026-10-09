@@ -88,8 +88,11 @@ The computer needs an SSH server, which most already have:
   (tested against Go's `x/crypto/ssh`, which Tailscale SSH is built on) and shows any sign-in
   link Tailscale sends, though it hasn't been tried against Tailscale itself yet.
 
-**Sign in with a key (optional).** Settings → SSH key creates an Ed25519 key that never leaves
-the phone, and shows the one command to run on each computer to accept it.
+**Sign in with a key (optional).** Settings → SSH keys imports the keys you already use (paste an
+OpenSSH private key, with its passphrase if it has one: Ed25519, ECDSA or RSA) or creates an
+Ed25519 key that never leaves the phone, and shows the one command to run on each computer to
+accept it. A connection offers every key unless you choose one for it. How keys are kept:
+[docs/security.md](docs/security.md#ssh-keys).
 
 **In the background.** On Android, while a session is open the app runs as a foreground service
 (the "1 session connected" notification), so sessions stay connected and agent alerts keep
