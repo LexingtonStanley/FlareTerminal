@@ -30,11 +30,16 @@ import { toModifiers } from '@/features/keyboard/modifiers';
 import { Composer } from '@/features/terminal/composer';
 import TerminalView, { type TerminalViewHandle } from '@/features/terminal/terminal-view';
 import { useTerminalTheme } from '@/features/settings/use-terminal-theme';
+import { useLock } from '@/features/vault/lock-provider';
+import { UnlockPanel } from '@/features/vault/unlock-panel';
+import { useProtection } from '@/features/vault/use-protection';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function SessionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const session = useSessions().find((candidate) => candidate.id === id);
+  const { settings, isAuthorized, authorize } = useLock();
+  const scope = useProtection()(session?.connectionId ?? '');
 
   if (!session) {
     return (
@@ -46,6 +51,26 @@ export default function SessionScreen() {
         <Link href="/">
           <ThemedText type="linkPrimary">Back home</ThemedText>
         </Link>
+      </Screen>
+    );
+  }
+
+  // A protected connection or group asks for the lock each time the person comes back.
+  // The session keeps running meanwhile; it just isn't shown.
+  if (scope && settings && !isAuthorized(scope)) {
+    return (
+      <Screen centered>
+        <Stack.Screen options={{ title: session.name }} />
+        <UnlockPanel
+          title={`Unlock ${session.name}`}
+          message={
+            scope.startsWith('group:')
+              ? 'Its group is protected. It stays connected while locked.'
+              : 'This connection is protected. It stays connected while locked.'
+          }
+          autoBiometrics
+          onUnlocked={() => authorize(scope)}
+        />
       </Screen>
     );
   }

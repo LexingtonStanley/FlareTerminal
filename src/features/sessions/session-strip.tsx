@@ -2,17 +2,32 @@ import { useRouter } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { Radius, sans, Spacing } from '@/constants/theme';
+import { useConnections } from '@/features/connections/connections-provider';
+import { groupOf } from '@/features/groups/groups';
+import { useGroups } from '@/features/groups/groups-provider';
 import { useTheme } from '@/hooks/use-theme';
 
 import { StatusDot } from './session-status';
 import { useSessions } from './sessions-provider';
 
 /**
- * Tabs for switching between open sessions. The one on screen carries the ember underline;
- * an ember dot marks sessions asking for attention.
+ * Tabs for switching between the open sessions of the current session's group (or of
+ * ungrouped connections). The one on screen carries the ember underline; an ember dot marks
+ * sessions asking for attention.
  */
 export function SessionStrip({ currentId }: { currentId: string }) {
-  const sessions = useSessions();
+  const { connections } = useConnections();
+  const { groups } = useGroups();
+  const groupIdOf = (connectionId: string) =>
+    groupOf(
+      connections.find(({ id }) => id === connectionId),
+      groups
+    )?.id ?? null;
+  const all = useSessions();
+  const current = all.find(({ id }) => id === currentId);
+  const sessions = current
+    ? all.filter(({ connectionId }) => groupIdOf(connectionId) === groupIdOf(current.connectionId))
+    : all;
   const router = useRouter();
   const theme = useTheme();
   if (sessions.length < 2) return null;

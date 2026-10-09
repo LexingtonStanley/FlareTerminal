@@ -1,14 +1,17 @@
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui/button';
-import { Callout, Card } from '@/components/ui/card';
+import { Callout, Card, Divider, Section } from '@/components/ui/card';
 import { Icon } from '@/components/ui/icon';
 import { Screen } from '@/components/ui/screen';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { TextField } from '@/components/ui/text-field';
-import { Radius, Spacing } from '@/constants/theme';
+import { ToggleRow } from '@/components/ui/toggle-row';
+import { Radius, sans, Spacing } from '@/constants/theme';
+import { useGroups } from '@/features/groups/groups-provider';
+import { useLock } from '@/features/vault/lock-provider';
 import { useTheme } from '@/hooks/use-theme';
 import { secretsSupported } from '@/lib/secrets';
 
@@ -19,6 +22,7 @@ import {
   type ConnectionErrors,
   type ConnectionInput,
   type ConnectionKind,
+  type ConnectionTextField,
 } from './connections';
 
 type ConnectionFormProps = {
@@ -49,7 +53,11 @@ export function ConnectionForm({
   const warning = connectionWarning(values);
   const isSsh = values.kind === 'ssh';
 
-  const field = (name: keyof ConnectionInput) => ({
+  const { groups } = useGroups();
+  const lock = useLock();
+  const group = groups.find(({ id }) => id === values.groupId);
+
+  const field = (name: ConnectionTextField) => ({
     value: values[name],
     onChangeText: (text: string) => setValues((current) => ({ ...current, [name]: text })),
     error: errors[name],
@@ -169,6 +177,70 @@ export function ConnectionForm({
           </Callout>
         ) : null}
 
+        {groups.length ? (
+          <View style={styles.field}>
+            <ThemedText type="eyebrow" themeColor="textSecondary">
+              Group
+            </ThemedText>
+            <View role="radiogroup" aria-label="Group" style={styles.chips}>
+              {[{ id: '', name: 'None' }, ...groups].map((option) => {
+                const selected = option.id === values.groupId;
+                return (
+                  <Pressable
+                    key={option.id}
+                    role="radio"
+                    aria-checked={selected}
+                    aria-label={option.name}
+                    onPress={() => setValues((current) => ({ ...current, groupId: option.id }))}
+                    style={[
+                      styles.chip,
+                      {
+                        backgroundColor: selected ? theme.primaryMuted : theme.backgroundElement,
+                        borderColor: selected ? theme.primary : theme.border,
+                      },
+                    ]}>
+                    <Text
+                      style={[styles.chipText, { color: selected ? theme.primary : theme.text }]}>
+                      {option.name}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
+
+        <Section title="Access">
+          <Card flush>
+            <ToggleRow
+              title="Require unlock"
+              caption={
+                group?.protected
+                  ? `Its group, ${group.name}, already asks for the app lock`
+                  : lock.settings
+                    ? 'Ask for the app lock each time you come back to it'
+                    : lock.supported
+                      ? 'Turn on the app lock in Settings first'
+                      : 'Needs the app lock in the Android and iOS apps'
+              }
+              value={values.protected || group?.protected === true}
+              disabled={!lock.settings || group?.protected === true}
+              onChange={(on) => setValues((current) => ({ ...current, protected: on }))}
+            />
+            <Divider inset={Spacing.three} />
+            <ToggleRow
+              title="Stay connected when you leave"
+              caption={
+                values.keepAlive
+                  ? 'Sessions keep running in the background'
+                  : 'Sessions disconnect when you leave them or the app'
+              }
+              value={values.keepAlive}
+              onChange={(on) => setValues((current) => ({ ...current, keepAlive: on }))}
+            />
+          </Card>
+        </Section>
+
         {isSsh && hostKey ? (
           <Card>
             <View style={styles.inline}>
@@ -216,4 +288,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   actions: { gap: Spacing.two + 2, marginTop: Spacing.two },
+  field: { gap: Spacing.two - 2 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
+  chip: {
+    minHeight: 40,
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.three,
+    borderRadius: Radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  chipText: { ...sans(600), fontSize: 14 },
 });

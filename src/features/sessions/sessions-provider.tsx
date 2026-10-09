@@ -14,6 +14,7 @@ import {
   postAgentNotification,
 } from '@/features/notifications/notify';
 import { openTransport } from '@/features/terminal/open-transport';
+import { useProtection } from '@/features/vault/use-protection';
 
 import { keepSessionsAlive } from './background';
 import { SessionManager, type SessionTarget } from './session-manager';
@@ -26,14 +27,12 @@ export function SessionsProvider({ children }: PropsWithChildren) {
   const [manager] = useState(
     () =>
       new SessionManager({
-        // Replaced below once the saved connections are known.
+        // Both replaced below once the saved connections are known.
         openTransport: () => null,
-        onAttention(session, attention, appActive) {
-          // In the foreground the in-app banner shows it instead.
-          if (!appActive) postAgentNotification(session.id, attention.title, attention.body);
-        },
+        onAttention: () => {},
       })
   );
+  const scopeOf = useProtection();
 
   // Sessions connect when their view attaches, which is always after this effect.
   useEffect(() => {
@@ -42,6 +41,19 @@ export function SessionsProvider({ children }: PropsWithChildren) {
       return connection ? openTransport(connection, getPassword(connection.id), listener) : null;
     });
   }, [manager, connections, getPassword]);
+
+  useEffect(() => {
+    manager.setAttentionHandler((session, attention, appActive) => {
+      // In the foreground the in-app banner shows it instead.
+      if (appActive) return;
+      // A protected session's message stays behind its lock, off the lock screen too.
+      if (scopeOf(session.connectionId)) {
+        postAgentNotification(session.id, session.name, 'Needs your attention');
+      } else {
+        postAgentNotification(session.id, attention.title, attention.body);
+      }
+    });
+  });
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) =>

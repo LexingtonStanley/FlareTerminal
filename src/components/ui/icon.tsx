@@ -34,6 +34,9 @@ const ICONS = {
   reconnect: { ios: 'arrow.clockwise', android: 'refresh', web: 'refresh' },
   keyboard: { ios: 'keyboard', android: 'keyboard', web: 'keyboard' },
   send: { ios: 'return', android: 'keyboard_return', web: 'keyboard_return' },
+  lock: { ios: 'lock.fill', android: 'lock', web: 'lock' },
+  biometrics: { ios: 'faceid', android: 'fingerprint', web: 'fingerprint' },
+  folder: { ios: 'folder.fill', android: 'folder', web: 'folder' },
 } satisfies Record<string, SymbolViewProps['name']>;
 
 export type IconName = keyof typeof ICONS;

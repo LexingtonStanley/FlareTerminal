@@ -47,7 +47,12 @@
         }
       ],
       "expo-sqlite",
-      "expo-secure-store",
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": "Flare Terminal uses Face ID to unlock the app and your saved passwords and keys."
+        }
+      ],
       [
         "expo-build-properties",
         {

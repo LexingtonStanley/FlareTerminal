@@ -286,6 +286,11 @@ export class SessionManager {
     this.deps = { ...this.deps, openTransport };
   }
 
+  /** Swaps what happens on alerts, e.g. when which connections are protected changes. */
+  setAttentionHandler(onAttention: SessionManagerDeps['onAttention']) {
+    this.deps = { ...this.deps, onAttention };
+  }
+
   /** @internal */
   openTransport(connectionId: string, listener: TransportListener) {
     return this.deps.openTransport(connectionId, listener);

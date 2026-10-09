@@ -8,6 +8,7 @@ import { Icon } from '@/components/ui/icon';
 import { Radius, Spacing } from '@/constants/theme';
 import { useNotificationOpens } from '@/features/notifications/notify';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useProtection } from '@/features/vault/use-protection';
 import { useTheme } from '@/hooks/use-theme';
 
 import { useSessions } from './sessions-provider';
@@ -23,6 +24,7 @@ export function AttentionBanner() {
   const dark = useColorScheme() === 'dark';
   const insets = useSafeAreaInsets();
   const [dismissedAt, setDismissedAt] = useState(0);
+  const scopeOf = useProtection();
 
   const open = (id: string) => router.push({ pathname: '/session/[id]', params: { id } });
   useNotificationOpens(open);
@@ -32,7 +34,10 @@ export function AttentionBanner() {
     .filter((session) => session.attention && session.attention.at > dismissedAt)
     .sort((a, b) => b.attention!.at - a.attention!.at)[0];
   if (onHome || !latest?.attention) return null;
-  const { attention } = latest;
+  // A protected session's message stays behind its lock.
+  const attention = scopeOf(latest.connectionId)
+    ? { ...latest.attention, title: latest.name, body: 'Needs your attention' }
+    : latest.attention;
 
   return (
     <View pointerEvents="box-none" style={[styles.wrap, { top: insets.top + Spacing.two }]}>

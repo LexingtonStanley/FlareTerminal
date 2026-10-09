@@ -109,11 +109,13 @@ Traps already hit in this exact stack:
 
 ```
 src/app/                 Routes only. Every file here is a screen; never put tests or helpers here.
-  _layout.tsx            Providers (preferences, connections, shortcuts, sessions), stack,
-                         attention banner, root ErrorBoundary
+  _layout.tsx            Providers (preferences, connections, groups, shortcuts, sessions,
+                         lock), stack, attention banner, access guard, root ErrorBoundary
   (tabs)/                Tab navigator: index (Home: sessions, shortcuts, connections), settings
   connections/           new.tsx, [id].tsx (edit): the connection form
   shortcuts/             new.tsx, [id].tsx (edit): the shortcut form
+  groups/                new.tsx, [id].tsx (edit): the group form
+  security.tsx           App lock: set up, change or turn off the PIN/password, biometrics
   session/[id].tsx       A session: session strip, view, coding keyboard (or, for writing,
                          the key bar and composer with the phone's keyboard)
   keyboard-preview.tsx   Both keyboards against a pretend shell, no host needed
@@ -132,9 +134,13 @@ src/features/keyboard/   Accessory bar and coding keyboard: layout, gestures, to
 src/features/shortcuts/  Shortcut type, presets (Claude in tmux/zellij), provider, form
 src/features/notifications/ Local notifications for agent alerts (no-op on web)
 src/features/connections/ Connection type (SSH or ttyd), validation, ConnectionsProvider, form
+src/features/groups/     Connection groups: type, provider, Home's group tabs, form
+src/features/vault/      App lock and encrypted vault (vault.ts), LockProvider (lock screen),
+                         UnlockPanel, AccessGuard (protected connections/groups, keep-alive)
 src/features/settings/   PreferencesProvider (font size)
 src/features/<name>/     Feature logic and its colocated *.test.ts(x)
-src/lib/                 storage.ts (JSON in localStorage / SQLite), secrets.ts (Keychain/Keystore)
+src/lib/                 storage.ts (JSON in localStorage / SQLite), secrets.ts (Keychain/Keystore),
+                         vault-key.ts (seals secrets while an app lock is set)
 src/test-utils/          Jest helpers: renderApp, memory-storage, fake-terminal-view, fake-transport,
                          fake-notify, ssh-server (a real SSH server from ssh2)
 __tests__/               Router-level Jest tests (render the real src/app tree)
@@ -177,7 +183,11 @@ app.json / app.config.ts Identity / build variants (APP_VARIANT = development | 
 - **Terminal output is untrusted.** Only open `http(s)` links from it, never evaluate it, and
   don't enable xterm.js features that write to the clipboard or file system without a prompt.
 - **Data on the device**: small JSON through `src/lib/storage.ts`; passwords and keys only
-  through `src/lib/secrets.ts` (no-op on web, where `secretsSupported` is false).
+  through `src/lib/secrets.ts` (no-op on web, where `secretsSupported` is false). While an app
+  lock is set, `secrets.ts` seals every value with the vault key (`docs/security.md`); never
+  read the Keychain/Keystore around it.
+- **The vault is security code**, like SSH: don't log secrets or keys, don't keep the PIN, and
+  don't weaken the scrypt cost or the back-off on wrong guesses without a reason.
 - **Config and secrets**: local values go in `.env.local` (see `.env.example`); cloud builds
   use `eas env:set`. `EXPO_PUBLIC_*` values ship inside the app, so never put a secret key there.
 - **Tests**: a behaviour change comes with a test.
