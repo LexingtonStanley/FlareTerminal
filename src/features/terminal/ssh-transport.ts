@@ -23,7 +23,8 @@ export type SshTransportOptions = {
   username: string;
   /** A saved password, tried once before asking. */
   password: string | null;
-  userKey: UserKey | null;
+  /** Keys to offer before a password, in order. */
+  userKeys: UserKey[];
   knownHosts: KnownHosts;
   openSocket: OpenSocket;
   /** Seconds between keepalives; 0 turns them off (tests). */
@@ -121,7 +122,7 @@ export class SshTransport implements TerminalTransport {
       port,
       username,
       password: this.options.password,
-      userKey: this.options.userKey,
+      userKeys: this.options.userKeys,
       keepaliveInterval: this.options.keepaliveInterval,
       verifyHostKey: (check) => this.verifyHostKey(check),
       prompt: (request) => this.prompt(request),

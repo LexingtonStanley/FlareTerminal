@@ -1,8 +1,9 @@
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { p256 } from '@noble/curves/nist.js';
-import { sha256, sha512 } from '@noble/hashes/sha2.js';
+import { sha256 } from '@noble/hashes/sha2.js';
 
 import { bigIntToBytes, bytesToBigInt, equalBytes, SshReader, toBase64 } from './bytes';
+import { modPow, pkcs1Encode, type RsaSignatureAlgorithm } from './rsa';
 
 /** A server's public host key: its SSH wire blob and what it is. */
 export type HostKey = {
@@ -25,39 +26,12 @@ export function keyTypeFor(algorithm: string): string {
   return algorithm.startsWith('rsa-sha2-') ? 'ssh-rsa' : algorithm;
 }
 
-// DER DigestInfo prefixes from RFC 8017 section 9.2, note 1.
-const DIGEST_INFO: Record<string, { prefix: number[]; hash: (data: Uint8Array) => Uint8Array }> = {
-  'rsa-sha2-256': {
-    prefix: [
-      0x30, 0x31, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x01,
-      0x05, 0x00, 0x04, 0x20,
-    ],
-    hash: sha256,
-  },
-  'rsa-sha2-512': {
-    prefix: [
-      0x30, 0x51, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x03,
-      0x05, 0x00, 0x04, 0x40,
-    ],
-    hash: sha512,
-  },
-};
-
-function modPow(base: bigint, exponent: bigint, modulus: bigint): bigint {
-  let result = 1n;
-  let b = base % modulus;
-  let e = exponent;
-  while (e > 0n) {
-    if (e & 1n) result = (result * b) % modulus;
-    b = (b * b) % modulus;
-    e >>= 1n;
-  }
-  return result;
-}
-
-function verifyRsa(algorithm: string, key: SshReader, signature: Uint8Array, data: Uint8Array) {
-  const info = DIGEST_INFO[algorithm];
-  if (!info) return false;
+function verifyRsa(
+  algorithm: RsaSignatureAlgorithm,
+  key: SshReader,
+  signature: Uint8Array,
+  data: Uint8Array
+) {
   const e = bytesToBigInt(key.mpint());
   const nBytes = key.mpint();
   const n = bytesToBigInt(nBytes);
@@ -67,14 +41,8 @@ function verifyRsa(algorithm: string, key: SshReader, signature: Uint8Array, dat
   const s = bytesToBigInt(signature);
   if (s >= n) return false;
   const encoded = bigIntToBytes(modPow(s, e, n), nBytes.length);
-
-  // EMSA-PKCS1-v1_5: 00 01 FF..FF 00 DigestInfo hash, compared in full.
-  const digest = [...info.prefix, ...info.hash(data)];
-  const expected = new Uint8Array(nBytes.length);
-  expected[1] = 0x01;
-  expected.fill(0xff, 2, nBytes.length - digest.length - 1);
-  expected.set(digest, nBytes.length - digest.length);
-  return equalBytes(encoded, expected);
+  // Compared in full, not parsed.
+  return equalBytes(encoded, pkcs1Encode(algorithm, data, nBytes.length));
 }
 
 /**

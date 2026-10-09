@@ -22,6 +22,7 @@ import { AttentionBanner } from '@/features/sessions/attention-banner';
 import { SessionsProvider } from '@/features/sessions/sessions-provider';
 import { PreferencesProvider } from '@/features/settings/preferences-provider';
 import { ShortcutsProvider } from '@/features/shortcuts/shortcuts-provider';
+import { KeysProvider } from '@/features/ssh/keys-provider';
 import { AccessGuard } from '@/features/vault/access-guard';
 import { LockProvider } from '@/features/vault/lock-provider';
 
@@ -77,52 +78,62 @@ export default function RootLayout() {
               <ShortcutsProvider>
                 <SessionsProvider>
                   <LockProvider>
-                    <Stack
-                      screenOptions={{
-                        headerShown: false,
-                        headerShadowVisible: false,
-                        headerTintColor: colors.text,
-                        headerStyle: { backgroundColor: colors.background },
-                        headerTitleStyle: { ...sans(600), fontSize: 17 },
-                        contentStyle: { backgroundColor: colors.background },
-                      }}>
-                      {/* The title is what the back button on pushed screens says. */}
-                      <Stack.Screen name="(tabs)" options={{ title: 'Home' }} />
-                      <Stack.Screen
-                        name="connections/new"
-                        options={{ headerShown: true, title: 'New connection' }}
-                      />
-                      <Stack.Screen
-                        name="connections/[id]"
-                        options={{ headerShown: true, title: 'Edit connection' }}
-                      />
-                      <Stack.Screen
-                        name="shortcuts/new"
-                        options={{ headerShown: true, title: 'New shortcut' }}
-                      />
-                      <Stack.Screen
-                        name="shortcuts/[id]"
-                        options={{ headerShown: true, title: 'Edit shortcut' }}
-                      />
-                      <Stack.Screen
-                        name="groups/new"
-                        options={{ headerShown: true, title: 'New group' }}
-                      />
-                      <Stack.Screen
-                        name="groups/[id]"
-                        options={{ headerShown: true, title: 'Edit group' }}
-                      />
-                      <Stack.Screen
-                        name="security"
-                        options={{ headerShown: true, title: 'App lock' }}
-                      />
-                      <Stack.Screen
-                        name="session/[id]"
-                        options={{ headerShown: true, title: '' }}
-                      />
-                    </Stack>
-                    <AttentionBanner />
-                    <AccessGuard />
+                    <KeysProvider>
+                      <Stack
+                        screenOptions={{
+                          headerShown: false,
+                          headerShadowVisible: false,
+                          headerTintColor: colors.text,
+                          headerStyle: { backgroundColor: colors.background },
+                          headerTitleStyle: { ...sans(600), fontSize: 17 },
+                          contentStyle: { backgroundColor: colors.background },
+                        }}>
+                        {/* The title is what the back button on pushed screens says. */}
+                        <Stack.Screen name="(tabs)" options={{ title: 'Home' }} />
+                        <Stack.Screen
+                          name="connections/new"
+                          options={{ headerShown: true, title: 'New connection' }}
+                        />
+                        <Stack.Screen
+                          name="connections/[id]"
+                          options={{ headerShown: true, title: 'Edit connection' }}
+                        />
+                        <Stack.Screen
+                          name="shortcuts/new"
+                          options={{ headerShown: true, title: 'New shortcut' }}
+                        />
+                        <Stack.Screen
+                          name="shortcuts/[id]"
+                          options={{ headerShown: true, title: 'Edit shortcut' }}
+                        />
+                        <Stack.Screen
+                          name="groups/new"
+                          options={{ headerShown: true, title: 'New group' }}
+                        />
+                        <Stack.Screen
+                          name="groups/[id]"
+                          options={{ headerShown: true, title: 'Edit group' }}
+                        />
+                        <Stack.Screen
+                          name="security"
+                          options={{ headerShown: true, title: 'App lock' }}
+                        />
+                        <Stack.Screen
+                          name="keys/new"
+                          options={{ headerShown: true, title: 'Import key' }}
+                        />
+                        <Stack.Screen
+                          name="keys/[id]"
+                          options={{ headerShown: true, title: 'Key' }}
+                        />
+                        <Stack.Screen
+                          name="session/[id]"
+                          options={{ headerShown: true, title: '' }}
+                        />
+                      </Stack>
+                      <AttentionBanner />
+                      <AccessGuard />
+                    </KeysProvider>
                   </LockProvider>
                 </SessionsProvider>
               </ShortcutsProvider>

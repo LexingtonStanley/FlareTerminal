@@ -14,6 +14,8 @@ type TextFieldProps = Omit<TextInputProps, 'style'> & {
   hint?: string;
   /** Monospace, for what a computer reads: hosts, addresses, commands, paths. */
   monospace?: boolean;
+  /** A multiline field stops growing at this many lines and scrolls instead. */
+  maxLines?: number;
 };
 
 /** Labelled text input with an inline error. The label doubles as the accessible name. */
@@ -22,6 +24,7 @@ export function TextField({
   error,
   hint,
   monospace = false,
+  maxLines,
   onFocus,
   onBlur,
   ...inputProps
@@ -62,6 +65,7 @@ export function TextField({
           styles.input,
           monospace ? styles.mono : styles.sans,
           multiline && styles.multiline,
+          multiline && maxLines ? { maxHeight: maxLines * LINE_HEIGHT + 2 * PADDING } : null,
           {
             color: theme.text,
             backgroundColor: theme.backgroundElement,
@@ -87,6 +91,9 @@ export function TextField({
   );
 }
 
+const LINE_HEIGHT = 21;
+const PADDING = Spacing.three - 3;
+
 const styles = StyleSheet.create({
   container: { gap: Spacing.two - 2 },
   input: {
@@ -100,7 +107,7 @@ const styles = StyleSheet.create({
   },
   sans: sans(400),
   mono: { ...mono(400), fontSize: 15 },
-  multiline: { paddingVertical: Spacing.three - 3, lineHeight: 21, textAlignVertical: 'top' },
+  multiline: { paddingVertical: PADDING, lineHeight: LINE_HEIGHT, textAlignVertical: 'top' },
   message: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one + 2 },
   messageText: { flexShrink: 1 },
 });

@@ -16,9 +16,15 @@ import {
   STRICT_KEX_CLIENT,
   STRICT_KEX_SERVER,
 } from './constants';
-import { fingerprint, parseHostKey, verifyHostSignature, type HostKey } from './host-keys';
+import {
+  fingerprint,
+  keyTypeFor,
+  parseHostKey,
+  verifyHostSignature,
+  type HostKey,
+} from './host-keys';
 import { CIPHER_KEY_SIZES, createCipher, PacketReader, PacketWriter } from './packet';
-import { publicKeyBlob, signWithUserKey, USER_KEY_ALGORITHM, type UserKey } from './user-key';
+import { publicKeyBlob, signatureAlgorithm, signWithUserKey, type UserKey } from './user-key';
 
 /**
  * An SSH-2 client (RFC 4251-4254) for interactive shells, written against audited
@@ -51,8 +57,8 @@ export type SshClientOptions = {
   username: string;
   /** Resolves true to trust the key. Called once per connection, during the first key exchange. */
   verifyHostKey(check: HostKeyCheck): Promise<boolean>;
-  /** The app's key to offer, if the person has made one. */
-  userKey?: UserKey | null;
+  /** Keys to offer, in order. The host is asked about each before it is used to sign. */
+  userKeys?: UserKey[];
   /** A saved password, tried once before asking. */
   password?: string | null;
   /** Asks the person (password, one-time code); resolves null to give up. */
@@ -87,6 +93,8 @@ type KexState = {
 };
 
 const MAX_AUTH_ATTEMPTS = 3;
+/** Asks the server for EXT_INFO (RFC 8308), which says which signatures it accepts. */
+const EXT_INFO_CLIENT = 'ext-info-c';
 const LOCAL_WINDOW = 2 * 1024 * 1024;
 const LOCAL_MAX_PACKET = 32 * 1024;
 const MAX_MISSED_KEEPALIVES = 3;
@@ -314,7 +322,11 @@ export class SshClient {
     const clientInit = this.message(MSG.KEXINIT, (w) =>
       w
         .raw(randomBytes(16))
-        .nameList([...KEX_ALGORITHMS, STRICT_KEX_CLIENT])
+        .nameList([
+          ...KEX_ALGORITHMS,
+          ...(this.initialKexDone ? [] : [EXT_INFO_CLIENT]),
+          STRICT_KEX_CLIENT,
+        ])
         .nameList(HOST_KEY_ALGORITHMS)
         .nameList(CIPHERS)
         .nameList(CIPHERS)
@@ -493,7 +505,9 @@ export class SshClient {
       case MSG.IGNORE:
       case MSG.DEBUG:
       case MSG.UNIMPLEMENTED:
+        return;
       case MSG.EXT_INFO:
+        this.handleExtInfo(payload);
         return;
       case MSG.KEXINIT:
         this.handleKexInit(payload);
@@ -561,6 +575,20 @@ export class SshClient {
     });
   }
 
+  /** Signature algorithms the server accepts for sign-in, or null until it says. */
+  private serverSigAlgs: string[] | null = null;
+
+  private handleExtInfo(payload: Uint8Array) {
+    const r = new SshReader(payload);
+    r.byte();
+    const count = r.uint32();
+    for (let i = 0; i < count; i++) {
+      const name = r.utf8();
+      const value = r.string();
+      if (name === 'server-sig-algs') this.serverSigAlgs = fromUtf8(value).split(',');
+    }
+  }
+
   // ───────────────────────────── authentication ─────────────────────────────
 
   private userauth(method: string, build?: (writer: SshWriter) => unknown) {
@@ -591,33 +619,50 @@ export class SshClient {
   }
 
   async authenticate(): Promise<void> {
-    const { userKey, username, host } = this.options;
+    const { userKeys = [], username, host } = this.options;
     let savedPassword = this.options.password ?? null;
 
     this.userauth('none');
     let methods = await this.authResult();
     if (methods === null) return this.signedIn();
 
-    if (userKey && methods.includes('publickey')) {
-      const blob = publicKeyBlob(userKey);
-      const signed = new SshWriter()
-        .string(this.sessionId!)
-        .byte(MSG.USERAUTH_REQUEST)
-        .string(username)
-        .string('ssh-connection')
-        .string('publickey')
-        .boolean(true)
-        .string(USER_KEY_ALGORITHM)
-        .string(blob)
-        .toBytes();
-      this.userauth('publickey', (w) =>
-        w
+    for (const key of userKeys) {
+      if (!methods.includes('publickey')) break;
+      const algorithm = signatureAlgorithm(key, this.serverSigAlgs);
+      if (!algorithm) continue;
+      const blob = publicKeyBlob(key);
+      // Ask first (RFC 4252 section 7), so only a key the host takes signs anything.
+      this.userauth('publickey', (w) => w.boolean(false).string(algorithm).string(blob));
+      let signed = false;
+      methods = await this.authResult(async (payload) => {
+        const r = new SshReader(payload);
+        r.byte();
+        // Hosts may name the key type here rather than the signature algorithm (ssh-rsa
+        // for rsa-sha2-512); the key itself must be the one offered.
+        const named = keyTypeFor(r.utf8());
+        if (signed || named !== key.type || !equalBytes(r.string(), blob)) {
+          throw new SshError('The host answered for a key that wasn’t offered');
+        }
+        signed = true;
+        const data = new SshWriter()
+          .string(this.sessionId!)
+          .byte(MSG.USERAUTH_REQUEST)
+          .string(username)
+          .string('ssh-connection')
+          .string('publickey')
           .boolean(true)
-          .string(USER_KEY_ALGORITHM)
+          .string(algorithm)
           .string(blob)
-          .string(signWithUserKey(userKey, signed))
-      );
-      methods = await this.authResult();
+          .toBytes();
+        this.userauth('publickey', (w) =>
+          w
+            .boolean(true)
+            .string(algorithm)
+            .string(blob)
+            .string(signWithUserKey(key, data, algorithm))
+        );
+        return true;
+      });
       if (methods === null) return this.signedIn();
     }
 

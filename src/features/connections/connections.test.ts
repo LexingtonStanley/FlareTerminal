@@ -77,10 +77,17 @@ describe('toConnection', () => {
       host: 'lexbox',
       port: 2222,
       username: 'lexde',
+      keyId: null,
       groupId: null,
       protected: false,
       keepAlive: true,
     });
+  });
+
+  it('keeps the chosen key and reads it back for editing', () => {
+    const connection = toConnection(ssh({ host: 'lexbox', username: 'a', keyId: 'k1' }), 'c1');
+    expect(connection).toMatchObject({ keyId: 'k1' });
+    expect(toInput(connection, null).keyId).toBe('k1');
   });
 
   it('keeps the group, protection and keep-alive, and reads them back for editing', () => {
@@ -96,7 +103,7 @@ describe('toConnection', () => {
     });
   });
 
-  it('treats connections saved before groups as ungrouped, unprotected and kept alive', () => {
+  it('treats connections saved before groups and keys as ungrouped, offering every key, unprotected and kept alive', () => {
     const old = {
       id: 'c1',
       kind: 'ssh',
@@ -105,7 +112,12 @@ describe('toConnection', () => {
       port: 22,
       username: 'a',
     } as const;
-    expect(toInput(old, null)).toMatchObject({ groupId: '', protected: false, keepAlive: true });
+    expect(toInput(old, null)).toMatchObject({
+      groupId: '',
+      keyId: '',
+      protected: false,
+      keepAlive: true,
+    });
   });
 
   it('prefers the Username field and keeps a given name', () => {

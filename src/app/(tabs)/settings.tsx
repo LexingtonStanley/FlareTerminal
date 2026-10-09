@@ -11,7 +11,7 @@ import { mono, Spacing } from '@/constants/theme';
 import { FONT_SIZE, usePreferences } from '@/features/settings/preferences-provider';
 import { TerminalPreview, TerminalSchemePicker } from '@/features/settings/terminal-scheme-picker';
 import { useTerminalTheme } from '@/features/settings/use-terminal-theme';
-import { AppKeyCard } from '@/features/ssh/app-key-card';
+import { KeysCard } from '@/features/ssh/keys-card';
 import { useLock } from '@/features/vault/lock-provider';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -94,8 +94,8 @@ export default function SettingsScreen() {
         </Card>
       </Section>
 
-      <Section title="SSH key">
-        <AppKeyCard />
+      <Section title="SSH keys">
+        <KeysCard />
       </Section>
 
       <Section title="About">

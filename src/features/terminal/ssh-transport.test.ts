@@ -45,7 +45,7 @@ function open(
       port,
       username: 'ada',
       password,
-      userKey: null,
+      userKeys: [],
       knownHosts,
       openSocket: openNodeSocket,
       keepaliveInterval: 0,

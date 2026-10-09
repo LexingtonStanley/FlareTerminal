@@ -5,7 +5,7 @@
 // implementation) over a real TCP socket.
 import { once } from 'node:events';
 import { createConnection } from 'node:net';
-import { utils, type CipherAlgorithm } from 'ssh2';
+import { utils, type AuthenticationType, type CipherAlgorithm } from 'ssh2';
 
 import {
   startTestSshServer as startServer,
@@ -14,11 +14,13 @@ import {
   waitFor,
   type HostKeyType,
 } from '@/test-utils/ssh-server';
+import { generateTestKey, type TestKeyType } from '@/test-utils/ssh-keys';
 
 import { fromUtf8, utf8 } from './bytes';
 import { SshChannel, SshClient, type SshClientOptions, type SshCloseReason } from './client';
 import { fingerprint } from './host-keys';
-import { generateUserKey, publicKeyLine } from './user-key';
+import { importPrivateKey } from './private-key';
+import { generateUserKey, publicKeyBlob, publicKeyLine } from './user-key';
 
 afterEach(stopTestSshServers);
 
@@ -171,23 +173,80 @@ describe('SshClient against the ssh2 server', () => {
     expect(prompt).not.toHaveBeenCalled();
   });
 
-  it('signs in with the app key', async () => {
-    const userKey = generateUserKey();
-    const expected = utils.parseKey(publicKeyLine(userKey));
+  /** A host that signs in only `allowed`, checking its signature, and records each offer. */
+  async function keyServer(allowed: string) {
+    const METHODS: AuthenticationType[] = ['publickey', 'password'];
+    const expected = utils.parseKey(allowed);
     if (expected instanceof Error) throw expected;
+    const offers: { key: string; signed: boolean }[] = [];
     const server = await startServer({
       authenticate: (ctx) => {
-        if (ctx.method !== 'publickey') return ctx.reject(['publickey']);
-        const sameKey = Buffer.compare(ctx.key.data, expected.getPublicSSH() as Buffer) === 0;
-        const valid =
-          ctx.signature && ctx.blob && expected.verify(ctx.blob, ctx.signature, ctx.hashAlgo);
-        return sameKey && valid ? ctx.accept() : ctx.reject();
+        if (ctx.method !== 'publickey') return ctx.reject(METHODS);
+        offers.push({ key: ctx.key.data.toString('base64'), signed: Boolean(ctx.signature) });
+        if (Buffer.compare(ctx.key.data, expected.getPublicSSH() as Buffer) !== 0) {
+          return ctx.reject(METHODS);
+        }
+        // Without a signature it's a question (would this key do?): yes.
+        if (!ctx.signature) return ctx.accept();
+        return ctx.blob && expected.verify(ctx.blob, ctx.signature, ctx.hashAlgo)
+          ? ctx.accept()
+          : ctx.reject(METHODS);
       },
     });
-    const { client } = await connect(server.port, { userKey });
+    return { server, offers };
+  }
+
+  it('signs in with the app key', async () => {
+    const userKey = generateUserKey();
+    const { server } = await keyServer(publicKeyLine(userKey));
+    const { client } = await connect(server.port, { userKeys: [userKey] });
 
     await client.handshake();
     await client.authenticate();
+  });
+
+  it.each<TestKeyType>(['ed25519', 'ecdsa-256', 'ecdsa-384', 'ecdsa-521', 'rsa'])(
+    'signs in with an imported %s key',
+    async (type) => {
+      const file = generateTestKey(type);
+      const { key } = await importPrivateKey(file.private, '');
+      const { server } = await keyServer(file.public);
+      const { client } = await connect(server.port, { userKeys: [key] });
+
+      await client.handshake();
+      await client.authenticate();
+    }
+  );
+
+  it('asks about each key and signs only with the one the host knows', async () => {
+    const unknown = generateUserKey();
+    const known = generateUserKey();
+    const { server, offers } = await keyServer(publicKeyLine(known));
+    const prompt = jest.fn(async () => null);
+    const { client } = await connect(server.port, { userKeys: [unknown, known], prompt });
+
+    await client.handshake();
+    await client.authenticate();
+
+    const blob = (key: typeof known) => Buffer.from(publicKeyBlob(key)).toString('base64');
+    expect(offers).toEqual([
+      { key: blob(unknown), signed: false },
+      { key: blob(known), signed: false },
+      { key: blob(known), signed: true },
+    ]);
+    expect(prompt).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the password when the host knows none of the keys', async () => {
+    const { server } = await keyServer(publicKeyLine(generateUserKey()));
+    const prompt = jest.fn(async () => null);
+    const { client } = await connect(server.port, { userKeys: [generateUserKey()], prompt });
+
+    await client.handshake();
+    await expect(client.authenticate()).rejects.toThrow('Sign-in cancelled');
+    expect(prompt).toHaveBeenCalledWith(
+      expect.objectContaining({ prompts: [expect.objectContaining({ echo: false })] })
+    );
   });
 
   it('signs in without credentials when the host allows it (Tailscale SSH does)', async () => {
