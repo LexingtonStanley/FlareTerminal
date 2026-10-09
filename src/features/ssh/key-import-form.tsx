@@ -1,5 +1,5 @@
 import * as Clipboard from 'expo-clipboard';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -10,6 +10,7 @@ import { TextField } from '@/components/ui/text-field';
 import { Spacing } from '@/constants/theme';
 import { useLock } from '@/features/vault/lock-provider';
 
+import { AbortError } from './bcrypt-pbkdf';
 import { fingerprint } from './host-keys';
 import type { SavedKey } from './keys';
 import { useKeys } from './keys-provider';
@@ -30,6 +31,9 @@ export function KeyImportForm({ onImported }: { onImported(key: SavedKey): void 
   /** What was pasted with the button, so it can be cleared from the clipboard afterwards. */
   const [pasted, setPasted] = useState<string | null>(null);
   const encrypted = needsPassphrase(text) === true;
+  // Leaving mid-import stops it: the key isn't saved and nothing navigates.
+  const importing = useRef<AbortController | null>(null);
+  useEffect(() => () => importing.current?.abort(), []);
 
   async function paste() {
     const clipboard = await Clipboard.getStringAsync();
@@ -43,10 +47,14 @@ export function KeyImportForm({ onImported }: { onImported(key: SavedKey): void 
     if (!text.trim()) return setErrors({ key: 'Paste your private key' });
     setErrors({});
     setProgress({ done: 0, total: 1 });
+    const controller = new AbortController();
+    importing.current = controller;
     try {
-      const imported = await importPrivateKey(text, encrypted ? passphrase : '', (done, total) =>
-        setProgress({ done, total })
-      );
+      const imported = await importPrivateKey(text, encrypted ? passphrase : '', {
+        onProgress: (done, total) => setProgress({ done, total }),
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted) return;
       const print = fingerprint(publicKeyBlob(imported.key));
       const existing = keys.find((key) => key.fingerprint === print);
       if (existing) {
@@ -58,6 +66,7 @@ export function KeyImportForm({ onImported }: { onImported(key: SavedKey): void 
       if (pasted !== null && pasted === text) await Clipboard.setStringAsync('');
       onImported(saved);
     } catch (error) {
+      if (error instanceof AbortError) return;
       setErrors(
         error instanceof KeyImportError
           ? { [error.field]: error.message }

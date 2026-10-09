@@ -1,6 +1,6 @@
 import { cbc, ctr, gcm } from '@noble/ciphers/aes.js';
 
-import { bcryptPbkdf } from './bcrypt-pbkdf';
+import { AbortError, bcryptPbkdf, type BcryptOptions } from './bcrypt-pbkdf';
 import { equalBytes, fromBase64, SshReader, utf8 } from './bytes';
 import {
   isConsistent,
@@ -151,13 +151,13 @@ export function needsPassphrase(text: string): boolean | null {
 
 /**
  * Reads a private key, decrypting it with `passphrase` when it has one. `onProgress`
- * follows the (deliberately slow) passphrase check. Throws a KeyImportError that says what
- * to do next.
+ * follows the (deliberately slow) passphrase check, which `signal` can stop. Throws a
+ * KeyImportError that says what to do next, or an AbortError.
  */
 export async function importPrivateKey(
   text: string,
   passphrase: string,
-  onProgress?: (done: number, total: number) => void
+  options: BcryptOptions = {}
 ): Promise<ImportedKey> {
   const file = readKeyFile(text);
   // Say so before asking for a passphrase for a key that can't be used anyway.
@@ -207,9 +207,10 @@ export async function importPrivateKey(
         salt,
         rounds,
         cipher.keyLength + cipher.ivLength,
-        onProgress
+        options
       );
-    } catch {
+    } catch (error) {
+      if (error instanceof AbortError) throw error;
       throw new KeyImportError('key', 'This key file is damaged.');
     }
     try {

@@ -34,6 +34,8 @@ beforeEach(() => {
 /** Imports must read keys ssh-keygen style; ssh2 writes them here. */
 const file = generateTestKey('ed25519', { comment: 'ada@laptop' });
 const encrypted = generateTestKey('ecdsa-256', { passphrase: 'correct horse', comment: 'work' });
+/** Enough rounds to leave halfway through unlocking it. */
+const slow = generateTestKey('ed25519', { passphrase: 'pw', rounds: 16 });
 
 async function importKey(text: string, passphrase?: string) {
   const user = userEvent.setup();
@@ -92,6 +94,23 @@ describe('SSH keys', () => {
     expect(await screen.findByLabelText('Public key')).toHaveTextContent(encrypted.public);
     // Nothing keeps the passphrase.
     expect(JSON.stringify([...secrets.values()])).not.toContain('correct horse');
+  });
+
+  it('stops unlocking a key when you leave the screen', async () => {
+    const user = userEvent.setup();
+    const app = await renderApp('/settings');
+    await user.press(await screen.findByRole('button', { name: 'Import a key' }));
+    await fireEvent.changeText(await screen.findByLabelText('Private key'), slow.private);
+    await user.type(screen.getByLabelText('Passphrase'), 'pw');
+    await user.press(screen.getByRole('button', { name: 'Import key' }));
+    expect(await screen.findByText(/Unlocking the key with its passphrase/)).toBeOnTheScreen();
+
+    await act(() => router.back());
+    // The router test helper fakes timers; run every round that's left.
+    await act(() => jest.advanceTimersByTimeAsync(1000));
+
+    expect(app).toHavePathname('/settings');
+    expect(readJson('flare.ssh-keys.v1')).toBeNull();
   });
 
   it('explains a key in the old PEM format', async () => {
