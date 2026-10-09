@@ -10,6 +10,7 @@ import type {
 } from '@/features/terminal/transport';
 
 import { parseOsc777, parseOsc9, parseOsc99, type AgentAlert } from './alerts';
+import { contentLines, type SessionActivity } from './inbox';
 
 /**
  * Open terminal sessions, kept alive while the person looks elsewhere (another session,
@@ -85,6 +86,9 @@ class Session {
   private everConnected = false;
   private retries = 0;
   private cancelRetry: (() => void) | null = null;
+  private lastOutputAt: number;
+  private screenText = '';
+  private changedAt: number;
   snapshot: SessionSnapshot;
 
   constructor(
@@ -101,6 +105,7 @@ class Session {
       attention: null,
       reconnecting: false,
     };
+    this.lastOutputAt = this.changedAt = manager.now();
     this.headless = new Terminal({
       cols: 80,
       rows: 24,
@@ -146,6 +151,7 @@ class Session {
   }
 
   private output(text: string) {
+    this.lastOutputAt = this.manager.now();
     this.headless.write(text);
     if (this.view) this.view.write(text);
     else this.replayBuffer?.push(text);
@@ -172,6 +178,26 @@ class Session {
       buffer.forEach((text) => view.write(text));
       this.view = view;
     });
+  }
+
+  /**
+   * What's on screen now. Checked when asked (the inbox asks every second) rather than on
+   * every write: if the content changed since the last look, it changed by the last output.
+   * Chrome such as a status bar's clock doesn't count, so it can't make a session look busy.
+   */
+  activity(): SessionActivity {
+    const buffer = this.headless.buffer.active;
+    const lines: string[] = [];
+    for (let y = buffer.baseY; y < buffer.baseY + this.headless.rows; y++) {
+      lines.push(buffer.getLine(y)?.translateToString(true) ?? '');
+    }
+    const content = contentLines(lines);
+    const text = content.join('\n');
+    if (text !== this.screenText) {
+      this.screenText = text;
+      this.changedAt = this.lastOutputAt;
+    }
+    return { preview: content.at(-1) ?? null, changedAt: this.changedAt };
   }
 
   detach(view: ViewSink) {
@@ -352,6 +378,11 @@ export class SessionManager {
     this.sessions.delete(id);
     if (this.focusedId === id) this.focusedId = null;
     this.changed();
+  }
+
+  /** What a session's screen shows, for the inbox; null for a closed session. */
+  activity(id: string): SessionActivity | null {
+    return this.sessions.get(id)?.activity() ?? null;
   }
 
   /** The headless copy of a session's screen (tests, previews). */

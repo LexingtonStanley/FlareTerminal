@@ -299,4 +299,33 @@ describe('SessionManager', () => {
       message: 'This connection no longer exists',
     });
   });
+
+  it('reads the last meaningful screen line and when the content last changed', async () => {
+    const { manager, transports, view, advance } = setup();
+    const id = manager.start({ connectionId: 'box', name: 'Box', command: null });
+    manager.attach(id, view(), SIZE);
+    const started = manager.activity(id)!.changedAt;
+
+    advance(10_000);
+    transports[0].output('Tests pass.\r\n\x1b[12;1H[main] 0:claude* 14:05');
+    await parsed(manager, id);
+    const first = manager.activity(id)!;
+    expect(first.preview).toBe('Tests pass.');
+    expect(first.changedAt).toBe(started + 10_000);
+
+    // Only the tmux clock moves: the content hasn't changed.
+    advance(10_000);
+    transports[0].output('\x1b[12;1H[main] 0:claude* 14:06');
+    await parsed(manager, id);
+    expect(manager.activity(id)!.changedAt).toBe(first.changedAt);
+
+    advance(10_000);
+    transports[0].output('\x1b[2;1HDo you want to proceed?');
+    await parsed(manager, id);
+    expect(manager.activity(id)).toEqual({
+      preview: 'Do you want to proceed?',
+      changedAt: started + 30_000,
+    });
+    expect(manager.activity('nope')).toBeNull();
+  });
 });

@@ -15,7 +15,7 @@ import { useSessions } from './sessions-provider';
 
 /**
  * Shows the newest alert from a session the person isn't looking at, and opens sessions
- * from tapped system notifications. Home lists alerts on its session rows instead.
+ * from tapped system notifications. Home and the inbox list alerts on their rows instead.
  */
 export function AttentionBanner() {
   const sessions = useSessions();
@@ -29,7 +29,9 @@ export function AttentionBanner() {
   const open = (id: string) => router.push({ pathname: '/session/[id]', params: { id } });
   useNotificationOpens(open);
 
-  const onHome = usePathname() === '/';
+  // Home and the inbox list alerts themselves.
+  const pathname = usePathname();
+  const onHome = pathname === '/' || pathname === '/inbox';
   const latest = sessions
     .filter((session) => session.attention && session.attention.at > dismissedAt)
     .sort((a, b) => b.attention!.at - a.attention!.at)[0];
