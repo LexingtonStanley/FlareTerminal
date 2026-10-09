@@ -54,6 +54,7 @@ const agentShortcut = (fields: Partial<Shortcut>): Shortcut => ({
   directory: '~/agents/janus',
   group: 'Agents',
   agent: { harness: 'claude', session: 'tmux', skipPermissions: false, commandEdited: false },
+  confirm: false,
   ...fields,
 });
 
@@ -252,6 +253,62 @@ describe('command shortcuts', () => {
     expect(screen.getByDisplayValue('df -h')).toBeOnTheScreen();
   });
 
+  it('asks before running a restart, which turns the question on by itself', async () => {
+    saved([DEVBOX]);
+    const user = userEvent.setup();
+    await renderApp('/shortcuts/new');
+
+    await user.press(await screen.findByRole('radio', { name: 'Command' }));
+    expect(screen.getByRole('switch', { name: 'Ask before running' })).not.toBeChecked();
+    await user.press(screen.getByRole('button', { name: 'Use Restart a service' }));
+    expect(screen.getByRole('switch', { name: 'Ask before running' })).toBeChecked();
+    await user.press(screen.getByRole('button', { name: 'Save' }));
+    expect(screen.getByText('Replace <service> with the service’s name')).toBeOnTheScreen();
+
+    const command = screen.getByDisplayValue('sudo systemctl restart <service>');
+    await user.clear(command);
+    await user.type(command, 'sudo systemctl restart nginx');
+    await user.press(screen.getByRole('button', { name: 'Save' }));
+
+    await user.press(await screen.findByRole('button', { name: 'Run Restart' }));
+    expect(screen.getByRole('heading', { name: 'Run Restart?' })).toBeOnTheScreen();
+    expect(screen.getByText('On Devbox, this runs:')).toBeOnTheScreen();
+    await user.press(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('heading', { name: 'Run Restart?' })).not.toBeOnTheScreen();
+    expect(transports).toHaveLength(0);
+
+    await user.press(screen.getByRole('button', { name: 'Run Restart' }));
+    await user.press(screen.getByRole('button', { name: 'Run' }));
+    const transport = transports.at(-1)!;
+    await act(() => transport.status({ state: 'connected' }));
+    expect(transport.written).toEqual(['sudo systemctl restart nginx\r']);
+    expect(await screen.findByRole('heading', { name: 'Restart' })).toBeOnTheScreen();
+  });
+
+  it('keeps the question as set by hand, and offers it only for commands', async () => {
+    saved([DEVBOX]);
+    const user = userEvent.setup();
+    await renderApp('/shortcuts/new');
+
+    expect(
+      await screen.findByRole('switch', { name: 'Skip permission prompts' })
+    ).toBeOnTheScreen();
+    expect(screen.queryByRole('switch', { name: 'Ask before running' })).not.toBeOnTheScreen();
+    await user.press(screen.getByRole('radio', { name: 'Command' }));
+    await user.press(screen.getByRole('button', { name: 'Use Reboot' }));
+    await user.press(screen.getByRole('switch', { name: 'Ask before running' }));
+    expect(screen.getByRole('switch', { name: 'Ask before running' })).not.toBeChecked();
+    const command = screen.getByDisplayValue('sudo reboot');
+    await user.clear(command);
+    await user.type(command, 'sudo shutdown -r now');
+    expect(screen.getByRole('switch', { name: 'Ask before running' })).not.toBeChecked();
+    await user.press(screen.getByRole('button', { name: 'Save' }));
+
+    const transport = await runShortcut('Reboot');
+    expect(transport.written).toEqual(['sudo shutdown -r now\r']);
+    expect(readJson(SHORTCUTS_KEY)).toEqual([expect.objectContaining({ confirm: false })]);
+  });
+
   it('runs shortcuts saved before agents and groups', async () => {
     saved(
       [DEVBOX],
@@ -289,6 +346,7 @@ describe('Home', () => {
       directory: '',
       group,
       agent: null,
+      confirm: false,
     });
     saved(
       [DEVBOX],

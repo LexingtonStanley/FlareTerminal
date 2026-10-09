@@ -23,8 +23,10 @@ web build), started from the RapidAppToolkit template.
 - **Shortcuts.** One tap connects and runs a command. An agent shortcut takes a folder, a
   name, the agent (Claude Code, Codex, Hermes or pi), a tmux or zellij session and whether to
   skip permission prompts, and writes the command, which stays yours to edit. Any other
-  command works too (presets for tmux, zellij, `git pull`, `df -h`, htop). Home shows them in
-  groups such as Agents and Maintenance.
+  command works too (presets for tmux, zellij, `git pull`, `df -h`, htop, `docker ps`,
+  `journalctl -f`, failed services, restarting a service, rebooting). A command that changes
+  things (a restart, a reboot, `rm`, a force-push) asks before it runs; you can turn that on or
+  off per shortcut. Home shows them in groups such as Agents and Maintenance.
 - **Agent alerts.** When an agent rings the bell or sends a terminal notification (OSC 9, 777
   or 99), the app flags the session, shows a banner on other screens, and posts a phone
   notification while the app is in the background.
