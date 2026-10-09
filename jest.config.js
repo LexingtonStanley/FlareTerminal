@@ -3,6 +3,9 @@ const expoPreset = require('jest-expo/jest-preset');
 /** @type {import('jest').Config} */
 module.exports = {
   preset: 'jest-expo',
+  // A suite's first router test transforms the whole app; from a cold cache (as on CI) that
+  // alone can pass the default 5 seconds.
+  testTimeout: 15000,
   // Playwright specs live in e2e/ and run with `npm run test:e2e`, not Jest.
   testPathIgnorePatterns: ['/node_modules/', '/e2e/', '/dist/', '/.expo/', '/.claude/worktrees/'],
   // Agent worktrees hold a second copy of the app; keep Jest's module map to this one.
