@@ -15,13 +15,36 @@ export type SpecialKey =
   | 'home'
   | 'end'
   | 'page-up'
-  | 'page-down';
+  | 'page-down'
+  | 'backspace'
+  | 'delete'
+  | 'insert'
+  | FunctionKey;
+
+export type FunctionKey =
+  'f1' | 'f2' | 'f3' | 'f4' | 'f5' | 'f6' | 'f7' | 'f8' | 'f9' | 'f10' | 'f11' | 'f12';
 
 export type Modifiers = { ctrl: boolean; alt: boolean };
 
 export const NO_MODIFIERS: Modifiers = { ctrl: false, alt: false };
 
 const ARROWS = { up: 'A', down: 'B', right: 'C', left: 'D' } as const;
+
+// xterm's encoding: F1-F4 are SS3 sequences, F5-F12 are numbered CSI ~ sequences.
+const FUNCTION_KEYS: Record<FunctionKey, string> = {
+  f1: '\x1bOP',
+  f2: '\x1bOQ',
+  f3: '\x1bOR',
+  f4: '\x1bOS',
+  f5: '\x1b[15~',
+  f6: '\x1b[17~',
+  f7: '\x1b[18~',
+  f8: '\x1b[19~',
+  f9: '\x1b[20~',
+  f10: '\x1b[21~',
+  f11: '\x1b[23~',
+  f12: '\x1b[24~',
+};
 
 /**
  * Bytes for a special key. Arrow keys depend on DECCKM (application cursor mode),
@@ -50,6 +73,15 @@ export function sequenceForKey(key: SpecialKey, { applicationCursor = false } = 
       return '\x1b[5~';
     case 'page-down':
       return '\x1b[6~';
+    case 'backspace':
+      // DEL, as xterm.js and most terminals send for Backspace.
+      return '\x7f';
+    case 'delete':
+      return '\x1b[3~';
+    case 'insert':
+      return '\x1b[2~';
+    default:
+      return FUNCTION_KEYS[key];
   }
 }
 

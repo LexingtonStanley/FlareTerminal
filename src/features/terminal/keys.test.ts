@@ -18,6 +18,26 @@ describe('sequenceForKey', () => {
   it('sends back-tab for shift-tab', () => {
     expect(sequenceForKey('shift-tab')).toBe('\x1b[Z');
   });
+
+  it('sends DEL for backspace and the editing-keypad sequences for delete and insert', () => {
+    expect(sequenceForKey('backspace')).toBe('\x7f');
+    expect(sequenceForKey('delete')).toBe('\x1b[3~');
+    expect(sequenceForKey('insert')).toBe('\x1b[2~');
+  });
+
+  it.each([
+    ['f1', '\x1bOP'],
+    ['f4', '\x1bOS'],
+    ['f5', '\x1b[15~'],
+    ['f6', '\x1b[17~'],
+    ['f10', '\x1b[21~'],
+    ['f11', '\x1b[23~'],
+    ['f12', '\x1b[24~'],
+  ] as const)('sends xterm sequences for %s', (key, expected) => {
+    expect(sequenceForKey(key)).toBe(expected);
+    // Function keys don't change with the cursor mode.
+    expect(sequenceForKey(key, { applicationCursor: true })).toBe(expected);
+  });
 });
 
 describe('controlCharacter', () => {
