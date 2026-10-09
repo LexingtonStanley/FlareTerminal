@@ -1,7 +1,7 @@
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { StyleSheet, Text, View, type TextStyle, type ViewStyle } from 'react-native';
 
-import { Colors, Fonts } from '@/constants/theme';
+import { mono, Radius, sans, type Theme } from '@/constants/theme';
 
 import type { Point, Rect } from './geometry';
 import { DIRECTIONS, type Direction, type KeyDef, type Secondary } from './layout';
@@ -9,11 +9,12 @@ import type { ModifierMode } from './modifiers';
 
 /**
  * How keys look. Purely presentational: the surface owns touches and passes in what
- * each key is doing. Character keys are light on a tray with darker function keys, as
- * on the iOS and Gboard keyboards, so the layout reads at a glance.
+ * each key is doing. Character keys are raised on a tray with quieter function keys, as
+ * on the iOS and Gboard keyboards, so the layout reads at a glance. Letters are set in
+ * Geist; punctuation and the terminal's own keys (esc, tab, ctrl, F1) in Geist Mono, so
+ * ' and ` or | and l can't be confused. Ember marks what is live: Enter, an armed
+ * modifier, the flick the finger has chosen.
  */
-
-type Theme = (typeof Colors)['light' | 'dark'];
 
 type SymbolName = SymbolViewProps['name'];
 
@@ -78,16 +79,16 @@ function visibleHints(def: KeyDef): [Direction, Secondary][] {
 
 function labelStyle(def: KeyDef, label: string, compact: boolean): TextStyle {
   if (def.tone === 'char' && /^[a-zA-Z0-9]$/.test(label)) {
-    return { fontFamily: Fonts.sans, fontSize: 23, fontWeight: 400 };
+    return { ...sans(400), fontSize: 23 };
   }
   // Punctuation in monospace, so ' and ` or | and l can't be confused.
   if (def.tone === 'char' && [...label].length === 1) {
-    return { fontFamily: Fonts.mono, fontSize: compact ? 18 : 21, fontWeight: 400 };
+    return { ...mono(400), fontSize: compact ? 18 : 21 };
   }
-  if (def.tone === 'char') return { fontFamily: Fonts.sans, fontSize: 13, fontWeight: 500 };
-  if (/^F\d+$/.test(label)) return { fontFamily: Fonts.sans, fontSize: 12, fontWeight: 600 };
-  if ([...label].length === 1) return { fontFamily: Fonts.sans, fontSize: 19, fontWeight: 500 };
-  return { fontFamily: Fonts.sans, fontSize: compact ? 14 : 15, fontWeight: 500 };
+  if (def.tone === 'char') return { ...mono(500), fontSize: 12 };
+  if (/^F\d+$/.test(label)) return { ...mono(500), fontSize: 12 };
+  if ([...label].length === 1) return { ...sans(500), fontSize: 19 };
+  return { ...mono(500), fontSize: compact ? 13 : 14, letterSpacing: -0.2 };
 }
 
 /** The visible face of one key. */
@@ -141,7 +142,7 @@ export function KeyCap({ def, label, mode, state, theme, compact }: KeyCapProps)
           style={[
             styles.hint,
             cross ? CROSS_HINT[direction] : styles.cornerHint,
-            /^[\x20-\x7e]$/.test(secondary.label) && { fontFamily: Fonts.mono },
+            /^[\x20-\x7e]$/.test(secondary.label) ? styles.hintMono : styles.hintSans,
             { color: state.direction === direction ? theme.primary : secondaryColor },
           ]}>
           {secondary.label}
@@ -304,9 +305,9 @@ export function KeyBubble({ def, label, rect, direction, surfaceWidth, theme }: 
           top,
           width,
           height,
-          backgroundColor: theme.key,
+          backgroundColor: theme.backgroundRaised,
           borderColor: theme.border,
-          boxShadow: `0 4px 14px ${theme.keyShadow}`,
+          boxShadow: `0 6px 18px ${theme.shadow}55`,
         },
       ]}>
       {cell('up')}
@@ -357,7 +358,7 @@ const ARROW_SLOT = {
 const styles = StyleSheet.create({
   face: {
     flex: 1,
-    borderRadius: 7,
+    borderRadius: Radius.small - 1,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -371,7 +372,9 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   triangleGroup: { alignItems: 'center', justifyContent: 'center', gap: 1 },
-  hint: { position: 'absolute', fontSize: 10, lineHeight: 12, fontWeight: 500 },
+  hint: { position: 'absolute', fontSize: 10, lineHeight: 12 },
+  hintMono: mono(500),
+  hintSans: sans(500),
   cornerHint: { top: 3, right: 5 },
   onceDot: { position: 'absolute', bottom: 4, width: 5, height: 5, borderRadius: 2.5 },
   lockBar: { position: 'absolute', bottom: 4, width: 14, height: 3, borderRadius: 1.5 },
@@ -395,7 +398,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cellText: { fontFamily: Fonts.mono, fontSize: 16, fontWeight: 500 },
+  cellText: { ...mono(500), fontSize: 16 },
   center: {
     minWidth: CENTER.width,
     height: CENTER.height,
@@ -404,6 +407,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  centerText: { fontFamily: Fonts.mono, fontSize: 26, fontWeight: 400 },
-  centerWord: { fontFamily: Fonts.sans, fontSize: 17, fontWeight: 600 },
+  centerText: { ...mono(400), fontSize: 26 },
+  centerWord: { ...mono(600), fontSize: 16 },
 });

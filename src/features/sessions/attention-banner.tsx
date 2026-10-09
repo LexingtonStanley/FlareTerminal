@@ -4,8 +4,10 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { Icon } from '@/components/ui/icon';
+import { Radius, Spacing } from '@/constants/theme';
 import { useNotificationOpens } from '@/features/notifications/notify';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useTheme } from '@/hooks/use-theme';
 
 import { useSessions } from './sessions-provider';
@@ -18,6 +20,7 @@ export function AttentionBanner() {
   const sessions = useSessions();
   const router = useRouter();
   const theme = useTheme();
+  const dark = useColorScheme() === 'dark';
   const insets = useSafeAreaInsets();
   const [dismissedAt, setDismissedAt] = useState(0);
 
@@ -39,11 +42,12 @@ export function AttentionBanner() {
         style={[
           styles.banner,
           {
-            backgroundColor: theme.backgroundElement,
+            backgroundColor: theme.backgroundRaised,
             borderColor: theme.border,
-            shadowColor: theme.shadow,
+            boxShadow: `0 8px 24px ${theme.shadow}${dark ? '99' : '26'}`,
           },
         ]}>
+        <View style={[styles.flare, { backgroundColor: theme.attention }]} />
         <Pressable
           role="button"
           aria-label={`Go to ${latest.name}: ${attention.body}`}
@@ -51,20 +55,25 @@ export function AttentionBanner() {
             setDismissedAt(attention.at);
             open(latest.id);
           }}
-          style={styles.body}>
-          <ThemedText type="smallBold" numberOfLines={1}>
-            {attention.title}
-          </ThemedText>
-          <ThemedText type="small" themeColor="textSecondary" numberOfLines={2}>
-            {attention.body}
-          </ThemedText>
+          style={({ pressed }) => [styles.body, pressed && styles.pressed]}>
+          <View style={[styles.icon, { backgroundColor: theme.primaryMuted }]}>
+            <Icon name="bell" size={16} color="attention" />
+          </View>
+          <View style={styles.text}>
+            <ThemedText type="smallBold" numberOfLines={1}>
+              {attention.title}
+            </ThemedText>
+            <ThemedText type="small" themeColor="textSecondary" numberOfLines={2}>
+              {attention.body}
+            </ThemedText>
+          </View>
         </Pressable>
         <Pressable
           role="button"
           aria-label="Dismiss"
           onPress={() => setDismissedAt(attention.at)}
-          style={styles.dismiss}>
-          <ThemedText type="small" themeColor="primary">
+          style={({ pressed }) => [styles.dismiss, pressed && styles.pressed]}>
+          <ThemedText type="link" themeColor="textSecondary">
             Dismiss
           </ThemedText>
         </Pressable>
@@ -78,13 +87,27 @@ const styles = StyleSheet.create({
   banner: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: Spacing.three,
+    borderRadius: Radius.large,
     borderWidth: StyleSheet.hairlineWidth,
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 6,
+    overflow: 'hidden',
   },
-  body: { flex: 1, gap: Spacing.half, padding: Spacing.three },
-  dismiss: { padding: Spacing.three },
+  flare: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 3 },
+  body: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three - 4,
+    paddingVertical: Spacing.three - 4,
+    paddingLeft: Spacing.three,
+  },
+  icon: {
+    width: 32,
+    height: 32,
+    borderRadius: Radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  text: { flex: 1, gap: Spacing.half },
+  dismiss: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.three },
+  pressed: { opacity: 0.7 },
 });

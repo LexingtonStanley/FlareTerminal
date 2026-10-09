@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
-import { Fonts, Spacing } from '@/constants/theme';
+import { Icon } from '@/components/ui/icon';
+import { mono, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 import type { Modifiers } from './keys';
@@ -41,7 +42,8 @@ export function Composer({ modifiers, secure = false, onSubmit, onModifiedKey }:
   }
 
   return (
-    <View style={[styles.row, { backgroundColor: theme.backgroundElement }]}>
+    // On the keyboard's tray, so the key bar and the composer read as one dock.
+    <View style={[styles.row, { backgroundColor: theme.keyboard }]}>
       <TextInput
         aria-label="Command"
         value={draft}
@@ -53,13 +55,19 @@ export function Composer({ modifiers, secure = false, onSubmit, onModifiedKey }:
         }
         secureTextEntry={secure}
         placeholderTextColor={theme.textSecondary}
+        cursorColor={theme.primary}
+        selectionColor={theme.primary}
         autoCapitalize="none"
         autoCorrect={false}
         spellCheck={false}
         returnKeyType="send"
         style={[
           styles.input,
-          { color: theme.text, backgroundColor: theme.background, borderColor: theme.border },
+          {
+            color: theme.text,
+            backgroundColor: theme.background,
+            borderColor: armed ? theme.primary : theme.border,
+          },
         ]}
       />
       <Pressable
@@ -71,30 +79,37 @@ export function Composer({ modifiers, secure = false, onSubmit, onModifiedKey }:
           { backgroundColor: theme.primary },
           pressed && styles.pressed,
         ]}>
-        <Text style={[styles.sendLabel, { color: theme.onPrimary }]}>↵</Text>
+        <Icon name="send" size={20} color="onPrimary" />
       </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', gap: Spacing.two, padding: Spacing.two, alignItems: 'center' },
+  row: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+    paddingHorizontal: Spacing.two,
+    paddingTop: Spacing.one,
+    paddingBottom: Spacing.two,
+    alignItems: 'center',
+  },
   input: {
+    ...mono(400),
     flex: 1,
     minHeight: 44,
-    paddingHorizontal: Spacing.three,
-    borderRadius: Spacing.two,
+    paddingHorizontal: Spacing.three - 2,
+    borderRadius: Radius.medium,
     borderWidth: 1,
-    fontFamily: Fonts.mono,
     fontSize: 15,
+    outlineWidth: 0,
   },
   send: {
     width: 44,
     height: 44,
-    borderRadius: Spacing.two,
+    borderRadius: Radius.medium,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sendLabel: { fontSize: 20, fontWeight: 700 },
-  pressed: { opacity: 0.8 },
+  pressed: { opacity: 0.8, transform: [{ scale: 0.96 }] },
 });

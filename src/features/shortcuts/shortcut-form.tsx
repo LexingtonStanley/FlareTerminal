@@ -9,11 +9,11 @@ import {
 } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
+import { Icon } from '@/components/ui/icon';
 import { Screen } from '@/components/ui/screen';
 import { TextField } from '@/components/ui/text-field';
-import { Spacing } from '@/constants/theme';
+import { Radius, sans, Spacing } from '@/constants/theme';
 import { connectionLabel, type Connection } from '@/features/connections/connections';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -66,12 +66,19 @@ export function ShortcutForm({
     <KeyboardAvoidingView
       style={styles.flex}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <Screen scroll edges={['left', 'right', 'bottom']}>
+      <Screen scroll edges={['left', 'right', 'bottom']} style={styles.screen}>
         <View style={styles.group}>
-          <ThemedText type="smallBold">Start from</ThemedText>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={styles.chips}>
-              {SHORTCUT_PRESETS.map((preset) => (
+          <ThemedText type="eyebrow" themeColor="textSecondary">
+            Start from
+          </ThemedText>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.bleed}
+            contentContainerStyle={styles.chips}>
+            {SHORTCUT_PRESETS.map((preset) => {
+              const chosen = values.command === preset.command;
+              return (
                 <Pressable
                   key={preset.label}
                   role="button"
@@ -80,26 +87,43 @@ export function ShortcutForm({
                   style={({ pressed }) => [
                     styles.chip,
                     {
-                      backgroundColor:
-                        values.command === preset.command
+                      backgroundColor: chosen
+                        ? theme.primaryMuted
+                        : pressed
                           ? theme.backgroundSelected
                           : theme.backgroundElement,
+                      borderColor: chosen ? theme.primary : theme.border,
                     },
-                    pressed && styles.pressed,
                   ]}>
-                  <ThemedText type="small">{preset.label}</ThemedText>
+                  <ThemedText
+                    type="small"
+                    themeColor={chosen ? 'primary' : 'text'}
+                    style={styles.chipText}>
+                    {preset.label}
+                  </ThemedText>
                 </Pressable>
-              ))}
-            </View>
+              );
+            })}
           </ScrollView>
         </View>
 
         <TextField label="Name" placeholder="Claude" {...field('name')} />
 
         <View style={styles.group}>
-          <ThemedText type="smallBold">Connection</ThemedText>
-          <View role="radiogroup" aria-label="Connection" style={styles.group}>
-            {connections.map((connection) => {
+          <ThemedText type="eyebrow" themeColor="textSecondary">
+            Connection
+          </ThemedText>
+          <View
+            role="radiogroup"
+            aria-label="Connection"
+            style={[
+              styles.options,
+              {
+                backgroundColor: theme.backgroundElement,
+                borderColor: errors.connectionId ? theme.danger : theme.border,
+              },
+            ]}>
+            {connections.map((connection, index) => {
               const selected = values.connectionId === connection.id;
               return (
                 <Pressable
@@ -108,25 +132,37 @@ export function ShortcutForm({
                   aria-checked={selected}
                   aria-label={connection.name}
                   onPress={() => set({ connectionId: connection.id })}
-                  style={[
+                  style={({ pressed }) => [
                     styles.option,
-                    {
-                      backgroundColor: theme.backgroundElement,
-                      borderColor: selected ? theme.primary : theme.backgroundElement,
-                    },
+                    index > 0 && [styles.optionDivider, { borderTopColor: theme.border }],
+                    pressed && { backgroundColor: theme.backgroundSelected },
                   ]}>
-                  <ThemedText type="smallBold">{connection.name}</ThemedText>
-                  <ThemedText type="small" themeColor="textSecondary">
-                    {connectionLabel(connection)}
-                  </ThemedText>
+                  <View
+                    style={[
+                      styles.radio,
+                      { borderColor: selected ? theme.primary : theme.textSecondary },
+                    ]}>
+                    {selected ? (
+                      <View style={[styles.radioDot, { backgroundColor: theme.primary }]} />
+                    ) : null}
+                  </View>
+                  <View style={styles.optionText}>
+                    <ThemedText type="smallBold">{connection.name}</ThemedText>
+                    <ThemedText type="code" themeColor="textSecondary" numberOfLines={1}>
+                      {connectionLabel(connection)}
+                    </ThemedText>
+                  </View>
                 </Pressable>
               );
             })}
           </View>
           {errors.connectionId ? (
-            <ThemedText type="small" style={{ color: theme.danger }}>
-              {errors.connectionId}
-            </ThemedText>
+            <View style={styles.message}>
+              <Icon name="error" size={15} color="danger" />
+              <ThemedText type="small" themeColor="danger">
+                {errors.connectionId}
+              </ThemedText>
+            </View>
           ) : null}
         </View>
 
@@ -135,6 +171,7 @@ export function ShortcutForm({
           placeholder="tmux new -A -s claude claude"
           autoCapitalize="none"
           autoCorrect={false}
+          monospace
           {...field('command')}
         />
         <TextField
@@ -142,28 +179,40 @@ export function ShortcutForm({
           placeholder="Optional, e.g. ~/code/my-app"
           autoCapitalize="none"
           autoCorrect={false}
+          monospace
           {...field('directory')}
         />
 
         {values.command.trim() ? (
-          <ThemedView type="backgroundElement" style={styles.preview}>
-            <ThemedText type="small" themeColor="textSecondary">
-              Runs:
+          <View style={styles.group}>
+            <ThemedText type="eyebrow" themeColor="textSecondary">
+              Runs
             </ThemedText>
-            <ThemedText type="code" selectable>
-              {startupCommand(values)}
-            </ThemedText>
-          </ThemedView>
+            <View
+              style={[
+                styles.preview,
+                { backgroundColor: theme.backgroundSelected, borderColor: theme.border },
+              ]}>
+              <ThemedText type="code" themeColor="primary">
+                $
+              </ThemedText>
+              <ThemedText type="code" selectable style={styles.previewCommand}>
+                {startupCommand(values)}
+              </ThemedText>
+            </View>
+          </View>
         ) : null}
 
-        <Button title="Save" onPress={submit} />
-        {onDelete ? (
-          <Button
-            title={confirmingDelete ? 'Tap again to delete' : 'Delete shortcut'}
-            variant="secondary"
-            onPress={() => (confirmingDelete ? onDelete() : setConfirmingDelete(true))}
-          />
-        ) : null}
+        <View style={styles.actions}>
+          <Button title="Save" onPress={submit} />
+          {onDelete ? (
+            <Button
+              title={confirmingDelete ? 'Tap again to delete' : 'Delete shortcut'}
+              variant="danger"
+              onPress={() => (confirmingDelete ? onDelete() : setConfirmingDelete(true))}
+            />
+          ) : null}
+        </View>
       </Screen>
     </KeyboardAvoidingView>
   );
@@ -171,15 +220,46 @@ export function ShortcutForm({
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  group: { gap: Spacing.two },
-  chips: { flexDirection: 'row', gap: Spacing.two },
-  chip: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, borderRadius: 999 },
-  option: {
-    gap: Spacing.half,
-    padding: Spacing.three,
-    borderRadius: Spacing.three,
-    borderWidth: 2,
+  screen: { gap: Spacing.three + 4 },
+  group: { gap: Spacing.two - 2 },
+  // The chips scroll to the screen's edges.
+  bleed: { marginHorizontal: -Spacing.four, flexGrow: 0 },
+  chips: { flexDirection: 'row', gap: Spacing.two, paddingHorizontal: Spacing.four },
+  chip: {
+    minHeight: 38,
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.three - 2,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
   },
-  preview: { gap: Spacing.one, padding: Spacing.three, borderRadius: Spacing.three },
-  pressed: { opacity: 0.7 },
+  chipText: sans(500),
+  options: { borderRadius: Radius.medium, borderWidth: 1, overflow: 'hidden' },
+  option: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three - 4,
+    paddingHorizontal: Spacing.three - 2,
+    paddingVertical: Spacing.three - 4,
+  },
+  optionDivider: { borderTopWidth: StyleSheet.hairlineWidth },
+  optionText: { flex: 1, gap: Spacing.half },
+  radio: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radioDot: { width: 10, height: 10, borderRadius: 5 },
+  message: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one + 2 },
+  preview: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+    padding: Spacing.three - 2,
+    borderRadius: Radius.medium,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  previewCommand: { flex: 1 },
+  actions: { gap: Spacing.two + 2, marginTop: Spacing.two },
 });

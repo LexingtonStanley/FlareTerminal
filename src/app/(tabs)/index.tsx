@@ -2,10 +2,12 @@ import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
+import { Card, Divider, Section } from '@/components/ui/card';
+import { Icon } from '@/components/ui/icon';
+import { IconButton } from '@/components/ui/icon-button';
 import { Screen } from '@/components/ui/screen';
-import { Spacing } from '@/constants/theme';
+import { mono, Radius, Spacing } from '@/constants/theme';
 import { connectionLabel } from '@/features/connections/connections';
 import { useConnections } from '@/features/connections/connections-provider';
 import type { SessionTarget } from '@/features/sessions/session-manager';
@@ -30,62 +32,92 @@ export default function HomeScreen() {
 
   const openSession = (id: string) => router.push({ pathname: '/session/[id]', params: { id } });
   const start = (target: SessionTarget) => openSession(startSession(target));
+  const waiting = sessions.filter((session) => session.attention).length;
 
   return (
-    <Screen scroll>
-      <ThemedText type="subtitle" role="heading">
-        Home
-      </ThemedText>
+    <Screen scroll style={styles.screen}>
+      <View style={styles.header}>
+        <View style={styles.wordmark}>
+          <ThemedText role="heading" aria-label="Flare" style={styles.brand}>
+            flare
+          </ThemedText>
+          <View style={[styles.cursor, { backgroundColor: theme.primary }]} />
+        </View>
+        <ThemedText type="small" themeColor="textSecondary">
+          {sessions.length === 0
+            ? 'A terminal for your coding agents'
+            : `${sessions.length} ${sessions.length === 1 ? 'session' : 'sessions'} open` +
+              (waiting ? ` · ${waiting} ${waiting === 1 ? 'needs' : 'need'} you` : '')}
+        </ThemedText>
+      </View>
 
       {sessions.length ? (
-        <View style={styles.section}>
-          <ThemedText type="smallBold" role="heading" themeColor="textSecondary">
-            Sessions
-          </ThemedText>
-          {sessions.map((session) => (
-            <ThemedView key={session.id} type="backgroundElement" style={styles.row}>
-              <Pressable
-                role="button"
-                aria-label={`Resume ${session.name}`}
-                onPress={() => openSession(session.id)}
-                style={({ pressed }) => [styles.rowMain, pressed && styles.pressed]}>
-                <View style={styles.rowTitle}>
-                  <StatusDot status={session.status} />
-                  <ThemedText type="smallBold" numberOfLines={1} style={styles.shrink}>
-                    {session.name}
-                  </ThemedText>
+        <Section title="Sessions">
+          <Card flush>
+            {sessions.map((session, index) => (
+              <View key={session.id}>
+                {index > 0 ? <Divider inset={Spacing.three + 20} /> : null}
+                <View style={styles.row}>
+                  {session.attention ? (
+                    <View style={[styles.flare, { backgroundColor: theme.attention }]} />
+                  ) : null}
+                  <Pressable
+                    role="button"
+                    aria-label={`Resume ${session.name}`}
+                    onPress={() => openSession(session.id)}
+                    style={({ pressed }) => [
+                      styles.rowMain,
+                      pressed && { backgroundColor: theme.backgroundSelected },
+                    ]}>
+                    <View style={styles.rowLead}>
+                      <StatusDot status={session.status} />
+                    </View>
+                    <View style={styles.rowText}>
+                      <ThemedText type="headline" numberOfLines={1}>
+                        {session.name}
+                      </ThemedText>
+                      <View style={styles.inline}>
+                        {session.attention ? (
+                          <Icon name="bell" size={14} color="attention" />
+                        ) : null}
+                        <ThemedText
+                          type="small"
+                          themeColor={session.attention ? 'attention' : 'textSecondary'}
+                          numberOfLines={1}
+                          style={styles.shrink}>
+                          {session.attention?.body ??
+                            session.title ??
+                            STATUS_LABELS[session.status.state]}
+                        </ThemedText>
+                      </View>
+                    </View>
+                  </Pressable>
+                  <View style={styles.rowAction}>
+                    <IconButton
+                      icon="close"
+                      label={`Close ${session.name}`}
+                      onPress={() => manager.close(session.id)}
+                    />
+                  </View>
                 </View>
-                <ThemedText
-                  type="small"
-                  themeColor={session.attention ? 'primary' : 'textSecondary'}
-                  numberOfLines={1}>
-                  {session.attention?.body ?? session.title ?? STATUS_LABELS[session.status.state]}
-                </ThemedText>
-              </Pressable>
-              <Pressable
-                role="button"
-                aria-label={`Close ${session.name}`}
-                onPress={() => manager.close(session.id)}
-                style={({ pressed }) => [styles.rowAction, pressed && styles.pressed]}>
-                <ThemedText type="smallBold" themeColor="textSecondary">
-                  ✕
-                </ThemedText>
-              </Pressable>
-            </ThemedView>
-          ))}
-        </View>
+              </View>
+            ))}
+          </Card>
+        </Section>
       ) : null}
 
       {connections.length ? (
-        <View style={styles.section}>
-          <ThemedText type="smallBold" role="heading" themeColor="textSecondary">
-            Shortcuts
-          </ThemedText>
+        <Section title="Shortcuts">
           <View style={styles.grid}>
             {shortcuts.map((shortcut) => {
               const connection = connections.find(({ id }) => id === shortcut.connectionId);
               return (
-                <ThemedView key={shortcut.id} type="backgroundElement" style={styles.tile}>
+                <View
+                  key={shortcut.id}
+                  style={[
+                    styles.tile,
+                    { backgroundColor: theme.backgroundElement, borderColor: theme.border },
+                  ]}>
                   <Pressable
                     role="button"
                     aria-label={`Run ${shortcut.name}`}
@@ -96,29 +128,40 @@ export default function HomeScreen() {
                         command: startupCommand(shortcut),
                       })
                     }
-                    style={({ pressed }) => [styles.tileMain, pressed && styles.pressed]}>
-                    <ThemedText type="smallBold" numberOfLines={1}>
-                      {shortcut.name}
-                    </ThemedText>
-                    <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
-                      {connection?.name ?? 'Missing connection'}
-                    </ThemedText>
-                    <ThemedText type="code" themeColor="textSecondary" numberOfLines={1}>
+                    style={({ pressed }) => [
+                      styles.tileMain,
+                      pressed && { backgroundColor: theme.backgroundSelected },
+                    ]}>
+                    <View style={[styles.runBadge, { backgroundColor: theme.primaryMuted }]}>
+                      <Icon name="run" size={16} color="primary" />
+                    </View>
+                    <View style={styles.tileText}>
+                      <ThemedText type="headline" numberOfLines={1}>
+                        {shortcut.name}
+                      </ThemedText>
+                      <ThemedText type="caption" themeColor="textSecondary" numberOfLines={1}>
+                        {connection?.name ?? 'Missing connection'}
+                      </ThemedText>
+                    </View>
+                    <ThemedText
+                      type="code"
+                      themeColor="textSecondary"
+                      numberOfLines={1}
+                      style={styles.tileCommand}>
                       {shortcut.command}
                     </ThemedText>
                   </Pressable>
-                  <Pressable
-                    role="button"
-                    aria-label={`Edit shortcut ${shortcut.name}`}
-                    onPress={() =>
-                      router.push({ pathname: '/shortcuts/[id]', params: { id: shortcut.id } })
-                    }
-                    style={styles.tileEdit}>
-                    <ThemedText type="small" themeColor="primary">
-                      Edit
-                    </ThemedText>
-                  </Pressable>
-                </ThemedView>
+                  <View style={styles.tileEdit}>
+                    <IconButton
+                      icon="edit"
+                      size={16}
+                      label={`Edit shortcut ${shortcut.name}`}
+                      onPress={() =>
+                        router.push({ pathname: '/shortcuts/[id]', params: { id: shortcut.id } })
+                      }
+                    />
+                  </View>
+                </View>
               );
             })}
             <Pressable
@@ -128,99 +171,202 @@ export default function HomeScreen() {
               style={({ pressed }) => [
                 styles.tile,
                 styles.addTile,
-                { borderColor: theme.border },
-                pressed && styles.pressed,
+                {
+                  borderColor: theme.border,
+                  backgroundColor: pressed ? theme.backgroundSelected : 'transparent',
+                },
               ]}>
-              <ThemedText type="smallBold" themeColor="primary">
-                + Shortcut
-              </ThemedText>
-              <ThemedText type="small" themeColor="textSecondary" style={styles.center}>
+              <View style={[styles.addBadge, { borderColor: theme.border }]}>
+                <Icon name="add" size={18} color="text" />
+              </View>
+              <ThemedText type="smallBold">New shortcut</ThemedText>
+              <ThemedText type="caption" themeColor="textSecondary" style={styles.center}>
                 {shortcuts.length ? 'One tap to a command' : 'e.g. Claude in tmux, one tap'}
               </ThemedText>
             </Pressable>
           </View>
-        </View>
+        </Section>
       ) : null}
 
-      <View style={styles.section}>
-        <ThemedText type="smallBold" role="heading" themeColor="textSecondary">
-          Connections
-        </ThemedText>
+      <Section title="Connections">
         {connections.length === 0 ? (
-          <ThemedView type="backgroundElement" style={styles.card}>
-            <ThemedText type="smallBold">Connect to your computer over SSH</ThemedText>
+          <Card style={styles.empty}>
+            <View
+              style={[
+                styles.window,
+                { backgroundColor: theme.background, borderColor: theme.border },
+              ]}>
+              <View style={styles.windowBar}>
+                {[0, 1, 2].map((dot) => (
+                  <View
+                    key={dot}
+                    style={[styles.windowDot, { backgroundColor: theme.backgroundSelected }]}
+                  />
+                ))}
+              </View>
+              <View style={styles.prompt}>
+                <ThemedText type="code" themeColor="primary" style={styles.promptText}>
+                  $
+                </ThemedText>
+                <ThemedText type="code" selectable style={styles.promptText}>
+                  ssh lexde@lexbox
+                </ThemedText>
+                <View style={[styles.promptCursor, { backgroundColor: theme.primary }]} />
+              </View>
+            </View>
+            <ThemedText type="headline">Connect to your computer over SSH</ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
               Nothing to install on it: if you can run this from a laptop, Flare can connect too.
-            </ThemedText>
-            <ThemedText
-              type="code"
-              selectable
-              style={[styles.command, { borderColor: theme.border }]}>
-              ssh lexde@lexbox
             </ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
               With Tailscale on the phone and the computer, use the computer&apos;s Tailscale name.
               Run agents inside tmux or zellij so they keep going while the phone is away.
             </ThemedText>
-          </ThemedView>
+          </Card>
         ) : (
-          connections.map((connection) => (
-            <ThemedView key={connection.id} type="backgroundElement" style={styles.row}>
-              <Pressable
-                role="button"
-                aria-label={`Open ${connection.name}`}
-                onPress={() =>
-                  start({ connectionId: connection.id, name: connection.name, command: null })
-                }
-                style={({ pressed }) => [styles.rowMain, pressed && styles.pressed]}>
-                <ThemedText type="smallBold">{connection.name}</ThemedText>
-                <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
-                  {connection.kind === 'ttyd'
-                    ? `ttyd · ${connectionLabel(connection)}`
-                    : connectionLabel(connection)}
-                </ThemedText>
-              </Pressable>
-              <Pressable
-                role="button"
-                aria-label={`Edit ${connection.name}`}
-                onPress={() =>
-                  router.push({ pathname: '/connections/[id]', params: { id: connection.id } })
-                }
-                style={({ pressed }) => [styles.rowAction, pressed && styles.pressed]}>
-                <ThemedText type="small" themeColor="primary">
-                  Edit
-                </ThemedText>
-              </Pressable>
-            </ThemedView>
-          ))
+          <Card flush>
+            {connections.map((connection, index) => (
+              <View key={connection.id}>
+                {index > 0 ? <Divider inset={Spacing.three + 40 + Spacing.three - 4} /> : null}
+                <View style={styles.row}>
+                  <Pressable
+                    role="button"
+                    aria-label={`Open ${connection.name}`}
+                    onPress={() =>
+                      start({ connectionId: connection.id, name: connection.name, command: null })
+                    }
+                    style={({ pressed }) => [
+                      styles.rowMain,
+                      pressed && { backgroundColor: theme.backgroundSelected },
+                    ]}>
+                    <View style={[styles.monogram, { backgroundColor: theme.backgroundSelected }]}>
+                      <ThemedText style={styles.monogramText}>
+                        {(connection.name.trim()[0] ?? '?').toUpperCase()}
+                      </ThemedText>
+                    </View>
+                    <View style={styles.rowText}>
+                      <ThemedText type="headline" numberOfLines={1}>
+                        {connection.name}
+                      </ThemedText>
+                      <ThemedText type="code" themeColor="textSecondary" numberOfLines={1}>
+                        {connection.kind === 'ttyd'
+                          ? `ttyd · ${connectionLabel(connection)}`
+                          : connectionLabel(connection)}
+                      </ThemedText>
+                    </View>
+                  </Pressable>
+                  <View style={styles.rowAction}>
+                    <IconButton
+                      icon="edit"
+                      size={16}
+                      label={`Edit ${connection.name}`}
+                      onPress={() =>
+                        router.push({
+                          pathname: '/connections/[id]',
+                          params: { id: connection.id },
+                        })
+                      }
+                    />
+                  </View>
+                </View>
+              </View>
+            ))}
+          </Card>
         )}
-        <Button title="New connection" onPress={() => router.push('/connections/new')} />
-      </View>
+        <Button
+          title="New connection"
+          icon="add"
+          variant={connections.length ? 'secondary' : 'primary'}
+          onPress={() => router.push('/connections/new')}
+        />
+      </Section>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  section: { gap: Spacing.two },
-  card: { gap: Spacing.two, padding: Spacing.three, borderRadius: Spacing.three },
-  command: { padding: Spacing.two, borderWidth: 1, borderRadius: Spacing.two },
-  row: { flexDirection: 'row', alignItems: 'center', borderRadius: Spacing.three },
-  rowMain: { flex: 1, gap: Spacing.half, padding: Spacing.three },
-  rowTitle: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
-  rowAction: { padding: Spacing.three },
+  screen: { gap: Spacing.four + 4 },
+  header: { gap: Spacing.half, paddingTop: Spacing.two },
+  wordmark: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one + 1 },
+  brand: { ...mono(600), fontSize: 30, lineHeight: 38, letterSpacing: -1 },
+  cursor: { width: 13, height: 27, borderRadius: 2, marginTop: 2 },
+  row: { flexDirection: 'row', alignItems: 'center' },
+  flare: { position: 'absolute', left: 0, top: 10, bottom: 10, width: 3, borderRadius: 2 },
+  rowMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three - 4,
+    paddingVertical: Spacing.three - 4,
+    paddingLeft: Spacing.three,
+    minHeight: 64,
+  },
+  rowLead: { width: 16, alignItems: 'center' },
+  rowText: { flex: 1, gap: Spacing.half },
+  rowAction: { paddingHorizontal: Spacing.two },
+  inline: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one },
   shrink: { flexShrink: 1 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
-  tile: { flexBasis: '47%', flexGrow: 1, borderRadius: Spacing.three, minHeight: 96 },
-  tileMain: { flex: 1, gap: Spacing.half, padding: Spacing.three },
-  tileEdit: { alignSelf: 'flex-end', paddingHorizontal: Spacing.three, paddingBottom: Spacing.two },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two + 2 },
+  tile: {
+    flexBasis: '46%',
+    flexGrow: 1,
+    minHeight: 132,
+    borderRadius: Radius.large,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+  },
+  tileMain: { flex: 1, gap: Spacing.two + 2, padding: Spacing.three - 2 },
+  runBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: Radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tileText: { gap: Spacing.half },
+  tileCommand: { fontSize: 12, marginTop: 'auto' },
+  tileEdit: { position: 'absolute', top: Spacing.one, right: Spacing.one },
   addTile: {
     alignItems: 'center',
     justifyContent: 'center',
-    gap: Spacing.half,
+    gap: Spacing.one + 2,
     padding: Spacing.three,
     borderWidth: 1,
     borderStyle: 'dashed',
   },
+  addBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.half,
+  },
   center: { textAlign: 'center' },
-  pressed: { opacity: 0.7 },
+  monogram: {
+    width: 40,
+    height: 40,
+    borderRadius: Radius.medium - 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  monogramText: { ...mono(600), fontSize: 17, lineHeight: 22 },
+  empty: { gap: Spacing.three - 4, padding: Spacing.three },
+  window: {
+    borderRadius: Radius.medium,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingBottom: Spacing.three,
+    marginBottom: Spacing.one,
+  },
+  windowBar: { flexDirection: 'row', gap: 6, padding: Spacing.two + 2 },
+  windowDot: { width: 9, height: 9, borderRadius: 4.5 },
+  prompt: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    paddingHorizontal: Spacing.three,
+  },
+  promptText: { fontSize: 15, lineHeight: 22 },
+  promptCursor: { width: 9, height: 18, borderRadius: 1.5, marginLeft: -4 },
 });
