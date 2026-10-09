@@ -2,9 +2,13 @@
   "expo": {
     "name": "Flare Terminal",
     "slug": "flare-terminal",
+    "owner": "lexingtonstanley",
     "version": "1.0.0",
     "runtimeVersion": {
       "policy": "fingerprint"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/2a925f89-3574-4e44-8fe4-5b7f286e8367"
     },
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -57,6 +61,11 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "2a925f89-3574-4e44-8fe4-5b7f286e8367"
+      }
     }
   }
 }
