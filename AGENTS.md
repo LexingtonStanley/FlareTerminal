@@ -135,6 +135,9 @@ app.json / app.config.ts Identity / build variants (APP_VARIANT = development | 
 - **Screens**: wrap content in `<Screen>`; use `ThemedText`, `ThemedView` and `useTheme()`
   colors, never hard-coded colors. Every screen must work in light and dark mode and at phone
   width on web.
+- **Design**: `docs/design.md` has the direction and the tokens (colour, type, space) and when
+  to use each. One ember accent per screen; Geist Mono only for what a computer reads. Fonts
+  are per-weight families, so style text with `sans(600)` / `mono()`, never `fontWeight`.
 - **Navigation**: routes are typed, so a bad `href` or `router.push()` fails typecheck.
 - **No accounts**: the hosts a person connects to do the authentication. The template's
   Supabase auth was removed; RapidAppToolkit has it if a backend (for example syncing

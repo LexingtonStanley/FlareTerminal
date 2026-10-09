@@ -25,7 +25,8 @@ web build), started from the RapidAppToolkit template.
 - **Composer**: a native text field for typing or dictating a prompt, sent as a bracketed
   paste then Enter.
 - [xterm.js](https://xtermjs.org) rendering (colours, full-screen apps, resize, Unicode,
-  links), light and dark mode, adjustable font size.
+  links), light and dark mode, adjustable font size, and colour schemes (Flare, Tokyo Night,
+  Catppuccin, Solarized, Gruvbox), each following the phone's light or dark mode.
 
 ## Put it on your phone
 
@@ -112,8 +113,9 @@ npm run check      # typecheck, lint, format, Jest, Playwright on the web build
 npm start          # press w for web; native needs a development build
 ```
 
-`AGENTS.md` has the conventions and the traps this stack has already hit. Try the keyboard
-without a host at `/keyboard-preview`.
+`AGENTS.md` has the conventions and the traps this stack has already hit, and
+`docs/design.md` the look (tokens, type, when to use the accent). Try the keyboard without a
+host at `/keyboard-preview`.
 
 ## How it works
 
@@ -154,6 +156,8 @@ without a host at `/keyboard-preview`.
 | [Expo](https://github.com/expo/expo) (DOM components, SecureStore, notifications, haptics)               | MIT     | App, WebView host, Keychain, alerts     |
 | [ssh2](https://github.com/mscdex/ssh2)                                                                   | MIT     | Test SSH server (development only)      |
 | [ttyd](https://github.com/tsl0922/ttyd)                                                                  | MIT     | Optional, on your computer; not shipped |
+| [Geist and Geist Mono](https://github.com/vercel/geist-font) (`assets/fonts`, with its licence)          | OFL 1.1 | The app's typefaces                     |
+| Colour schemes: Tokyo Night (Apache-2.0), Catppuccin, Solarized, Gruvbox                                 | MIT     | Terminal colours to choose in Settings  |
 
 Projects that were evaluated and not used: Whip (an Expo, xterm.js and SSH terminal, but
 AGPL), `@fressh/react-native-terminal` (MIT; a native SSH and terminal renderer, no web),
