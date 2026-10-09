@@ -44,22 +44,29 @@ function withReactNativeGlobals(load: () => void) {
   }
 }
 
-it('loads the app and runs a session with React Native’s globals', async () => {
-  let manager: SessionManagerType | undefined;
-  withReactNativeGlobals(() => {
-    /* eslint-disable @typescript-eslint/no-require-imports -- they must load with the globals */
-    for (const route of routes) require(route);
-    const { SessionManager } = require('@/features/sessions/session-manager');
-    /* eslint-enable @typescript-eslint/no-require-imports */
-    manager = new SessionManager({ openTransport: () => null, onAttention() {} });
-    // Nothing the app loaded left browser-only fields behind.
-    expect(globalThis.navigator).toEqual({ product: 'ReactNative' });
-  });
+// Compiling every route takes a few seconds when Jest's cache is cold, as it is in CI.
+const LOAD_TIMEOUT_MS = 30_000;
 
-  expect(routes).toEqual(expect.arrayContaining(['@/app/_layout', '@/app/session/[id]']));
+it(
+  'loads the app and runs a session with React Native’s globals',
+  async () => {
+    let manager: SessionManagerType | undefined;
+    withReactNativeGlobals(() => {
+      /* eslint-disable @typescript-eslint/no-require-imports -- they must load with the globals */
+      for (const route of routes) require(route);
+      const { SessionManager } = require('@/features/sessions/session-manager');
+      /* eslint-enable @typescript-eslint/no-require-imports */
+      manager = new SessionManager({ openTransport: () => null, onAttention() {} });
+      // Nothing the app loaded left browser-only fields behind.
+      expect(globalThis.navigator).toEqual({ product: 'ReactNative' });
+    });
 
-  const id = manager!.start({ connectionId: 'box', name: 'Box', command: null });
-  const screen = manager!.screen(id)!;
-  await new Promise<void>((resolve) => screen.write('\x1b[1mhello\x1b[0m', resolve));
-  expect(screen.buffer.active.getLine(0)?.translateToString(true)).toBe('hello');
-});
+    expect(routes).toEqual(expect.arrayContaining(['@/app/_layout', '@/app/session/[id]']));
+
+    const id = manager!.start({ connectionId: 'box', name: 'Box', command: null });
+    const screen = manager!.screen(id)!;
+    await new Promise<void>((resolve) => screen.write('\x1b[1mhello\x1b[0m', resolve));
+    expect(screen.buffer.active.getLine(0)?.translateToString(true)).toBe('hello');
+  },
+  LOAD_TIMEOUT_MS
+);

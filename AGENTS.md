@@ -48,7 +48,7 @@ Traps already hit in this exact stack:
   async calls back to the app, and the component can't share React state with the app. Push
   streaming data in through the imperative handle (`useDOMImperativeHandle`), never through
   changing props, and batch it: each call is an `injectJavaScript`. Settings that rarely change
-  (theme, font size, `systemKeyboard`) are props. Its methods aren't callable until
+  (theme, font size) are props. Its methods aren't callable until
   the view has called `onReady`. Expo types handle methods as `(...args: JSONValue[])`; the view
   wraps that once (`useTypedDOMImperativeHandle`) so callers keep precise types.
 - **ttyd** ignores input unless started with `-W`, needs the `Authorization: Basic` header on
@@ -110,13 +110,15 @@ src/app/                 Routes only. Every file here is a screen; never put tes
   (tabs)/                Tab navigator: index (Home: sessions, shortcuts, connections), settings
   connections/           new.tsx, [id].tsx (edit): the connection form
   shortcuts/             new.tsx, [id].tsx (edit): the shortcut form
-  session/[id].tsx       A session: session strip, view, keyboard (bar + composer, or coding)
+  session/[id].tsx       A session: session strip, view, coding keyboard (or, for writing,
+                         the key bar and composer with the phone's keyboard)
   keyboard-preview.tsx   Both keyboards against a pretend shell, no host needed
   +not-found.tsx
 src/components/ui/       Screen, Button, TextField primitives: build screens from these
 src/components/          ThemedText, ThemedView, ExternalLink
 src/features/terminal/   terminal-view ('use dom' xterm.js), transport.ts (interface), ttyd.ts,
-                         ssh-transport.ts, open-transport.ts, keys.ts (bytes for keys), composer
+                         ssh-transport.ts, open-transport.ts, keys.ts (bytes for keys), composer,
+                         cursor-tap.ts (a tap on the edited line as arrow keys)
 src/features/ssh/        SSH-2 client (client.ts), packets and ciphers, host and user keys,
                          known hosts, the app's key, socket.ts (TCP; socket.web.ts refuses)
 src/features/sessions/   SessionManager (every open session, headless xterm), alerts, provider,
@@ -126,7 +128,7 @@ src/features/keyboard/   Accessory bar and coding keyboard: layout, gestures, to
 src/features/shortcuts/  Shortcut type, presets (Claude in tmux/zellij), provider, form
 src/features/notifications/ Local notifications for agent alerts (no-op on web)
 src/features/connections/ Connection type (SSH or ttyd), validation, ConnectionsProvider, form
-src/features/settings/   PreferencesProvider (font size, keyboard)
+src/features/settings/   PreferencesProvider (font size)
 src/features/<name>/     Feature logic and its colocated *.test.ts(x)
 src/lib/                 storage.ts (JSON in localStorage / SQLite), secrets.ts (Keychain/Keystore)
 src/test-utils/          Jest helpers: renderApp, memory-storage, fake-terminal-view, fake-transport,

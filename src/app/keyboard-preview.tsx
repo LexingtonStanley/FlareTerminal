@@ -54,7 +54,6 @@ export default function KeyboardPreviewScreen() {
             ref={viewRef}
             theme={TerminalColors[scheme]}
             fontSize={15}
-            systemKeyboard={mode === 'bar'}
             onReady={() => setReady(true)}
             onInput={keyboardProps.onText}
             onResize={() => {}}

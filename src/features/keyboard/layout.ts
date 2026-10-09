@@ -234,10 +234,11 @@ const OPEN_KEYBOARD = key(
   }
 );
 
+// The phone's keyboard, in a text field: for prose, with autocorrect, swiping and dictation.
 const SYSTEM_KEYBOARD = key(
   'switch',
   '',
-  'System keyboard',
+  'Phone keyboard',
   { type: 'switch', to: 'system' },
   {
     icon: 'globe',
@@ -269,13 +270,14 @@ const SHIFT = key(
   }
 );
 
-// Swipe left to delete a word (Ctrl-W), as on Gboard.
+// Swipe left to delete a word (Ctrl-W), as on Gboard; swipe right to delete forwards.
 const BACKSPACE = key('backspace', '', 'Backspace', special('backspace'), {
   behavior: 'repeat',
   icon: 'backspace',
   units: 1.5,
   flicks: {
     left: { action: text('\x17'), label: '^W', name: 'Delete word', hidden: true },
+    right: { action: special('delete'), label: 'del', name: 'Delete' },
   },
 });
 
@@ -302,8 +304,8 @@ const TO_SYMBOLS = {
   },
 } satisfies KeyDef;
 
-function nav(id: SpecialKey, label: string, name: string, repeat = false): KeyDef {
-  return key(id, label, name, special(id), { units: 2, behavior: repeat ? 'repeat' : 'press' });
+function nav(id: SpecialKey, label: string, name: string, repeat = false, units = 2): KeyDef {
+  return key(id, label, name, special(id), { units, behavior: repeat ? 'repeat' : 'press' });
 }
 
 // The arrows stand out from the keys around them, like the character keys do.
@@ -328,7 +330,16 @@ const LAYERS: Record<LayerId, Row[]> = {
       inset: 0,
     },
     {
-      keys: [TO_SYMBOLS, char('-', { up: '_' }), space(4.5), char('.', { up: ',' }), ENTER],
+      // Home and End either side of space, where the cursor goes.
+      keys: [
+        TO_SYMBOLS,
+        char('-', { up: '_' }),
+        nav('home', 'home', 'Home', false, 1),
+        space(2.5),
+        nav('end', 'end', 'End', false, 1),
+        char('.', { up: ',' }),
+        ENTER,
+      ],
       height: KEY_ROW_HEIGHT,
       inset: 0,
     },

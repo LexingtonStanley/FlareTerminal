@@ -80,6 +80,8 @@ test('connects, sizes the remote terminal and runs a command', async ({ page }) 
   await expect(page.getByText(FAKE_TITLE).filter({ visible: true })).toBeVisible();
   await expect(screen).toContainText('$');
 
+  await page.getByRole('button', { name: 'Phone keyboard' }).click();
+  await expect(page.getByLabel('Command')).toBeFocused();
   await page.getByLabel('Command').fill('echo hello from flare');
   await page.getByLabel('Command').press('Enter');
 
@@ -89,52 +91,85 @@ test('connects, sizes the remote terminal and runs a command', async ({ page }) 
   await expect(page.getByLabel('Command')).toHaveValue('');
 });
 
-test('types straight into the terminal and uses the key bar', async ({ page }) => {
-  const { session, screen, tapTarget } = await openTerminal(page);
+test('opens on the coding keyboard, which keeps the terminal focused', async ({ page }) => {
+  const { session, screen } = await openTerminal(page);
+  const textarea = page.locator('.xterm-helper-textarea');
 
-  await tapTarget.click();
-  await page.keyboard.type('ls');
+  // The terminal never asks for the phone's keyboard; it keeps focus for the cursor and
+  // for hardware keyboards.
+  await expect(page.getByLabel('Coding keyboard')).toBeVisible();
+  await expect(textarea).toHaveAttribute('inputmode', 'none');
+  await expect(textarea).toBeFocused();
+  await expect(page.getByLabel('Command')).toBeHidden();
+
+  for (const name of ['l', 's']) await page.getByRole('button', { name, exact: true }).click();
   await expect(screen).toContainText('$ ls');
 
-  // Keys must not take focus away from the terminal (that closes a phone's keyboard).
-  // The arrows key sends the side that is tapped.
+  // The arrows key sends the side that is tapped; keys never take focus.
   const arrows = (await page.getByRole('button', { name: 'Arrow keys' }).boundingBox())!;
   await page.mouse.click(arrows.x + arrows.width / 2, arrows.y + 6);
   await page.getByRole('button', { name: 'Escape' }).click();
-  await expect(page.locator('.xterm-helper-textarea')).toBeFocused();
+  await expect(textarea).toBeFocused();
 
-  // Sticky Ctrl, then a key typed in the composer: Ctrl+C.
-  await page.getByRole('switch', { name: 'Control' }).click();
-  await expect(page.getByRole('switch', { name: 'Control' })).toBeChecked();
-  await page.getByLabel('Command').pressSequentially('c');
-  await expect(page.getByRole('switch', { name: 'Control' })).not.toBeChecked();
+  // Sticky Ctrl, then a key: Ctrl+C.
+  const ctrl = page.getByRole('switch', { name: 'Control' });
+  await ctrl.click();
+  await expect(ctrl).toBeChecked();
+  await page.getByRole('button', { name: 'c', exact: true }).click();
+  await expect(ctrl).not.toBeChecked();
   await expect(screen).toContainText('^C');
-  await expect(page.getByLabel('Command')).toHaveValue('');
 
   await page.getByRole('button', { name: 'Pipe' }).click();
+  await page.keyboard.type('x');
 
-  expect(session.inputs).toEqual(['l', 's', '\x1b[A', '\x1b', '\x03', '|']);
+  expect(session.inputs).toEqual(['l', 's', '\x1b[A', '\x1b', '\x03', '|', 'x']);
 });
 
-test('swaps the phone’s keyboard for the coding keyboard', async ({ page }) => {
+test('writes with the phone’s keyboard in a text field, then goes back', async ({ page }) => {
   const { session } = await openTerminal(page);
-  const textarea = page.locator('.xterm-helper-textarea');
+
+  await page.getByRole('button', { name: 'Phone keyboard' }).click();
+  const field = page.getByLabel('Command');
+  await expect(field).toBeFocused();
+  await expect(page.getByRole('toolbar', { name: 'Terminal keys' })).toBeVisible();
+  await field.fill('Fix the flaky test');
+  await page.getByRole('button', { name: 'Send' }).click();
+  expect(session.inputs).toEqual(['\x1b[200~Fix the flaky test\x1b[201~', '\r']);
 
   await page.getByRole('button', { name: 'Coding keyboard' }).click();
   await expect(page.getByLabel('Coding keyboard')).toBeVisible();
-  // The terminal keeps focus but no longer opens the phone's keyboard.
-  await expect(textarea).toHaveAttribute('inputmode', 'none');
-  await expect(page.getByLabel('Command')).toBeHidden();
+  await expect(field).toBeHidden();
+  await expect(page.locator('.xterm-helper-textarea')).toBeFocused();
+});
 
-  for (const name of ['g', 'i', 't', 'Space', 's', 'Enter']) {
-    await page.getByRole('button', { name, exact: true }).click();
-  }
-  await expect(textarea).toBeFocused();
-  expect(session.inputs).toEqual(['g', 'i', 't', ' ', 's', '\r']);
+test('a tap on the line being edited moves the cursor there', async ({ page }) => {
+  const { session, screen, tapTarget } = await openTerminal(page);
+  await tapTarget.click();
+  await page.keyboard.type('echo hello');
+  await expect(screen).toContainText('$ echo hello');
+  session.inputs.length = 0;
 
-  await page.getByRole('button', { name: 'System keyboard' }).click();
-  await expect(page.getByLabel('Command')).toBeVisible();
-  await expect(textarea).not.toHaveAttribute('inputmode', 'none');
+  const box = (await tapTarget.boundingBox())!;
+  const { columns, rows } = session.resizes.at(-1) ?? session.handshake;
+  const cell = (col: number, row: number) => ({
+    x: box.x + ((col + 0.5) * box.width) / columns,
+    y: box.y + ((row + 0.5) * box.height) / rows,
+  });
+
+  // "$ echo hello": the cursor is at column 12; the "e" of echo is column 2.
+  const echo = cell(2, 0);
+  await page.touchscreen.tap(echo.x, echo.y);
+  await expect.poll(() => session.inputs).toEqual(['\x1b[D'.repeat(10)]);
+  // Typing now goes in where the tap put the cursor.
+  await page.keyboard.type('>');
+  await expect(screen).toContainText('$ >echo hello');
+
+  // Past the end of the text: back to the end. Another line: nothing.
+  const past = cell(columns - 2, 0);
+  await page.touchscreen.tap(past.x, past.y);
+  const below = cell(2, 3);
+  await page.touchscreen.tap(below.x, below.y);
+  await expect.poll(() => session.inputs).toEqual(['\x1b[D'.repeat(10), '>', '\x1b[C'.repeat(10)]);
 });
 
 test('reports a finished session and reconnects', async ({ page }) => {
@@ -172,6 +207,7 @@ test('runs a shortcut: connects and types its command', async ({ page }) => {
 
 test('keeps sessions running in the background and flags them', async ({ page }) => {
   const { ttyd, session: first, screen } = await openTerminal(page);
+  await page.getByRole('button', { name: 'Phone keyboard' }).click();
   await page.getByLabel('Command').fill('echo first session');
   await page.getByLabel('Command').press('Enter');
   await expect(screen).toContainText('first session');

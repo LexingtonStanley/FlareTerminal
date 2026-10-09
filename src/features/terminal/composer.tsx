@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Fonts, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -17,9 +17,9 @@ type ComposerProps = {
 };
 
 /**
- * A native text field for writing a command or an agent prompt before sending it.
- * Phone keyboards, autocorrect and dictation work here even where typing straight
- * into the terminal doesn't (Android IMEs hold back xterm.js input until Enter).
+ * A native text field for writing an agent prompt (or a command) with the phone's own
+ * keyboard: autocorrect, swiping and dictation, which can't work in a terminal. It opens
+ * focused, and Enter or the send button pastes the text and presses Enter.
  */
 export function Composer({ modifiers, secure = false, onSubmit, onModifiedKey }: ComposerProps) {
   const theme = useTheme();
@@ -44,18 +44,23 @@ export function Composer({ modifiers, secure = false, onSubmit, onModifiedKey }:
     <View style={[styles.row, { backgroundColor: theme.backgroundElement }]}>
       <TextInput
         aria-label="Command"
+        autoFocus
         value={draft}
         onChangeText={handleChange}
         onSubmitEditing={submit}
         submitBehavior="submit"
         placeholder={
-          armed ? 'Type a key for the combination' : secure ? 'Password' : 'Command or prompt'
+          armed ? 'Type a key for the combination' : secure ? 'Password' : 'Write a prompt'
         }
         secureTextEntry={secure}
         placeholderTextColor={theme.textSecondary}
-        autoCapitalize="none"
-        autoCorrect={false}
-        spellCheck={false}
+        // Prose: let the phone's keyboard help. (Commands are easier on the coding keyboard.)
+        autoCapitalize={secure ? 'none' : 'sentences'}
+        autoCorrect={!secure}
+        spellCheck={!secure}
+        // Grows for long prompts; Enter still sends. (react-native-web only sends from a
+        // multiline field by blurring it, which would close the keyboard each time.)
+        multiline={!secure && Platform.OS !== 'web'}
         returnKeyType="send"
         style={[
           styles.input,
@@ -82,7 +87,9 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     minHeight: 44,
+    maxHeight: 132,
     paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
     borderRadius: Spacing.two,
     borderWidth: 1,
     fontFamily: Fonts.mono,

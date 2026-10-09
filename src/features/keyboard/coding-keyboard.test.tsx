@@ -200,10 +200,26 @@ describe('CodingKeyboard', () => {
     expect(sent).toEqual([{ key: 'left' }, { key: 'left' }, { key: 'left' }]);
   });
 
-  it('goes back to the system keyboard', async () => {
+  it('has Home and End beside space, and Delete a flick right on backspace', async () => {
+    const { surface, sent } = await renderKeyboard('keyboard');
+
+    await swipe(surface, rowsFor('letters'), 'Home');
+    await swipe(surface, rowsFor('letters'), 'End');
+    await swipe(surface, rowsFor('letters'), 'Backspace', { dx: 30 });
+    await swipe(surface, rowsFor('letters'), 'Backspace');
+
+    expect(sent).toEqual([
+      { key: 'home' },
+      { key: 'end' },
+      { key: 'delete' },
+      { key: 'backspace' },
+    ]);
+  });
+
+  it('switches to the phone keyboard', async () => {
     const { surface, switches } = await renderKeyboard('keyboard');
 
-    await swipe(surface, rowsFor('letters'), 'System keyboard');
+    await swipe(surface, rowsFor('letters'), 'Phone keyboard');
 
     expect(switches).toEqual(['system']);
   });

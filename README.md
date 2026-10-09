@@ -18,12 +18,12 @@ web build), started from the RapidAppToolkit template.
 - **Agent alerts.** When an agent rings the bell or sends a terminal notification (OSC 9, 777
   or 99), the app flags the session, shows a banner on other screens, and posts a phone
   notification while the app is in the background.
-- **A coding keyboard.** A bar above the phone's keyboard with Esc, Tab/Shift+Tab, sticky
-  Ctrl and Alt, an arrows joystick and the symbols phones bury; or a full in-app keyboard that
-  replaces the phone's (no autocorrect, every key reaches the terminal). See
-  [docs/keyboard.md](docs/keyboard.md).
-- **Composer**: a native text field for typing or dictating a prompt, sent as a bracketed
-  paste then Enter.
+- **A coding keyboard** in place of the phone's: no autocorrect, every key reaches the
+  terminal. Esc, Tab/Shift+Tab, sticky Ctrl and Alt, an arrows joystick, Home/End and the
+  symbols phones bury, all fixed in place. Tap the line you're editing to move the cursor
+  there. See [docs/keyboard.md](docs/keyboard.md).
+- **Writing with the phone's keyboard**: the globe key opens a text field for prompts, with
+  autocorrect, swiping and dictation, sent as a paste then Enter, and the coding keys above.
 - [xterm.js](https://xtermjs.org) rendering (colours, full-screen apps, resize, Unicode,
   links), light and dark mode, adjustable font size.
 
@@ -133,7 +133,7 @@ without a host at `/keyboard-preview`.
  phone                                                          computer
 ┌───────────────────────────────────────────────────┐          ┌───────────────┐
 │ session/[id]: TerminalView ('use dom' xterm.js),  │          │ sshd          │
-│   keyboard (bar or coding), composer              │          │  └ tmux       │
+│   coding keyboard, or key bar + text field        │          │  └ tmux       │
 │      ▲ write, batched per frame    │ input        │          │    └ claude,  │
 │ SessionManager: every open session, each with a   │   SSH    │      shells   │
 │   headless xterm (screen, alerts) and a transport │◄────────►│               │
@@ -186,8 +186,6 @@ Thumb-Key, Unexpected Keyboard and Termux's extra keys.
   sockets, the soft keyboard and IMEs, Keychain/Keystore, notifications, haptics) needs a
   device run: `.maestro/terminal.yaml` covers the basics on EAS
   (`npx eas-cli@latest workflow:run .eas/workflows/e2e.yml`).
-- Typing straight into the terminal with the phone's keyboard may wait for Enter on some
-  Android keyboards (xterm.js issue #5108); use the coding keyboard or the composer there.
 - SSH agent forwarding, X11 and SFTP aren't supported.
 
 ## Commands

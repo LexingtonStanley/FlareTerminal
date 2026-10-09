@@ -1,7 +1,7 @@
 import { openBrowserAsync } from 'expo-web-browser';
 import { Link, Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useHeaderHeight } from 'expo-router/react-navigation';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Keyboard,
@@ -70,8 +70,9 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
   const view = useSessionView(viewRef, session.id);
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { keyboard, setKeyboard } = usePreferences();
-  const coding = keyboard === 'coding';
+  // The coding keyboard, or "writing": a text field with the phone's keyboard, for prose
+  // (autocorrect, swiping, dictation) and the key bar for the keys it lacks.
+  const [writing, setWriting] = useState(false);
   const keys = {
     modifiers: view.modifiers,
     onModifiersChange: view.setModifiers,
@@ -86,7 +87,7 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
   }
 
   return (
-    <Screen edges={coding ? ['left', 'right'] : ['left', 'right', 'bottom']} style={styles.screen}>
+    <Screen edges={writing ? ['left', 'right', 'bottom'] : ['left', 'right']} style={styles.screen}>
       <Stack.Screen
         options={{
           headerTitle: () => <SessionTitle name={session.name} title={session.title} />,
@@ -118,7 +119,6 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
             fontSize={fontSize}
             {...view.viewCallbacks}
             onOpenLink={openLink}
-            systemKeyboard={!coding}
             dom={{
               style: styles.flex,
               scrollEnabled: false,
@@ -136,24 +136,14 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
             </ThemedView>
           ) : null}
         </View>
-        {coding ? (
-          // The tray colour runs under the home indicator.
-          <View style={{ paddingBottom: insets.bottom, backgroundColor: theme.keyboard }}>
-            <CodingKeyboard
-              {...keys}
-              onUseSystemKeyboard={() => {
-                setKeyboard('system');
-                viewRef.current?.focus();
-              }}
-            />
-          </View>
-        ) : (
+        {writing ? (
           <>
             <AccessoryBar
               {...keys}
               onOpenKeyboard={() => {
                 Keyboard.dismiss();
-                setKeyboard('coding');
+                setWriting(false);
+                viewRef.current?.focus();
               }}
             />
             <Composer
@@ -163,6 +153,11 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
               onModifiedKey={view.type}
             />
           </>
+        ) : (
+          // The tray colour runs under the home indicator.
+          <View style={{ paddingBottom: insets.bottom, backgroundColor: theme.keyboard }}>
+            <CodingKeyboard {...keys} onUseSystemKeyboard={() => setWriting(true)} />
+          </View>
         )}
       </KeyboardAvoidingView>
     </Screen>

@@ -12,6 +12,7 @@ import { useEffect, useEffectEvent, useRef, type DependencyList, type Ref } from
 
 import type { TerminalTheme } from '@/constants/theme';
 
+import { arrowsForTap } from './cursor-tap';
 import { sequenceForKey, type SpecialKey } from './keys';
 import type { TerminalSize } from './transport';
 
@@ -21,6 +22,10 @@ import type { TerminalSize } from './transport';
  * prop must be JSON-serializable and function props become async calls back to
  * the app. Output goes in through the imperative handle (`write`), input comes out
  * through `onInput`. The view knows nothing about connections.
+ *
+ * It never asks for the phone's keyboard (the app has its own, and a text field for
+ * the phone's): it keeps focus for the cursor and hardware keyboards, and a tap on the
+ * line being edited moves the cursor there.
  */
 
 export type TerminalViewHandle = {
@@ -48,11 +53,6 @@ export type TerminalViewProps = {
   onResize: (size: TerminalSize) => void;
   onTitleChange: (title: string) => void;
   onOpenLink: (url: string) => void;
-  /**
-   * False while the in-app coding keyboard replaces the phone's: the terminal keeps
-   * focus (cursor, hardware keyboards) but asks for no on-screen keyboard. Default true.
-   */
-  systemKeyboard?: boolean;
   dom?: DOMProps;
 };
 
@@ -84,7 +84,6 @@ export default function TerminalView({
   onResize,
   onTitleChange,
   onOpenLink,
-  systemKeyboard = true,
 }: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -145,6 +144,10 @@ export default function TerminalView({
     terminal.loadAddon(new WebLinksAddon((_event, url) => openLink(url)));
     terminal.open(container);
     fit.fit();
+    const textarea = terminal.textarea;
+    textarea?.setAttribute('inputmode', 'none');
+    textarea?.focus();
+    const stopTaps = moveCursorOnTap(terminal);
 
     const subscriptions = [
       terminal.onData((data) => input(data)),
@@ -160,6 +163,7 @@ export default function TerminalView({
     ready({ cols: terminal.cols, rows: terminal.rows });
 
     return () => {
+      stopTaps();
       observer.disconnect();
       subscriptions.forEach((subscription) => subscription.dispose());
       terminal.dispose();
@@ -176,22 +180,77 @@ export default function TerminalView({
     fitRef.current?.fit();
   }, [theme, fontSize]);
 
-  useEffect(() => {
-    const textarea = terminalRef.current?.textarea;
-    if (!textarea) return;
-    if (systemKeyboard) textarea.removeAttribute('inputmode');
-    else textarea.setAttribute('inputmode', 'none');
-    // A focused field keeps its keyboard state until it is focused again. With the in-app
-    // keyboard, focus can't open the phone's, and gives a live cursor and a hardware
-    // keyboard to type with.
-    const focused = document.activeElement === textarea;
-    if (focused) textarea.blur();
-    if (focused || !systemKeyboard) textarea.focus();
-  }, [systemKeyboard]);
-
   return (
     <div style={{ position: 'absolute', inset: 0, padding: 6, background: theme.background }}>
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
     </div>
   );
+}
+
+// A tap, not a scroll or a selection: the pointer barely moved and came up soon.
+const TAP_SLOP_PX = 10;
+const TAP_MAX_MS = 400;
+
+/**
+ * Turns a tap on the line being edited into arrow keys (see cursor-tap.ts). Pointer
+ * events rather than clicks, because touch scrolling can suppress the click. Programs
+ * that read the mouse themselves (tmux with mouse on, vim with mouse=a), and full-screen
+ * programs, get the tap as xterm.js reports it instead.
+ */
+function moveCursorOnTap(terminal: Terminal): () => void {
+  const element = terminal.element;
+  if (!element) return () => {};
+  let down: { id: number; x: number; y: number; at: number } | null = null;
+
+  const onDown = (event: PointerEvent) => {
+    down = { id: event.pointerId, x: event.clientX, y: event.clientY, at: event.timeStamp };
+  };
+  const onUp = (event: PointerEvent) => {
+    const start = down;
+    down = null;
+    if (!start || start.id !== event.pointerId || event.button > 0) return;
+    const moved = Math.hypot(event.clientX - start.x, event.clientY - start.y);
+    if (moved > TAP_SLOP_PX || event.timeStamp - start.at > TAP_MAX_MS) return;
+    const buffer = terminal.buffer.active;
+    if (buffer.type !== 'normal' || terminal.modes.mouseTrackingMode !== 'none') return;
+    if (terminal.hasSelection()) return;
+    const screen = element.querySelector('.xterm-screen');
+    if (!screen) return;
+    const rect = screen.getBoundingClientRect();
+    const col = Math.floor(((event.clientX - rect.left) / rect.width) * terminal.cols);
+    const row = Math.floor(((event.clientY - rect.top) / rect.height) * terminal.rows);
+    if (col < 0 || row < 0 || col >= terminal.cols || row >= terminal.rows) return;
+
+    const presses = arrowsForTap(
+      {
+        cols: terminal.cols,
+        length: buffer.length,
+        cursorRow: buffer.baseY + buffer.cursorY,
+        cursorCol: buffer.cursorX,
+        isWrapped: (r) => buffer.getLine(r)?.isWrapped ?? false,
+        contentEnd: (r) => {
+          const line = buffer.getLine(r);
+          for (let c = terminal.cols - 1; line && c >= 0; c--) {
+            const cell = line.getCell(c);
+            if (cell && cell.getChars().trim()) return c + cell.getWidth();
+          }
+          return 0;
+        },
+        cellWidth: (r, c) => buffer.getLine(r)?.getCell(c)?.getWidth() ?? 1,
+      },
+      buffer.viewportY + row,
+      col
+    );
+    if (!presses) return;
+    const applicationCursor = terminal.modes.applicationCursorKeysMode;
+    const arrow = sequenceForKey(presses > 0 ? 'right' : 'left', { applicationCursor });
+    terminal.input(arrow.repeat(Math.abs(presses)));
+  };
+
+  element.addEventListener('pointerdown', onDown);
+  element.addEventListener('pointerup', onUp);
+  return () => {
+    element.removeEventListener('pointerdown', onDown);
+    element.removeEventListener('pointerup', onUp);
+  };
 }

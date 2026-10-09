@@ -87,6 +87,10 @@ function labelStyle(def: KeyDef, label: string, compact: boolean): TextStyle {
   if (def.tone === 'char') return { fontFamily: Fonts.sans, fontSize: 13, fontWeight: 500 };
   if (/^F\d+$/.test(label)) return { fontFamily: Fonts.sans, fontSize: 12, fontWeight: 600 };
   if ([...label].length === 1) return { fontFamily: Fonts.sans, fontSize: 19, fontWeight: 500 };
+  // "home" on a one-unit key.
+  if (def.units <= 1 && [...label].length > 3) {
+    return { fontFamily: Fonts.sans, fontSize: compact ? 11 : 12, fontWeight: 600 };
+  }
   return { fontFamily: Fonts.sans, fontSize: compact ? 14 : 15, fontWeight: 500 };
 }
 

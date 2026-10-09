@@ -4,7 +4,8 @@ import type { Page, WebSocketRoute } from '@playwright/test';
  * A ttyd stand-in for the web E2E tests, wired in with page.routeWebSocket so nothing
  * listens on the network. It speaks ttyd's framing (see src/features/terminal/ttyd.ts)
  * and runs a tiny line-editing "shell": it echoes keystrokes, understands `echo`,
- * Ctrl+C and backspace, and turns on bracketed paste like bash does.
+ * Ctrl+C, backspace and the Left and Right arrows (typing goes in at the cursor, like
+ * readline), ignores other escape sequences, and turns on bracketed paste like bash does.
  */
 
 export const FAKE_TTYD_ADDRESS = 'ttyd.test:7681';
@@ -14,6 +15,8 @@ export const FAKE_TITLE = 'fake-shell (ttyd.test)';
 const PROMPT = '\x1b[?2004h$ ';
 const PASTE_START = '\x1b[200~';
 const PASTE_END = '\x1b[201~';
+/** An escape sequence (arrows in either cursor mode, CSI sequences) or one character. */
+const TOKEN = /\x1b\[[0-9;]*[@-~]|\x1bO[@-~]|\x1b|[\s\S]/gu;
 
 type Handshake = { AuthToken: string; columns: number; rows: number };
 
@@ -47,6 +50,7 @@ function run(command: string) {
 
 function startShell(ws: WebSocketRoute, handshake: Handshake): ShellSession {
   let line = '';
+  let cursor = 0;
   const session: ShellSession = {
     handshake,
     inputs: [],
@@ -60,19 +64,33 @@ function startShell(ws: WebSocketRoute, handshake: Handshake): ShellSession {
     session.inputs.push(data);
     const text = data.split(PASTE_START).join('').split(PASTE_END).join('');
     let echo = '';
-    for (const char of text) {
-      if (char === '\r') {
+    for (const token of text.match(TOKEN) ?? []) {
+      const rest = line.slice(cursor);
+      if (token === '\r') {
         echo += '\r\n' + run(line) + PROMPT;
         line = '';
-      } else if (char === '\x03') {
+        cursor = 0;
+      } else if (token === '\x03') {
         echo += '^C\r\n' + PROMPT;
         line = '';
-      } else if (char === '\x7f') {
-        if (line) echo += '\b \b';
-        line = line.slice(0, -1);
-      } else if (char >= ' ') {
-        line += char;
-        echo += char;
+        cursor = 0;
+      } else if (token === '\x7f') {
+        if (cursor === 0) continue;
+        line = line.slice(0, cursor - 1) + rest;
+        cursor--;
+        echo += '\b' + rest + ' ' + '\b'.repeat(rest.length + 1);
+      } else if (token === '\x1b[D' || token === '\x1bOD') {
+        if (cursor === 0) continue;
+        cursor--;
+        echo += '\b';
+      } else if (token === '\x1b[C' || token === '\x1bOC') {
+        if (cursor === line.length) continue;
+        echo += line[cursor];
+        cursor++;
+      } else if (token >= ' ' && !token.startsWith('\x1b')) {
+        line = line.slice(0, cursor) + token + rest;
+        cursor++;
+        echo += token + rest + '\b'.repeat(rest.length);
       }
     }
     if (echo) session.output(echo);

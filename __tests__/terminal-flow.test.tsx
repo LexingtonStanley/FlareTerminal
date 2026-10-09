@@ -6,7 +6,7 @@ import type { Connection } from '@/features/connections/connections';
 import { posted } from '@/test-utils/fake-notify';
 import { FAKE_SIZE } from '@/test-utils/fake-terminal-view';
 import { transports } from '@/test-utils/fake-transport';
-import { clearMemoryStorage, readJson, secrets, writeJson } from '@/test-utils/memory-storage';
+import { clearMemoryStorage, secrets, writeJson } from '@/test-utils/memory-storage';
 import { renderApp } from '@/test-utils/render-app';
 
 jest.mock('@/lib/storage', () => jest.requireActual('@/test-utils/memory-storage'));
@@ -168,6 +168,7 @@ describe('terminal', () => {
   it('sends the composer text as a paste, then Enter', async () => {
     const { transport } = await openDevbox();
     const user = userEvent.setup();
+    await keyAction('Phone keyboard');
 
     await user.type(screen.getByLabelText('Command'), 'fix the failing test');
     await user.press(screen.getByRole('button', { name: 'Send' }));
@@ -179,6 +180,7 @@ describe('terminal', () => {
   it('applies a sticky Ctrl to the next key, then releases it', async () => {
     const { transport } = await openDevbox();
     const user = userEvent.setup();
+    await keyAction('Phone keyboard');
     const ctrl = screen.getByRole('switch', { name: 'Control' });
 
     await keyAction('Control', 'activate', 'switch');
@@ -202,23 +204,25 @@ describe('terminal', () => {
     expect(transport.written).toEqual(['\x1b', '\x1b[Z', '\x1b[A', '~', '\x03']);
   });
 
-  it('swaps to the coding keyboard and remembers the choice', async () => {
+  it('opens on the coding keyboard, and writes prose with the phone’s', async () => {
     const { transport } = await openDevbox();
 
-    await keyAction('Coding keyboard');
-    expect(await screen.findByLabelText('Coding keyboard')).toBeOnTheScreen();
-    // The composer belongs to the phone's keyboard.
+    expect(screen.getByLabelText('Coding keyboard')).toBeOnTheScreen();
     expect(screen.queryByLabelText('Command')).not.toBeOnTheScreen();
-    expect(readJson('flare.preferences.v1')).toMatchObject({ keyboard: 'coding' });
-
     await keyAction('l');
     await keyAction('s');
     await keyAction('Enter');
     expect(transport.written).toEqual(['l', 's', '\r']);
 
-    await keyAction('System keyboard');
-    expect(await screen.findByLabelText('Command')).toBeOnTheScreen();
-    expect(readJson('flare.preferences.v1')).toMatchObject({ keyboard: 'system' });
+    // The phone's keyboard comes with a text field, focused, and the key bar.
+    await keyAction('Phone keyboard');
+    expect(await screen.findByLabelText('Command')).toHaveProp('autoFocus', true);
+    expect(screen.getByLabelText('Terminal keys')).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: 'Phone keyboard' })).not.toBeOnTheScreen();
+
+    await keyAction('Coding keyboard');
+    expect(await screen.findByLabelText('Coding keyboard')).toBeOnTheScreen();
+    expect(screen.queryByLabelText('Command')).not.toBeOnTheScreen();
   });
 
   it('offers to reconnect when the session ends', async () => {
