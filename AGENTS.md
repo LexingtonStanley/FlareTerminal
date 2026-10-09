@@ -175,6 +175,7 @@ __tests__/               Router-level Jest tests (render the real src/app tree)
 e2e/web/                 Playwright specs; fake-ttyd.ts plays a ttyd host via page.routeWebSocket
 .maestro/                Device flows, run on EAS
 .eas/workflows/          EAS cloud workflows (device E2E, production deploy)
+patches/                 Fixes to libraries' native code (patch-package, applied by postinstall)
 app.json / app.config.ts Identity / build variants (APP_VARIANT = development | preview | production)
 ```
 
@@ -183,6 +184,10 @@ app.json / app.config.ts Identity / build variants (APP_VARIANT = development | 
 - **Native code**: `ios/` and `android/` are generated and git-ignored. Never create or edit
   them. Configure native behaviour with `app.json` and config plugins. A new native library
   needs a new development build (`eas build --profile development`) before it runs on a device.
+  A bug in a library's native code is fixed in `patches/` (`npx patch-package <name>` after
+  editing it in `node_modules`), with a comment in the code saying why; check whether a new
+  version of the library still needs it. react-native-tcp-socket's patch stops Android
+  keeping two idle threads for every socket that ever opened.
 - **Screens**: wrap content in `<Screen>`; use `ThemedText`, `ThemedView` and `useTheme()`
   colors, never hard-coded colors. Every screen must work in light and dark mode and at phone
   width on web.
