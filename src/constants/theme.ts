@@ -20,6 +20,13 @@ export const Colors = {
     success: '#1A7F37',
     border: '#D9D9DE',
     shadow: '#000000',
+    // The in-app keyboard: character keys on a tray, darker function keys, and a tint
+    // for a one-shot modifier (locked ones use primary).
+    keyboard: '#D3D6DC',
+    key: '#FFFFFF',
+    keyFunction: '#AFB4BE',
+    keyShadow: '#898C93',
+    keyArmed: '#CFE5FC',
   },
   dark: {
     text: '#ffffff',
@@ -33,6 +40,11 @@ export const Colors = {
     success: '#3FB950',
     border: '#3A3B40',
     shadow: '#000000',
+    keyboard: '#151618',
+    key: '#46484E',
+    keyFunction: '#2A2C30',
+    keyShadow: '#000000',
+    keyArmed: '#173A60',
   },
 } as const;
 

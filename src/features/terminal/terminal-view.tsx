@@ -48,6 +48,11 @@ export type TerminalViewProps = {
   onResize: (size: TerminalSize) => void;
   onTitleChange: (title: string) => void;
   onOpenLink: (url: string) => void;
+  /**
+   * False while the in-app coding keyboard replaces the phone's: the terminal keeps
+   * focus (cursor, hardware keyboards) but asks for no on-screen keyboard. Default true.
+   */
+  systemKeyboard?: boolean;
   dom?: DOMProps;
 };
 
@@ -79,6 +84,7 @@ export default function TerminalView({
   onResize,
   onTitleChange,
   onOpenLink,
+  systemKeyboard = true,
 }: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -169,6 +175,19 @@ export default function TerminalView({
     terminal.options.fontSize = fontSize;
     fitRef.current?.fit();
   }, [theme, fontSize]);
+
+  useEffect(() => {
+    const textarea = terminalRef.current?.textarea;
+    if (!textarea) return;
+    if (systemKeyboard) textarea.removeAttribute('inputmode');
+    else textarea.setAttribute('inputmode', 'none');
+    // A focused field keeps its keyboard state until it is focused again. With the in-app
+    // keyboard, focus can't open the phone's, and gives a live cursor and a hardware
+    // keyboard to type with.
+    const focused = document.activeElement === textarea;
+    if (focused) textarea.blur();
+    if (focused || !systemKeyboard) textarea.focus();
+  }, [systemKeyboard]);
 
   return (
     <div style={{ position: 'absolute', inset: 0, padding: 6, background: theme.background }}>

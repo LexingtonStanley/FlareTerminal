@@ -96,9 +96,10 @@ test('types straight into the terminal and uses the key bar', async ({ page }) =
   await page.keyboard.type('ls');
   await expect(screen).toContainText('$ ls');
 
-  // Key-bar buttons must not take focus away from the terminal (that closes a
-  // phone's keyboard).
-  await page.getByRole('button', { name: 'Up arrow' }).click();
+  // Keys must not take focus away from the terminal (that closes a phone's keyboard).
+  // The arrows key sends the side that is tapped.
+  const arrows = (await page.getByRole('button', { name: 'Arrow keys' }).boundingBox())!;
+  await page.mouse.click(arrows.x + arrows.width / 2, arrows.y + 6);
   await page.getByRole('button', { name: 'Escape' }).click();
   await expect(page.locator('.xterm-helper-textarea')).toBeFocused();
 
@@ -113,6 +114,27 @@ test('types straight into the terminal and uses the key bar', async ({ page }) =
   await page.getByRole('button', { name: 'Pipe' }).click();
 
   expect(session.inputs).toEqual(['l', 's', '\x1b[A', '\x1b', '\x03', '|']);
+});
+
+test('swaps the phone’s keyboard for the coding keyboard', async ({ page }) => {
+  const { session } = await openTerminal(page);
+  const textarea = page.locator('.xterm-helper-textarea');
+
+  await page.getByRole('button', { name: 'Coding keyboard' }).click();
+  await expect(page.getByLabel('Coding keyboard')).toBeVisible();
+  // The terminal keeps focus but no longer opens the phone's keyboard.
+  await expect(textarea).toHaveAttribute('inputmode', 'none');
+  await expect(page.getByLabel('Command')).toBeHidden();
+
+  for (const name of ['g', 'i', 't', 'Space', 's', 'Enter']) {
+    await page.getByRole('button', { name, exact: true }).click();
+  }
+  await expect(textarea).toBeFocused();
+  expect(session.inputs).toEqual(['g', 'i', 't', ' ', 's', '\r']);
+
+  await page.getByRole('button', { name: 'System keyboard' }).click();
+  await expect(page.getByLabel('Command')).toBeVisible();
+  await expect(textarea).not.toHaveAttribute('inputmode', 'none');
 });
 
 test('reports a finished session and reconnects', async ({ page }) => {

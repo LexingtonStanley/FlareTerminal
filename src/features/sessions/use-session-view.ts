@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 
 import {
-  applyModifiers,
-  NO_MODIFIERS,
-  type Modifiers,
-  type SpecialKey,
-} from '@/features/terminal/keys';
+  afterInput,
+  MODIFIERS_OFF,
+  toModifiers,
+  type ModifierState,
+} from '@/features/keyboard/modifiers';
+import { applyModifiers, type SpecialKey } from '@/features/terminal/keys';
 import type { TerminalViewHandle, TerminalViewProps } from '@/features/terminal/terminal-view';
 import type { TerminalSize } from '@/features/terminal/transport';
 
@@ -17,9 +18,9 @@ type ViewCallbacks = Pick<TerminalViewProps, 'onReady' | 'onInput' | 'onResize' 
 export type SessionView = {
   /** Spread onto the TerminalView whose ref was passed in. */
   viewCallbacks: ViewCallbacks;
-  /** Sticky key-bar modifiers: armed by a tap, released by the next input. */
-  modifiers: Modifiers;
-  toggleModifier(name: keyof Modifiers): void;
+  /** Sticky Ctrl and Alt from the keyboards: one-shot ones release after the next input. */
+  modifiers: ModifierState;
+  setModifiers(next: ModifierState): void;
   /** A special key from the key bar, encoded by the view for its cursor mode. */
   pressKey(key: SpecialKey): void;
   /** Characters typed outside the terminal (key bar symbols, Ctrl+letter from the composer). */
@@ -39,9 +40,9 @@ export function useSessionView(
 ): SessionView {
   const manager = useSessionManager();
   const sizeRef = useRef<TerminalSize | null>(null);
-  const modifiersRef = useRef<Modifiers>(NO_MODIFIERS);
+  const modifiersRef = useRef<ModifierState>(MODIFIERS_OFF);
   const [ready, setReady] = useState(false);
-  const [modifiers, setModifiersState] = useState<Modifiers>(NO_MODIFIERS);
+  const [modifiers, setModifiersState] = useState<ModifierState>(MODIFIERS_OFF);
 
   useEffect(() => {
     manager.setFocused(sessionId);
@@ -75,15 +76,15 @@ export function useSessionView(
     };
   }, [manager, sessionId, ready, viewRef]);
 
-  function setModifiers(next: Modifiers) {
+  function setModifiers(next: ModifierState) {
     modifiersRef.current = next;
     setModifiersState(next);
   }
 
   function input(data: string) {
     const active = modifiersRef.current;
-    if (active.ctrl || active.alt) setModifiers(NO_MODIFIERS);
-    manager.write(sessionId, applyModifiers(data, active));
+    setModifiers(afterInput(active));
+    manager.write(sessionId, applyModifiers(data, toModifiers(active)));
   }
 
   return {
@@ -101,15 +102,15 @@ export function useSessionView(
       onTitleChange() {},
     },
     modifiers,
-    toggleModifier(name) {
-      setModifiers({ ...modifiersRef.current, [name]: !modifiersRef.current[name] });
-    },
+    setModifiers,
     pressKey(key) {
       viewRef.current?.pressKey(key);
     },
     type: input,
     submit(text) {
-      setModifiers(NO_MODIFIERS);
+      // Sending text isn't a key combination: release even locked modifiers, or a
+      // locked Alt would prefix the paste with Esc.
+      setModifiers(MODIFIERS_OFF);
       if (text) viewRef.current?.paste(text);
       viewRef.current?.pressKey('enter');
     },

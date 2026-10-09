@@ -1,4 +1,4 @@
-import { act, userEvent } from '@testing-library/react-native';
+import { act, fireEvent, userEvent } from '@testing-library/react-native';
 import { router } from 'expo-router';
 import { screen } from 'expo-router/testing-library';
 
@@ -6,7 +6,7 @@ import type { Connection } from '@/features/connections/connections';
 import { posted } from '@/test-utils/fake-notify';
 import { FAKE_SIZE } from '@/test-utils/fake-terminal-view';
 import { transports } from '@/test-utils/fake-transport';
-import { clearMemoryStorage, secrets, writeJson } from '@/test-utils/memory-storage';
+import { clearMemoryStorage, readJson, secrets, writeJson } from '@/test-utils/memory-storage';
 import { renderApp } from '@/test-utils/render-app';
 
 jest.mock('@/lib/storage', () => jest.requireActual('@/test-utils/memory-storage'));
@@ -31,6 +31,17 @@ const DEVBOX: Connection = {
 /** Starts the app with saved connections, as if from a previous launch. */
 function saved(...connections: unknown[]) {
   writeJson('flare.connections.v1', connections);
+}
+
+/** The in-app keys have no onPress (one surface tracks every finger); act on them by name. */
+async function keyAction(
+  name: string,
+  actionName = 'activate',
+  role: 'button' | 'switch' = 'button'
+) {
+  await fireEvent(screen.getByRole(role, { name }), 'accessibilityAction', {
+    nativeEvent: { actionName },
+  });
 }
 
 async function openDevbox() {
@@ -170,7 +181,7 @@ describe('terminal', () => {
     const user = userEvent.setup();
     const ctrl = screen.getByRole('switch', { name: 'Control' });
 
-    await user.press(ctrl);
+    await keyAction('Control', 'activate', 'switch');
     expect(ctrl).toBeChecked();
     await user.type(screen.getByLabelText('Command'), 'c');
 
@@ -179,16 +190,35 @@ describe('terminal', () => {
     expect(screen.getByLabelText('Command')).toHaveDisplayValue('');
   });
 
-  it('sends key-bar keys', async () => {
+  it('sends the bar’s keys, flicks included', async () => {
     const { transport } = await openDevbox();
-    const user = userEvent.setup();
 
-    await user.press(screen.getByRole('button', { name: 'Escape' }));
-    await user.press(screen.getByRole('button', { name: 'Shift Tab' }));
-    await user.press(screen.getByRole('button', { name: 'Up arrow' }));
-    await user.press(screen.getByRole('button', { name: 'Tilde' }));
+    await keyAction('Escape');
+    await keyAction('Tab', 'up');
+    await keyAction('Arrow keys', 'up');
+    await keyAction('Pipe', 'up');
+    await keyAction('Control', 'up', 'switch');
 
-    expect(transport.written).toEqual(['\x1b', '\x1b[Z', '\x1b[A', '~']);
+    expect(transport.written).toEqual(['\x1b', '\x1b[Z', '\x1b[A', '~', '\x03']);
+  });
+
+  it('swaps to the coding keyboard and remembers the choice', async () => {
+    const { transport } = await openDevbox();
+
+    await keyAction('Coding keyboard');
+    expect(await screen.findByLabelText('Coding keyboard')).toBeOnTheScreen();
+    // The composer belongs to the phone's keyboard.
+    expect(screen.queryByLabelText('Command')).not.toBeOnTheScreen();
+    expect(readJson('flare.preferences.v1')).toMatchObject({ keyboard: 'coding' });
+
+    await keyAction('l');
+    await keyAction('s');
+    await keyAction('Enter');
+    expect(transport.written).toEqual(['l', 's', '\r']);
+
+    await keyAction('System keyboard');
+    expect(await screen.findByLabelText('Command')).toBeOnTheScreen();
+    expect(readJson('flare.preferences.v1')).toMatchObject({ keyboard: 'system' });
   });
 
   it('offers to reconnect when the session ends', async () => {

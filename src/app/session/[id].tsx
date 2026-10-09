@@ -2,7 +2,9 @@ import { openBrowserAsync } from 'expo-web-browser';
 import { Link, Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useHeaderHeight } from 'expo-router/react-navigation';
 import { useRef } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -22,10 +24,13 @@ import { SessionStrip } from '@/features/sessions/session-strip';
 import { useSessionManager, useSessions } from '@/features/sessions/sessions-provider';
 import { useSessionView } from '@/features/sessions/use-session-view';
 import { usePreferences } from '@/features/settings/preferences-provider';
+import { AccessoryBar } from '@/features/keyboard/accessory-bar';
+import { CodingKeyboard } from '@/features/keyboard/coding-keyboard';
+import { toModifiers } from '@/features/keyboard/modifiers';
 import { Composer } from '@/features/terminal/composer';
-import { KeyBar } from '@/features/terminal/key-bar';
 import TerminalView, { type TerminalViewHandle } from '@/features/terminal/terminal-view';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useTheme } from '@/hooks/use-theme';
 
 export default function SessionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -63,6 +68,16 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
   const router = useRouter();
   const viewRef = useRef<TerminalViewHandle>(null);
   const view = useSessionView(viewRef, session.id);
+  const theme = useTheme();
+  const insets = useSafeAreaInsets();
+  const { keyboard, setKeyboard } = usePreferences();
+  const coding = keyboard === 'coding';
+  const keys = {
+    modifiers: view.modifiers,
+    onModifiersChange: view.setModifiers,
+    onKey: view.pressKey,
+    onText: view.type,
+  };
 
   function closeSession() {
     manager.close(session.id);
@@ -71,7 +86,7 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
   }
 
   return (
-    <Screen edges={['left', 'right', 'bottom']} style={styles.screen}>
+    <Screen edges={coding ? ['left', 'right'] : ['left', 'right', 'bottom']} style={styles.screen}>
       <Stack.Screen
         options={{
           headerTitle: () => <SessionTitle name={session.name} title={session.title} />,
@@ -103,6 +118,7 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
             fontSize={fontSize}
             {...view.viewCallbacks}
             onOpenLink={openLink}
+            systemKeyboard={!coding}
             dom={{
               style: styles.flex,
               scrollEnabled: false,
@@ -120,18 +136,34 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
             </ThemedView>
           ) : null}
         </View>
-        <KeyBar
-          modifiers={view.modifiers}
-          onToggleModifier={view.toggleModifier}
-          onKey={view.pressKey}
-          onText={view.type}
-        />
-        <Composer
-          modifiers={view.modifiers}
-          secure={session.inputMode === 'secret'}
-          onSubmit={view.submit}
-          onModifiedKey={view.type}
-        />
+        {coding ? (
+          // The tray colour runs under the home indicator.
+          <View style={{ paddingBottom: insets.bottom, backgroundColor: theme.keyboard }}>
+            <CodingKeyboard
+              {...keys}
+              onUseSystemKeyboard={() => {
+                setKeyboard('system');
+                viewRef.current?.focus();
+              }}
+            />
+          </View>
+        ) : (
+          <>
+            <AccessoryBar
+              {...keys}
+              onOpenKeyboard={() => {
+                Keyboard.dismiss();
+                setKeyboard('coding');
+              }}
+            />
+            <Composer
+              modifiers={toModifiers(view.modifiers)}
+              secure={session.inputMode === 'secret'}
+              onSubmit={view.submit}
+              onModifiedKey={view.type}
+            />
+          </>
+        )}
       </KeyboardAvoidingView>
     </Screen>
   );
