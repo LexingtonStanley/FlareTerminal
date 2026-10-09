@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { Icon } from '@/components/ui/icon';
-import { Radius, sans, Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { Spacing } from '@/constants/theme';
+import { shadows, useShape, useTheme, useType } from '@/hooks/use-theme';
 
 import type { Modifiers } from './keys';
 
@@ -24,6 +24,8 @@ type ComposerProps = {
  */
 export function Composer({ modifiers, secure = false, onSubmit, onModifiedKey }: ComposerProps) {
   const theme = useTheme();
+  const shape = useShape();
+  const { sans } = useType();
   const [draft, setDraft] = useState('');
   const armed = modifiers.ctrl || modifiers.alt;
 
@@ -68,7 +70,11 @@ export function Composer({ modifiers, secure = false, onSubmit, onModifiedKey }:
         returnKeyType="send"
         style={[
           styles.input,
+          // Prose, so the interface face (docs/design.md keeps mono for what computers read).
+          sans(400),
           {
+            borderRadius: shape.radius.medium,
+            borderWidth: Math.max(1, shape.borderWidth),
             color: theme.text,
             backgroundColor: theme.background,
             borderColor: armed ? theme.primary : theme.border,
@@ -81,7 +87,13 @@ export function Composer({ modifiers, secure = false, onSubmit, onModifiedKey }:
         onPress={submit}
         style={({ pressed }) => [
           styles.send,
-          { backgroundColor: theme.primary },
+          {
+            backgroundColor: theme.primary,
+            borderColor: theme.primaryBorder,
+            borderRadius: shape.radius.medium,
+            borderWidth: shape.borderWidth > 1 ? shape.borderWidth : 0,
+            boxShadow: shadows(shape.glowPrimary),
+          },
           pressed && styles.pressed,
         ]}>
         <Icon name="send" size={20} color="onPrimary" />
@@ -100,22 +112,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   input: {
-    // Prose, so the interface face (docs/design.md keeps mono for what computers read).
-    ...sans(400),
     flex: 1,
     minHeight: 44,
     maxHeight: 132,
     paddingHorizontal: Spacing.three - 2,
     paddingVertical: Spacing.two,
-    borderRadius: Radius.medium,
-    borderWidth: 1,
     fontSize: 15,
     outlineWidth: 0,
   },
   send: {
     width: 44,
     height: 44,
-    borderRadius: Radius.medium,
     alignItems: 'center',
     justifyContent: 'center',
   },

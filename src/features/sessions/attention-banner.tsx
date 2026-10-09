@@ -5,11 +5,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { Icon } from '@/components/ui/icon';
-import { Radius, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
 import { useNotificationOpens } from '@/features/notifications/notify';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useProtection } from '@/features/vault/use-protection';
-import { useTheme } from '@/hooks/use-theme';
+import { shadows, useShape, useTheme } from '@/hooks/use-theme';
 
 import { useSessions } from './sessions-provider';
 
@@ -21,7 +20,7 @@ export function AttentionBanner() {
   const sessions = useSessions();
   const router = useRouter();
   const theme = useTheme();
-  const dark = useColorScheme() === 'dark';
+  const shape = useShape();
   const insets = useSafeAreaInsets();
   const [dismissedAt, setDismissedAt] = useState(0);
   const scopeOf = useProtection();
@@ -51,7 +50,9 @@ export function AttentionBanner() {
           {
             backgroundColor: theme.backgroundRaised,
             borderColor: theme.border,
-            boxShadow: `0 8px 24px ${theme.shadow}${dark ? '99' : '26'}`,
+            borderRadius: shape.radius.large,
+            borderWidth: shape.hairline,
+            boxShadow: shadows(shape.shadowFloat),
           },
         ]}>
         <View style={[styles.flare, { backgroundColor: theme.attention }]} />
@@ -63,7 +64,11 @@ export function AttentionBanner() {
             open(latest.id);
           }}
           style={({ pressed }) => [styles.body, pressed && styles.pressed]}>
-          <View style={[styles.icon, { backgroundColor: theme.primaryMuted }]}>
+          <View
+            style={[
+              styles.icon,
+              { backgroundColor: theme.primaryMuted, borderRadius: shape.radius.pill },
+            ]}>
             {latest.attention.kind === 'finished' ? (
               <Icon name="check" size={16} color="success" />
             ) : (
@@ -98,8 +103,6 @@ const styles = StyleSheet.create({
   banner: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: Radius.large,
-    borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
   },
   flare: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 3 },
@@ -114,7 +117,6 @@ const styles = StyleSheet.create({
   icon: {
     width: 32,
     height: 32,
-    borderRadius: Radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
   },

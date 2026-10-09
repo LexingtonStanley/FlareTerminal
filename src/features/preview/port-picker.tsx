@@ -6,8 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Callout } from '@/components/ui/card';
 import { Screen } from '@/components/ui/screen';
 import { TextField } from '@/components/ui/text-field';
-import { mono, Radius, Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { Spacing } from '@/constants/theme';
+import { useShape, useTheme, useType } from '@/hooks/use-theme';
 
 import { parsePort } from './local-urls';
 
@@ -27,6 +27,8 @@ export function PortPicker({
   onPick(port: number): void;
 }) {
   const theme = useTheme();
+  const shape = useShape();
+  const { mono } = useType();
   const [text, setText] = useState(initial ? String(initial) : '');
   const [error, setError] = useState<string | null>(null);
 
@@ -59,9 +61,13 @@ export function PortPicker({
                   {
                     backgroundColor: pressed ? theme.backgroundSelected : theme.backgroundElement,
                     borderColor: theme.border,
+                    borderRadius: shape.radius.pill,
+                    borderWidth: shape.hairline,
                   },
                 ]}>
-                <Text style={[styles.chipText, { color: theme.text }]}>localhost:{port}</Text>
+                <Text style={[styles.chipText, mono(500), { color: theme.text }]}>
+                  localhost:{port}
+                </Text>
               </Pressable>
             ))}
           </View>
@@ -101,8 +107,6 @@ const styles = StyleSheet.create({
     minHeight: 40,
     justifyContent: 'center',
     paddingHorizontal: Spacing.three,
-    borderRadius: Radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
   },
-  chipText: { ...mono(500), fontSize: 14 },
+  chipText: { fontSize: 14 },
 });

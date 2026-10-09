@@ -1,43 +1,52 @@
-import { createContext, use, useState, type PropsWithChildren } from 'react';
+import { use, useEffect, useState, type PropsWithChildren } from 'react';
+import { Appearance as SystemAppearance } from 'react-native';
+
+import { DEFAULT_APP_THEME, isAppThemeId } from '@/constants/app-themes';
+import { readJson, writeJson } from '@/lib/storage';
 
 import {
-  DEFAULT_TERMINAL_SCHEME,
-  isTerminalSchemeId,
-  type TerminalSchemeId,
-} from '@/constants/terminal-schemes';
-import { readJson, writeJson } from '@/lib/storage';
+  APPEARANCES,
+  PreferencesContext,
+  type Appearance,
+  type Preferences,
+  type PreferencesContextValue,
+} from './preferences-context';
+
+export type { Appearance, Preferences } from './preferences-context';
 
 const STORAGE_KEY = 'flare.preferences.v1';
 
 export const FONT_SIZE = { min: 10, max: 24, default: 14 } as const;
 
-export type Preferences = {
-  fontSize: number;
-  /** The terminal's colour scheme; its light or dark variant follows the phone. */
-  terminalScheme: TerminalSchemeId;
-};
-
-type PreferencesContextValue = Preferences & {
-  setTerminalScheme(scheme: TerminalSchemeId): void;
-  setFontSize(size: number): void;
-};
-
-const PreferencesContext = createContext<PreferencesContextValue | null>(null);
-
 function clampFontSize(size: number) {
   return Math.min(FONT_SIZE.max, Math.max(FONT_SIZE.min, Math.round(size)));
 }
 
+function isAppearance(value: unknown): value is Appearance {
+  return APPEARANCES.includes(value as Appearance);
+}
+
+/** What's stored, including the terminal scheme that a theme replaced (its ids carried over). */
+type Stored = Partial<Preferences> & { terminalScheme?: unknown };
+
 export function PreferencesProvider({ children }: PropsWithChildren) {
   const [preferences, setPreferences] = useState<Preferences>(() => {
-    const stored = readJson<Partial<Preferences>>(STORAGE_KEY);
+    const stored = readJson<Stored>(STORAGE_KEY);
     const fontSize = stored?.fontSize;
-    const terminalScheme = stored?.terminalScheme;
+    const theme = stored?.appTheme ?? stored?.terminalScheme;
     return {
-      terminalScheme: isTerminalSchemeId(terminalScheme) ? terminalScheme : DEFAULT_TERMINAL_SCHEME,
+      appTheme: isAppThemeId(theme) ? theme : DEFAULT_APP_THEME,
+      appearance: isAppearance(stored?.appearance) ? stored.appearance : 'system',
       fontSize: typeof fontSize === 'number' ? clampFontSize(fontSize) : FONT_SIZE.default,
     };
   });
+
+  // The phone's own UI (the status bar, alerts, its keyboard) follows a chosen appearance too.
+  useEffect(() => {
+    SystemAppearance.setColorScheme?.(
+      preferences.appearance === 'system' ? 'unspecified' : preferences.appearance
+    );
+  }, [preferences.appearance]);
 
   function update(changes: Partial<Preferences>) {
     const next = { ...preferences, ...changes };
@@ -47,7 +56,8 @@ export function PreferencesProvider({ children }: PropsWithChildren) {
 
   const value: PreferencesContextValue = {
     ...preferences,
-    setTerminalScheme: (terminalScheme) => update({ terminalScheme }),
+    setAppTheme: (appTheme) => update({ appTheme }),
+    setAppearance: (appearance) => update({ appearance }),
     setFontSize: (size) => update({ fontSize: clampFontSize(size) }),
   };
 

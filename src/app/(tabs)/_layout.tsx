@@ -1,14 +1,14 @@
 import { Tabs } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import { StyleSheet } from 'react-native';
 
-import { sans } from '@/constants/theme';
 import { waitingFor } from '@/features/sessions/inbox';
 import { useSessions } from '@/features/sessions/sessions-provider';
-import { useTheme } from '@/hooks/use-theme';
+import { useShape, useTheme, useType } from '@/hooks/use-theme';
 
 export default function TabsLayout() {
   const theme = useTheme();
+  const { hairline } = useShape();
+  const { sans } = useType();
   const waiting = useSessions().filter((session) => waitingFor(session)).length;
 
   return (
@@ -25,7 +25,7 @@ export default function TabsLayout() {
         tabBarStyle: {
           backgroundColor: theme.background,
           borderTopColor: theme.border,
-          borderTopWidth: StyleSheet.hairlineWidth,
+          borderTopWidth: hairline,
         },
       }}>
       <Tabs.Screen

@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet } from 'react-native';
 
-import { Radius, type ThemeColor } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import type { ThemeColor } from '@/constants/theme';
+import { useShape, useTheme } from '@/hooks/use-theme';
 
 import { Icon, type IconName } from './icon';
 
@@ -28,6 +28,7 @@ export function IconButton({
   disabled = false,
 }: IconButtonProps) {
   const theme = useTheme();
+  const shape = useShape();
 
   return (
     <Pressable
@@ -40,6 +41,8 @@ export function IconButton({
       style={({ pressed }) => [
         styles.button,
         {
+          borderRadius: shape.radius.pill,
+          borderWidth: shape.hairline,
           backgroundColor: pressed
             ? theme.backgroundSelected
             : filled
@@ -58,8 +61,6 @@ const styles = StyleSheet.create({
   button: {
     width: 40,
     height: 40,
-    borderRadius: Radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
   },

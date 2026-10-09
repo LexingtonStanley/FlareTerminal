@@ -7,8 +7,8 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
 import { IconButton } from '@/components/ui/icon-button';
-import { mono, Radius, Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { Spacing } from '@/constants/theme';
+import { shadows, useShape, useTheme, useType } from '@/hooks/use-theme';
 
 /** The web view's methods this screen uses (its types don't declare a ref). */
 type WebViewHandle = {
@@ -47,6 +47,8 @@ export function PreviewBrowser({
   onChangePort(): void;
 }) {
   const theme = useTheme();
+  const shape = useShape();
+  const { mono } = useType();
   const webView = useRef<WebViewHandle>(null);
   const origin = `http://localhost:${localPort}`;
   const [start, setStart] = useState(`${origin}${path}`);
@@ -123,7 +125,15 @@ export function PreviewBrowser({
       {error ? (
         <ThemedView
           type="backgroundRaised"
-          style={[styles.banner, { borderColor: theme.border, shadowColor: theme.shadow }]}>
+          style={[
+            styles.banner,
+            {
+              borderColor: theme.border,
+              borderRadius: shape.radius.large,
+              borderWidth: shape.hairline,
+              boxShadow: shadows(shape.shadowFloat),
+            },
+          ]}>
           <ThemedText type="small" role="alert" style={styles.flex}>
             {error}
           </ThemedText>
@@ -134,7 +144,14 @@ export function PreviewBrowser({
       <View
         role="toolbar"
         aria-label="Preview"
-        style={[styles.toolbar, { backgroundColor: theme.background, borderColor: theme.border }]}>
+        style={[
+          styles.toolbar,
+          {
+            backgroundColor: theme.background,
+            borderColor: theme.border,
+            borderTopWidth: shape.hairline,
+          },
+        ]}>
         <IconButton
           icon="back"
           label="Back"
@@ -153,9 +170,12 @@ export function PreviewBrowser({
           onPress={onChangePort}
           style={({ pressed }) => [
             styles.address,
-            { backgroundColor: pressed ? theme.backgroundSelected : theme.backgroundElement },
+            {
+              backgroundColor: pressed ? theme.backgroundSelected : theme.backgroundElement,
+              borderRadius: shape.radius.medium,
+            },
           ]}>
-          <Text numberOfLines={1} style={[styles.addressText, { color: theme.text }]}>
+          <Text numberOfLines={1} style={[styles.addressText, mono(), { color: theme.text }]}>
             {address}
           </Text>
         </Pressable>
@@ -180,16 +200,14 @@ const styles = StyleSheet.create({
     gap: Spacing.half,
     paddingHorizontal: Spacing.two,
     paddingVertical: Spacing.one,
-    borderTopWidth: StyleSheet.hairlineWidth,
   },
   address: {
     flex: 1,
     minHeight: 36,
     justifyContent: 'center',
     paddingHorizontal: Spacing.three - 4,
-    borderRadius: Radius.medium,
   },
-  addressText: { ...mono(), fontSize: 13 },
+  addressText: { fontSize: 13 },
   banner: {
     position: 'absolute',
     left: Spacing.three,
@@ -200,12 +218,6 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
     paddingLeft: Spacing.three,
     paddingVertical: Spacing.one,
-    borderRadius: Radius.large,
-    borderWidth: StyleSheet.hairlineWidth,
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
   },
   failed: {
     position: 'absolute',

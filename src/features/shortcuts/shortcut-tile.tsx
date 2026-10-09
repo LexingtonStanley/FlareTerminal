@@ -3,8 +3,8 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { Icon } from '@/components/ui/icon';
 import { IconButton } from '@/components/ui/icon-button';
-import { Radius, Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { Spacing } from '@/constants/theme';
+import { shadows, useShape, useTheme } from '@/hooks/use-theme';
 
 import { HARNESSES } from './agent-command';
 import type { Shortcut } from './shortcuts';
@@ -20,6 +20,7 @@ type ShortcutTileProps = {
 /** A shortcut on Home: tap to run it. An agent's shows which agent and its folder. */
 export function ShortcutTile({ shortcut, connectionName, onRun, onEdit }: ShortcutTileProps) {
   const theme = useTheme();
+  const shape = useShape();
   const connection = connectionName ?? 'Missing connection';
   const { agent } = shortcut;
 
@@ -27,7 +28,13 @@ export function ShortcutTile({ shortcut, connectionName, onRun, onEdit }: Shortc
     <View
       style={[
         styles.tile,
-        { backgroundColor: theme.backgroundElement, borderColor: theme.border },
+        {
+          backgroundColor: theme.backgroundElement,
+          borderColor: theme.border,
+          borderRadius: shape.radius.large,
+          borderWidth: shape.hairline,
+          boxShadow: shadows(shape.shadowCard),
+        },
       ]}>
       <Pressable
         role="button"
@@ -37,8 +44,12 @@ export function ShortcutTile({ shortcut, connectionName, onRun, onEdit }: Shortc
           styles.main,
           pressed && { backgroundColor: theme.backgroundSelected },
         ]}>
-        <View style={[styles.badge, { backgroundColor: theme.primaryMuted }]}>
-          <Icon name="run" size={16} color="primary" />
+        <View
+          style={[
+            styles.badge,
+            { backgroundColor: theme.primaryMuted, borderRadius: shape.radius.pill },
+          ]}>
+          <Icon name="run" size={16} color="primaryText" />
         </View>
         <View style={styles.text}>
           <ThemedText type="headline" numberOfLines={1}>
@@ -67,6 +78,7 @@ export function ShortcutTile({ shortcut, connectionName, onRun, onEdit }: Shortc
 /** The last tile in the grid: makes a new shortcut. */
 export function NewShortcutTile({ onPress, hint }: { onPress(): void; hint: string }) {
   const theme = useTheme();
+  const shape = useShape();
 
   return (
     <Pressable
@@ -77,11 +89,13 @@ export function NewShortcutTile({ onPress, hint }: { onPress(): void; hint: stri
         styles.tile,
         styles.add,
         {
+          borderRadius: shape.radius.large,
           borderColor: theme.border,
           backgroundColor: pressed ? theme.backgroundSelected : 'transparent',
         },
       ]}>
-      <View style={[styles.addBadge, { borderColor: theme.border }]}>
+      <View
+        style={[styles.addBadge, { borderColor: theme.border, borderRadius: shape.radius.pill }]}>
         <Icon name="add" size={18} color="text" />
       </View>
       <ThemedText type="smallBold">New shortcut</ThemedText>
@@ -97,15 +111,12 @@ const styles = StyleSheet.create({
     flexBasis: '46%',
     flexGrow: 1,
     minHeight: 132,
-    borderRadius: Radius.large,
-    borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
   },
   main: { flex: 1, gap: Spacing.two + 2, padding: Spacing.three - 2 },
   badge: {
     width: 32,
     height: 32,
-    borderRadius: Radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -123,7 +134,6 @@ const styles = StyleSheet.create({
   addBadge: {
     width: 36,
     height: 36,
-    borderRadius: Radius.pill,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',

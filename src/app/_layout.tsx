@@ -9,13 +9,12 @@ import {
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
-import { useColorScheme } from 'react-native';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 
 import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui/button';
 import { Screen } from '@/components/ui/screen';
-import { Colors, FontFiles, sans } from '@/constants/theme';
+import { FontFiles } from '@/constants/theme';
 import { ConnectionsProvider } from '@/features/connections/connections-provider';
 import { GroupsProvider } from '@/features/groups/groups-provider';
 import { AttentionBanner } from '@/features/sessions/attention-banner';
@@ -25,14 +24,14 @@ import { ShortcutsProvider } from '@/features/shortcuts/shortcuts-provider';
 import { KeysProvider } from '@/features/ssh/keys-provider';
 import { AccessGuard } from '@/features/vault/access-guard';
 import { LockProvider } from '@/features/vault/lock-provider';
+import { useAppTheme, useType, type Type } from '@/hooks/use-theme';
 
 // The splash stays up until the app's fonts are ready, so nothing draws in a fallback font.
 void SplashScreen.preventAutoHideAsync().catch(() => {});
 
-/** React Navigation's headers, tab bar and screen backgrounds in Flare's colours and type. */
-function navigationTheme(mode: 'light' | 'dark'): Theme {
+/** React Navigation's headers, tab bar and screen backgrounds in the theme's colours and type. */
+function navigationTheme({ mode, colors }: ReturnType<typeof useAppTheme>, { sans }: Type): Theme {
   const base = mode === 'dark' ? DarkTheme : DefaultTheme;
-  const colors = Colors[mode];
   const font = (weight: 400 | 500 | 600 | 700) => ({
     fontFamily: sans(weight).fontFamily as string,
     fontWeight: 'normal' as const,
@@ -52,12 +51,8 @@ function navigationTheme(mode: 'light' | 'dark'): Theme {
   };
 }
 
-const THEMES = { light: navigationTheme('light'), dark: navigationTheme('dark') };
-
 // No accounts: the hosts a person connects to do the authentication.
 export default function RootLayout() {
-  const mode = useColorScheme() === 'dark' ? 'dark' : 'light';
-  const colors = Colors[mode];
   const [fontsLoaded, fontError] = useFonts(FontFiles);
   const ready = fontsLoaded || fontError !== null;
 
@@ -71,81 +66,86 @@ export default function RootLayout() {
     // Keyboard avoidance that works with Android's edge-to-edge layout, where the window no
     // longer shrinks for the keyboard (see Screen and the session screen).
     <KeyboardProvider>
-      <ThemeProvider value={THEMES[mode]}>
-        <PreferencesProvider>
-          <ConnectionsProvider>
-            <GroupsProvider>
-              <ShortcutsProvider>
-                <SessionsProvider>
-                  <LockProvider>
-                    <KeysProvider>
-                      <Stack
-                        screenOptions={{
-                          headerShown: false,
-                          headerShadowVisible: false,
-                          headerTintColor: colors.text,
-                          headerStyle: { backgroundColor: colors.background },
-                          headerTitleStyle: { ...sans(600), fontSize: 17 },
-                          contentStyle: { backgroundColor: colors.background },
-                        }}>
-                        {/* The title is what the back button on pushed screens says. */}
-                        <Stack.Screen name="(tabs)" options={{ title: 'Home' }} />
-                        <Stack.Screen
-                          name="connections/new"
-                          options={{ headerShown: true, title: 'New connection' }}
-                        />
-                        <Stack.Screen
-                          name="connections/[id]"
-                          options={{ headerShown: true, title: 'Edit connection' }}
-                        />
-                        <Stack.Screen
-                          name="shortcuts/new"
-                          options={{ headerShown: true, title: 'New shortcut' }}
-                        />
-                        <Stack.Screen
-                          name="shortcuts/[id]"
-                          options={{ headerShown: true, title: 'Edit shortcut' }}
-                        />
-                        <Stack.Screen
-                          name="groups/new"
-                          options={{ headerShown: true, title: 'New group' }}
-                        />
-                        <Stack.Screen
-                          name="groups/[id]"
-                          options={{ headerShown: true, title: 'Edit group' }}
-                        />
-                        <Stack.Screen
-                          name="security"
-                          options={{ headerShown: true, title: 'App lock' }}
-                        />
-                        <Stack.Screen
-                          name="keys/new"
-                          options={{ headerShown: true, title: 'Import key' }}
-                        />
-                        <Stack.Screen
-                          name="keys/[id]"
-                          options={{ headerShown: true, title: 'Key' }}
-                        />
-                        <Stack.Screen
-                          name="session/[id]"
-                          options={{ headerShown: true, title: '' }}
-                        />
-                        <Stack.Screen
-                          name="session/[id]/preview"
-                          options={{ headerShown: true, title: 'Preview' }}
-                        />
-                      </Stack>
-                      <AttentionBanner />
-                      <AccessGuard />
-                    </KeysProvider>
-                  </LockProvider>
-                </SessionsProvider>
-              </ShortcutsProvider>
-            </GroupsProvider>
-          </ConnectionsProvider>
-        </PreferencesProvider>
-      </ThemeProvider>
+      <PreferencesProvider>
+        <ThemedApp />
+      </PreferencesProvider>
     </KeyboardProvider>
+  );
+}
+
+/** The app inside the chosen theme, which can change while it runs. */
+function ThemedApp() {
+  const theme = useAppTheme();
+  const type = useType();
+  const { colors } = theme;
+
+  return (
+    <ThemeProvider value={navigationTheme(theme, type)}>
+      <ConnectionsProvider>
+        <GroupsProvider>
+          <ShortcutsProvider>
+            <SessionsProvider>
+              <LockProvider>
+                <KeysProvider>
+                  <Stack
+                    screenOptions={{
+                      headerShown: false,
+                      headerShadowVisible: false,
+                      headerTintColor: colors.text,
+                      headerStyle: { backgroundColor: colors.background },
+                      headerTitleStyle: { ...type.sans(600), fontSize: 17 },
+                      contentStyle: { backgroundColor: colors.background },
+                    }}>
+                    {/* The title is what the back button on pushed screens says. */}
+                    <Stack.Screen name="(tabs)" options={{ title: 'Home' }} />
+                    <Stack.Screen
+                      name="connections/new"
+                      options={{ headerShown: true, title: 'New connection' }}
+                    />
+                    <Stack.Screen
+                      name="connections/[id]"
+                      options={{ headerShown: true, title: 'Edit connection' }}
+                    />
+                    <Stack.Screen
+                      name="shortcuts/new"
+                      options={{ headerShown: true, title: 'New shortcut' }}
+                    />
+                    <Stack.Screen
+                      name="shortcuts/[id]"
+                      options={{ headerShown: true, title: 'Edit shortcut' }}
+                    />
+                    <Stack.Screen
+                      name="groups/new"
+                      options={{ headerShown: true, title: 'New group' }}
+                    />
+                    <Stack.Screen
+                      name="groups/[id]"
+                      options={{ headerShown: true, title: 'Edit group' }}
+                    />
+                    <Stack.Screen
+                      name="security"
+                      options={{ headerShown: true, title: 'App lock' }}
+                    />
+                    <Stack.Screen
+                      name="keys/new"
+                      options={{ headerShown: true, title: 'Import key' }}
+                    />
+                    <Stack.Screen name="keys/[id]" options={{ headerShown: true, title: 'Key' }} />
+                    <Stack.Screen name="session/[id]" options={{ headerShown: true, title: '' }} />
+                    <Stack.Screen
+                      name="session/[id]/preview"
+                      options={{ headerShown: true, title: 'Preview' }}
+                    />
+                  </Stack>
+                  <AttentionBanner />
+                  <AccessGuard />
+                </KeysProvider>
+              </LockProvider>
+            </SessionsProvider>
+          </ShortcutsProvider>
+        </GroupsProvider>
+      </ConnectionsProvider>
+    </ThemeProvider>
   );
 }
 

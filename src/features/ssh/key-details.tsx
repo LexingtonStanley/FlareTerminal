@@ -7,9 +7,9 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Screen } from '@/components/ui/screen';
 import { TextField } from '@/components/ui/text-field';
-import { Radius, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
 import { useConnections } from '@/features/connections/connections-provider';
-import { useTheme } from '@/hooks/use-theme';
+import { useShape, useTheme } from '@/hooks/use-theme';
 
 import { APP_KEY_ID, authorizeCommand, type SavedKey } from './keys';
 import { useKeys } from './keys-provider';
@@ -24,7 +24,14 @@ export function KeyDetails({ savedKey, onDeleted }: { savedKey: SavedKey; onDele
   const [name, setName] = useState(savedKey.name);
   const [copied, setCopied] = useState<Copied>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const well = [styles.well, { backgroundColor: theme.backgroundSelected }];
+  const { radius } = useShape();
+  const well = [
+    styles.well,
+    {
+      backgroundColor: theme.backgroundSelected,
+      borderRadius: Math.min(radius.small + 2, radius.small * 2),
+    },
+  ];
   const usedBy = connections.filter(
     (connection) => connection.kind === 'ssh' && connection.keyId === savedKey.id
   );
@@ -127,7 +134,6 @@ const styles = StyleSheet.create({
   buttons: { flexDirection: 'row', gap: Spacing.two },
   well: {
     padding: Spacing.three - 4,
-    borderRadius: Radius.small + 2,
     overflow: 'hidden',
     fontSize: 12,
     lineHeight: 18,

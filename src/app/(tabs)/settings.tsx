@@ -3,22 +3,36 @@ import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Card, Divider, Section } from '@/components/ui/card';
+import { Card, Section } from '@/components/ui/card';
 import { Icon } from '@/components/ui/icon';
 import { IconButton } from '@/components/ui/icon-button';
 import { Screen } from '@/components/ui/screen';
-import { mono, Spacing } from '@/constants/theme';
-import { FONT_SIZE, usePreferences } from '@/features/settings/preferences-provider';
-import { TerminalPreview, TerminalSchemePicker } from '@/features/settings/terminal-scheme-picker';
+import { SegmentedControl } from '@/components/ui/segmented-control';
+import { Spacing } from '@/constants/theme';
+import {
+  FONT_SIZE,
+  usePreferences,
+  type Appearance,
+} from '@/features/settings/preferences-provider';
+import { TerminalPreview, ThemePicker } from '@/features/settings/theme-picker';
 import { useTerminalTheme } from '@/features/settings/use-terminal-theme';
 import { KeysCard } from '@/features/ssh/keys-card';
 import { useLock } from '@/features/vault/lock-provider';
-import { useTheme } from '@/hooks/use-theme';
+import { useShape, useTheme, useType } from '@/hooks/use-theme';
+
+const APPEARANCE_OPTIONS: { value: Appearance; label: string }[] = [
+  { value: 'system', label: 'System' },
+  { value: 'light', label: 'Light' },
+  { value: 'dark', label: 'Dark' },
+];
 
 export default function SettingsScreen() {
-  const { fontSize, setFontSize, terminalScheme, setTerminalScheme } = usePreferences();
+  const { fontSize, setFontSize, appTheme, setAppTheme, appearance, setAppearance } =
+    usePreferences();
   const terminalTheme = useTerminalTheme();
   const theme = useTheme();
+  const shape = useShape();
+  const { mono } = useType();
   const { version, extra } = Constants.expoConfig ?? {};
   const { settings: lock } = useLock();
   const router = useRouter();
@@ -29,6 +43,23 @@ export default function SettingsScreen() {
         Settings
       </ThemedText>
 
+      <Section title="Appearance">
+        <Card>
+          <TerminalPreview colors={terminalTheme} fontSize={fontSize} />
+          <ThemePicker value={appTheme} onChange={setAppTheme} />
+          <SegmentedControl
+            label="Appearance"
+            options={APPEARANCE_OPTIONS}
+            value={appearance}
+            onChange={setAppearance}
+          />
+          <ThemedText type="caption" themeColor="textSecondary">
+            Each theme has a light and a dark version. A theme sets the app and the terminal
+            together.
+          </ThemedText>
+        </Card>
+      </Section>
+
       <Section title="Terminal">
         <Card flush>
           <View style={styles.row}>
@@ -38,7 +69,15 @@ export default function SettingsScreen() {
                 Points, for every session
               </ThemedText>
             </View>
-            <View style={[styles.stepper, { borderColor: theme.border }]}>
+            <View
+              style={[
+                styles.stepper,
+                {
+                  borderColor: theme.border,
+                  borderRadius: shape.radius.pill,
+                  borderWidth: shape.hairline,
+                },
+              ]}>
               <IconButton
                 icon="minus"
                 label="Smaller"
@@ -46,7 +85,7 @@ export default function SettingsScreen() {
                 onPress={() => setFontSize(fontSize - 1)}
                 disabled={fontSize <= FONT_SIZE.min}
               />
-              <ThemedText aria-label="Font size" style={styles.value}>
+              <ThemedText aria-label="Font size" style={[styles.value, mono(500)]}>
                 {fontSize}
               </ThemedText>
               <IconButton
@@ -57,15 +96,6 @@ export default function SettingsScreen() {
                 disabled={fontSize >= FONT_SIZE.max}
               />
             </View>
-          </View>
-          <Divider inset={Spacing.three} />
-          <View style={styles.block}>
-            <ThemedText type="smallBold">Colours</ThemedText>
-            <TerminalPreview colors={terminalTheme} fontSize={fontSize} />
-            <TerminalSchemePicker value={terminalScheme} onChange={setTerminalScheme} />
-            <ThemedText type="caption" themeColor="textSecondary">
-              Each scheme has a light and a dark version that follows your phone&apos;s appearance.
-            </ThemedText>
           </View>
         </Card>
       </Section>
@@ -80,7 +110,7 @@ export default function SettingsScreen() {
               styles.row,
               pressed && { backgroundColor: theme.backgroundSelected },
             ]}>
-            <Icon name="lock" size={18} color={lock ? 'primary' : 'textSecondary'} />
+            <Icon name="lock" size={18} color={lock ? 'primaryText' : 'textSecondary'} />
             <View style={styles.grow}>
               <ThemedText type="smallBold">App lock</ThemedText>
               <ThemedText type="caption" themeColor="textSecondary">
@@ -129,11 +159,8 @@ const styles = StyleSheet.create({
   stepper: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
     padding: Spacing.half,
   },
-  value: { ...mono(500), minWidth: 32, textAlign: 'center', fontSize: 16 },
-  block: { gap: Spacing.three - 4, padding: Spacing.three },
+  value: { minWidth: 32, textAlign: 'center', fontSize: 16 },
   aboutRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
 });

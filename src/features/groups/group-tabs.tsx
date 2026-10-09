@@ -2,8 +2,8 @@ import { useRouter } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text } from 'react-native';
 
 import { Icon } from '@/components/ui/icon';
-import { Radius, sans, Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { Spacing } from '@/constants/theme';
+import { useShape, useTheme, useType } from '@/hooks/use-theme';
 
 import type { Group } from './groups';
 
@@ -24,6 +24,10 @@ type GroupTabsProps = {
 export function GroupTabs({ groups, selected, onSelect }: GroupTabsProps) {
   const router = useRouter();
   const theme = useTheme();
+  const shape = useShape();
+  const { sans } = useType();
+  const tab = { borderRadius: shape.radius.pill, borderWidth: shape.hairline };
+  const label = [styles.label, sans(600)];
   const tabs = [{ id: ALL_GROUPS, name: 'All', protected: false }, ...groups];
 
   return (
@@ -49,6 +53,7 @@ export function GroupTabs({ groups, selected, onSelect }: GroupTabsProps) {
             }
             style={({ pressed }) => [
               styles.tab,
+              tab,
               {
                 backgroundColor: current
                   ? theme.primaryMuted
@@ -59,11 +64,11 @@ export function GroupTabs({ groups, selected, onSelect }: GroupTabsProps) {
               },
             ]}>
             {group.protected ? (
-              <Icon name="lock" size={13} color={current ? 'primary' : 'textSecondary'} />
+              <Icon name="lock" size={13} color={current ? 'primaryText' : 'textSecondary'} />
             ) : null}
             <Text
               numberOfLines={1}
-              style={[styles.label, { color: current ? theme.primary : theme.text }]}>
+              style={[label, { color: current ? theme.primaryText : theme.text }]}>
               {group.name}
             </Text>
           </Pressable>
@@ -75,6 +80,7 @@ export function GroupTabs({ groups, selected, onSelect }: GroupTabsProps) {
         onPress={() => router.push('/groups/new')}
         style={({ pressed }) => [
           styles.tab,
+          tab,
           styles.add,
           {
             borderColor: theme.border,
@@ -82,7 +88,7 @@ export function GroupTabs({ groups, selected, onSelect }: GroupTabsProps) {
           },
         ]}>
         <Icon name="add" size={15} color="textSecondary" />
-        <Text style={[styles.label, { color: theme.textSecondary }]}>Group</Text>
+        <Text style={[label, { color: theme.textSecondary }]}>Group</Text>
       </Pressable>
     </ScrollView>
   );
@@ -99,9 +105,7 @@ const styles = StyleSheet.create({
     minHeight: 40,
     maxWidth: 200,
     paddingHorizontal: Spacing.three,
-    borderRadius: Radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
   },
   add: { borderStyle: 'dashed', borderWidth: 1 },
-  label: { ...sans(600), fontSize: 14, flexShrink: 1 },
+  label: { fontSize: 14, flexShrink: 1 },
 });

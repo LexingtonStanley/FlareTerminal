@@ -8,9 +8,9 @@ import { Icon } from '@/components/ui/icon';
 import { Screen } from '@/components/ui/screen';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { TextField } from '@/components/ui/text-field';
-import { Radius, sans, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
 import { connectionLabel, type Connection } from '@/features/connections/connections';
-import { useTheme } from '@/hooks/use-theme';
+import { useShape, useTheme, useType } from '@/hooks/use-theme';
 
 import {
   HARNESSES,
@@ -376,6 +376,8 @@ type ChipProps = {
 
 function Chip({ label, accessibleName, role, selected, onPress }: ChipProps) {
   const theme = useTheme();
+  const shape = useShape();
+  const { sans } = useType();
   return (
     <Pressable
       role={role}
@@ -391,9 +393,11 @@ function Chip({ label, accessibleName, role, selected, onPress }: ChipProps) {
               ? theme.backgroundSelected
               : theme.backgroundElement,
           borderColor: selected ? theme.primary : theme.border,
+          borderRadius: shape.radius.pill,
+          borderWidth: Math.max(1, shape.borderWidth),
         },
       ]}>
-      <ThemedText type="small" themeColor={selected ? 'primary' : 'text'} style={styles.chipText}>
+      <ThemedText type="small" themeColor={selected ? 'primaryText' : 'text'} style={sans(500)}>
         {label}
       </ThemedText>
     </Pressable>
@@ -409,6 +413,7 @@ function HarnessPicker({
   onChange(harness: AgentHarness): void;
 }) {
   const theme = useTheme();
+  const shape = useShape();
   return (
     <View role="radiogroup" aria-label="Coding agent" style={styles.wrap}>
       {HARNESS_OPTIONS.map((option) => {
@@ -425,6 +430,8 @@ function HarnessPicker({
               {
                 backgroundColor: pressed ? theme.backgroundSelected : theme.backgroundElement,
                 borderColor: selected ? theme.primary : theme.border,
+                borderRadius: shape.radius.medium,
+                borderWidth: shape.borderWidthStrong,
               },
             ]}>
             <ThemedText type="smallBold" numberOfLines={1}>
@@ -434,7 +441,11 @@ function HarnessPicker({
               {HARNESSES[option.value].program}
             </ThemedText>
             {selected ? (
-              <View style={[styles.check, { backgroundColor: theme.primary }]}>
+              <View
+                style={[
+                  styles.check,
+                  { backgroundColor: theme.primary, borderRadius: Math.min(shape.radius.dot, 9) },
+                ]}>
                 <Icon name="check" size={12} color="onPrimary" weight="bold" />
               </View>
             ) : null}
@@ -456,6 +467,7 @@ function PermissionsToggle({
   onChange(value: boolean): void;
 }) {
   const theme = useTheme();
+  const shape = useShape();
   const { label, skipFlag } = HARNESSES[harness];
   if (!skipFlag) {
     return <Callout>{`${label} doesn’t ask for permission, so there’s nothing to skip.`}</Callout>;
@@ -473,6 +485,8 @@ function PermissionsToggle({
         {
           backgroundColor: pressed ? theme.backgroundSelected : theme.backgroundElement,
           borderColor: theme.border,
+          borderRadius: shape.radius.medium,
+          borderWidth: Math.max(1, shape.borderWidth),
         },
       ]}>
       <View style={styles.toggleText}>
@@ -485,6 +499,7 @@ function PermissionsToggle({
         style={[
           styles.track,
           {
+            borderRadius: shape.radius.pill,
             backgroundColor: value ? theme.primary : theme.backgroundSelected,
             borderColor: value ? theme.primary : theme.textSecondary,
           },
@@ -492,7 +507,10 @@ function PermissionsToggle({
         <View
           style={[
             value ? styles.thumbOn : styles.thumbOff,
-            { backgroundColor: value ? theme.onPrimary : theme.textSecondary },
+            {
+              backgroundColor: value ? theme.onPrimary : theme.textSecondary,
+              borderRadius: Math.min(shape.radius.pill, value ? 10 : 7),
+            },
           ]}
         />
       </View>
@@ -512,6 +530,7 @@ function ConnectionPicker({
   onChange(id: string): void;
 }) {
   const theme = useTheme();
+  const shape = useShape();
   return (
     <View style={styles.group}>
       <ThemedText type="eyebrow" themeColor="textSecondary">
@@ -525,6 +544,8 @@ function ConnectionPicker({
           {
             backgroundColor: theme.backgroundElement,
             borderColor: error ? theme.danger : theme.border,
+            borderRadius: shape.radius.medium,
+            borderWidth: Math.max(1, shape.borderWidth),
           },
         ]}>
         {connections.map((connection, index) => {
@@ -538,7 +559,7 @@ function ConnectionPicker({
               onPress={() => onChange(connection.id)}
               style={({ pressed }) => [
                 styles.option,
-                index > 0 && [styles.optionDivider, { borderTopColor: theme.border }],
+                index > 0 && { borderTopColor: theme.border, borderTopWidth: shape.hairline },
                 pressed && { backgroundColor: theme.backgroundSelected },
               ]}>
               <View
@@ -574,11 +595,17 @@ function ConnectionPicker({
 
 function CommandPreview({ command }: { command: string }) {
   const theme = useTheme();
+  const shape = useShape();
   return (
     <View
       style={[
         styles.preview,
-        { backgroundColor: theme.backgroundSelected, borderColor: theme.border },
+        {
+          backgroundColor: theme.backgroundSelected,
+          borderColor: theme.border,
+          borderRadius: shape.radius.medium,
+          borderWidth: shape.hairline,
+        },
       ]}>
       <ThemedText type="code" themeColor="primary">
         $
@@ -603,18 +630,13 @@ const styles = StyleSheet.create({
     minHeight: 40,
     justifyContent: 'center',
     paddingHorizontal: Spacing.three - 2,
-    borderRadius: Radius.pill,
-    borderWidth: 1,
   },
-  chipText: sans(500),
   harness: {
     flexBasis: '40%',
     flexGrow: 1,
     gap: Spacing.half,
     paddingHorizontal: Spacing.three - 4,
     paddingVertical: Spacing.two + 2,
-    borderRadius: Radius.medium,
-    borderWidth: 1.5,
   },
   check: {
     position: 'absolute',
@@ -622,11 +644,10 @@ const styles = StyleSheet.create({
     right: Spacing.two,
     width: 18,
     height: 18,
-    borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  box: { borderRadius: Radius.medium, borderWidth: 1, overflow: 'hidden' },
+  box: { overflow: 'hidden' },
   toggle: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -638,13 +659,12 @@ const styles = StyleSheet.create({
   track: {
     width: 46,
     height: 28,
-    borderRadius: Radius.pill,
     borderWidth: 1.5,
     justifyContent: 'center',
     paddingHorizontal: 3,
   },
-  thumbOn: { width: 20, height: 20, borderRadius: 10, alignSelf: 'flex-end' },
-  thumbOff: { width: 14, height: 14, borderRadius: 7, marginLeft: 3 },
+  thumbOn: { width: 20, height: 20, alignSelf: 'flex-end' },
+  thumbOff: { width: 14, height: 14, marginLeft: 3 },
   option: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -652,7 +672,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three - 2,
     paddingVertical: Spacing.three - 4,
   },
-  optionDivider: { borderTopWidth: StyleSheet.hairlineWidth },
   optionText: { flex: 1, gap: Spacing.half },
   radio: {
     width: 20,
@@ -668,8 +687,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: Spacing.two,
     padding: Spacing.three - 2,
-    borderRadius: Radius.medium,
-    borderWidth: StyleSheet.hairlineWidth,
   },
   previewCommand: { flex: 1 },
   actions: { gap: Spacing.two + 2, marginTop: Spacing.two },

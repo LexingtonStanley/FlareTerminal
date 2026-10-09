@@ -2,8 +2,8 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import { Platform, StyleSheet, TextInput, View, type TextInputProps } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { mono, Radius, sans, Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { Spacing } from '@/constants/theme';
+import { useShape, useTheme, useType } from '@/hooks/use-theme';
 
 import { Icon } from './icon';
 
@@ -30,6 +30,8 @@ export function TextField({
   ...inputProps
 }: TextFieldProps) {
   const theme = useTheme();
+  const shape = useShape();
+  const { sans, mono } = useType();
   const [focused, setFocused] = useState(false);
   const input = useRef<TextInput>(null);
   const { multiline, value } = inputProps;
@@ -63,13 +65,15 @@ export function TextField({
         }}
         style={[
           styles.input,
-          monospace ? styles.mono : styles.sans,
+          monospace ? [mono(400), styles.mono] : sans(400),
           multiline && styles.multiline,
           multiline && maxLines ? { maxHeight: maxLines * LINE_HEIGHT + 2 * PADDING } : null,
           {
             color: theme.text,
             backgroundColor: theme.backgroundElement,
             borderColor: error ? theme.danger : focused ? theme.primary : theme.border,
+            borderRadius: shape.radius.medium,
+            borderWidth: Math.max(1, shape.borderWidth),
           },
           focused && { boxShadow: `0 0 0 3px ${error ? theme.danger : theme.primary}26` },
         ]}
@@ -99,14 +103,11 @@ const styles = StyleSheet.create({
   input: {
     minHeight: 50,
     paddingHorizontal: Spacing.three - 2,
-    borderRadius: Radius.medium,
-    borderWidth: 1,
     fontSize: 16,
     // Web draws its own focus ring; the border and glow above replace it.
     outlineWidth: 0,
   },
-  sans: sans(400),
-  mono: { ...mono(400), fontSize: 15 },
+  mono: { fontSize: 15 },
   multiline: { paddingVertical: PADDING, lineHeight: LINE_HEIGHT, textAlignVertical: 'top' },
   message: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one + 2 },
   messageText: { flexShrink: 1 },
