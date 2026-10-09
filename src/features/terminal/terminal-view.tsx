@@ -14,6 +14,7 @@ import type { TerminalTheme } from '@/constants/theme';
 
 import { arrowsForTap } from './cursor-tap';
 import { sequenceForKey, type SpecialKey } from './keys';
+import { scrollModeOf, TouchScroller, WHEEL_LINES, type ScrollMode } from './touch-scroll';
 import type { TerminalSize } from './transport';
 
 /**
@@ -25,7 +26,7 @@ import type { TerminalSize } from './transport';
  *
  * It never asks for the phone's keyboard (the app has its own, and a text field for
  * the phone's): it keeps focus for the cursor and hardware keyboards, and a tap on the
- * line being edited moves the cursor there.
+ * line being edited moves the cursor there. A finger scrolls it (see touch-scroll.ts).
  */
 
 export type TerminalViewHandle = {
@@ -55,6 +56,8 @@ export type TerminalViewProps = {
   onOpenLink: (url: string) => void;
   /** A tap on the terminal (not a scroll or a selection), after any cursor move it makes. */
   onTap?: () => void;
+  /** A swipe on a full-screen program that keeps its history to itself (tmux, mouse off). */
+  onScrollUnavailable?: () => void;
   dom?: DOMProps;
 };
 
@@ -87,6 +90,7 @@ export default function TerminalView({
   onTitleChange,
   onOpenLink,
   onTap,
+  onScrollUnavailable,
 }: TerminalViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -126,6 +130,7 @@ export default function TerminalView({
   const titleChange = useEffectEvent((title: string) => onTitleChange(title));
   const openLink = useEffectEvent((url: string) => onOpenLink(url));
   const tap = useEffectEvent(() => onTap?.());
+  const scrollUnavailable = useEffectEvent(() => onScrollUnavailable?.());
   const initialOptions = useEffectEvent(() => ({ theme, fontSize }));
 
   useEffect(() => {
@@ -152,6 +157,7 @@ export default function TerminalView({
     textarea?.setAttribute('inputmode', 'none');
     textarea?.focus();
     const stopTaps = moveCursorOnTap(terminal, () => tap());
+    const stopScrolling = scrollByTouch(terminal, () => scrollUnavailable());
 
     const subscriptions = [
       terminal.onData((data) => input(data)),
@@ -168,6 +174,7 @@ export default function TerminalView({
 
     return () => {
       stopTaps();
+      stopScrolling();
       observer.disconnect();
       subscriptions.forEach((subscription) => subscription.dispose());
       terminal.dispose();
@@ -260,5 +267,102 @@ function moveCursorOnTap(terminal: Terminal, onTap: () => void): () => void {
   return () => {
     element.removeEventListener('pointerdown', onDown);
     element.removeEventListener('pointerup', onUp);
+  };
+}
+
+/** Travel, in lines, before a swipe that can't scroll says so. */
+const UNAVAILABLE_LINES = 2;
+
+/**
+ * Scrolls by touch: the scrollback, or wheel reports for a program that reads the mouse
+ * (see touch-scroll.ts). Only fingers: a mouse drag still selects text.
+ */
+function scrollByTouch(terminal: Terminal, onUnavailable: () => void): () => void {
+  const element = terminal.element;
+  if (!element) return () => {};
+  // The view handles drags itself; the browser mustn't pan or zoom instead.
+  element.style.touchAction = 'none';
+  let pointer: number | null = null;
+  let mode: ScrollMode = 'none';
+  let at = { x: 0, y: 0 };
+  let blocked = 0;
+
+  const lineHeight = () => {
+    const screen = element.querySelector('.xterm-screen');
+    return screen ? screen.getBoundingClientRect().height / terminal.rows : 0;
+  };
+  // xterm.js encodes each wheel event in the mouse protocol the program asked for.
+  const wheel = (steps: number) => {
+    for (let i = 0; i < Math.abs(steps); i++) {
+      element.dispatchEvent(
+        new WheelEvent('wheel', {
+          deltaY: Math.sign(steps),
+          deltaMode: WheelEvent.DOM_DELTA_LINE,
+          clientX: at.x,
+          clientY: at.y,
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+    }
+  };
+  const scroller = new TouchScroller({
+    stepSize: () => (mode === 'wheel' ? lineHeight() * WHEEL_LINES : lineHeight()),
+    onScroll: (steps) => {
+      if (mode === 'scrollback') terminal.scrollLines(steps);
+      else if (mode === 'wheel') wheel(steps);
+    },
+    requestFrame: (callback) => {
+      const id = requestAnimationFrame(callback);
+      return () => cancelAnimationFrame(id);
+    },
+  });
+
+  const onDown = (event: PointerEvent) => {
+    if (event.pointerType !== 'touch' || pointer !== null) return;
+    pointer = event.pointerId;
+    at = { x: event.clientX, y: event.clientY };
+    mode = scrollModeOf({
+      buffer: terminal.buffer.active.type,
+      mouseTracking: terminal.modes.mouseTrackingMode,
+    });
+    blocked = 0;
+    scroller.start(event.clientY, event.timeStamp);
+  };
+  const onMove = (event: PointerEvent) => {
+    if (event.pointerId !== pointer) return;
+    const travel = event.clientY - at.y;
+    at = { x: event.clientX, y: event.clientY };
+    if (mode !== 'none') {
+      scroller.move(event.clientY, event.timeStamp);
+      return;
+    }
+    // Said once per swipe, once it is clearly a swipe.
+    const before = blocked;
+    blocked += Math.abs(travel);
+    const limit = lineHeight() * UNAVAILABLE_LINES;
+    if (before < limit && blocked >= limit) onUnavailable();
+  };
+  const onUp = (event: PointerEvent) => {
+    if (event.pointerId !== pointer) return;
+    pointer = null;
+    if (mode !== 'none') scroller.end(event.timeStamp);
+  };
+  const onCancel = (event: PointerEvent) => {
+    if (event.pointerId !== pointer) return;
+    pointer = null;
+    scroller.cancel();
+  };
+
+  element.addEventListener('pointerdown', onDown);
+  element.addEventListener('pointermove', onMove);
+  element.addEventListener('pointerup', onUp);
+  element.addEventListener('pointercancel', onCancel);
+  return () => {
+    scroller.cancel();
+    element.removeEventListener('pointerdown', onDown);
+    element.removeEventListener('pointermove', onMove);
+    element.removeEventListener('pointerup', onUp);
+    element.removeEventListener('pointercancel', onCancel);
   };
 }

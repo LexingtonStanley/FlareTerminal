@@ -15,6 +15,7 @@ import { Spacing } from '@/constants/theme';
 import { useConnections } from '@/features/connections/connections-provider';
 import { SessionHealthStrip } from '@/features/health/health-strip';
 import { parseLocalUrl, type LocalAddress } from '@/features/preview/local-urls';
+import { ScrollHint } from '@/features/sessions/scroll-hint';
 import { SessionGate } from '@/features/sessions/session-gate';
 import { StatusBadge } from '@/features/sessions/session-status';
 import type { SessionSnapshot } from '@/features/sessions/session-manager';
@@ -67,6 +68,8 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
   // dictation) and the key bar for the keys it lacks.
   const [input, setInput] = useState<'keys' | 'hidden' | 'writing'>('keys');
   const writing = input === 'writing';
+  // When the last swipe couldn't scroll; a new one shows the hint afresh.
+  const [unscrollableAt, setUnscrollableAt] = useState<number | null>(null);
   const keys = {
     modifiers: view.modifiers,
     onModifiersChange: view.setModifiers,
@@ -132,6 +135,7 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
             {...view.viewCallbacks}
             onOpenLink={openTerminalLink}
             onTap={() => setInput((current) => (current === 'hidden' ? 'keys' : current))}
+            onScrollUnavailable={() => setUnscrollableAt(Date.now())}
             dom={{
               style: styles.flex,
               scrollEnabled: false,
@@ -140,6 +144,9 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
               hideKeyboardAccessoryView: true,
             }}
           />
+          {unscrollableAt !== null ? (
+            <ScrollHint key={unscrollableAt} onDismiss={() => setUnscrollableAt(null)} />
+          ) : null}
           {session.status.state === 'closed' ? (
             <ThemedView
               type="backgroundRaised"

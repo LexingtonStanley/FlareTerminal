@@ -12,7 +12,8 @@ web build), started from the RapidAppToolkit template.
 - **Sessions that keep running.** Open several at once and switch from the strip at the top
   of a session or from Home. Leaving a session doesn't close it, and coming back replays its
   screen exactly. On Android they stay connected while you use other apps, and a dropped
-  connection reconnects by itself.
+  connection reconnects by itself. Swipe to scroll back, with a fling; inside tmux (with
+  mouse mode on, as agent shortcuts set it) and zellij a swipe scrolls their own history.
 - **Shortcuts.** One tap connects and runs a command. An agent shortcut takes a folder, a
   name, the agent (Claude Code, Codex, Hermes or pi), a tmux or zellij session and whether to
   skip permission prompts, and writes the command, which stays yours to edit. Any other
@@ -116,11 +117,13 @@ the app reconnects by itself, and a shortcut's command runs again: run agents in
 zellij (agent shortcuts do) and that reattaches you to the same agent, still running.
 
 **Agent shortcuts.** The session is named after the agent, so a second tap attaches instead of
-starting another. Janus, Claude Code in `~/agents/janus`, skipping permission prompts:
+starting another. In tmux they turn on mouse mode for that session only, so a swipe scrolls
+tmux's history (zellij has it on already). Janus, Claude Code in `~/agents/janus`, skipping
+permission prompts:
 
 ```bash
 # tmux
-cd ~/agents/janus && tmux new -A -s Janus claude --dangerously-skip-permissions
+cd ~/agents/janus && tmux new -A -s Janus claude --dangerously-skip-permissions \; set -q mouse on
 # zellij: a layout that runs the agent (flare- prefixed, beside your own), then attach or start
 mkdir -p ~/.config/zellij/layouts && echo 'layout { pane command="claude" { args "--dangerously-skip-permissions"; }; }' > ~/.config/zellij/layouts/flare-janus.kdl && cd ~/agents/janus && if zellij ls -s 2>/dev/null | grep -qx Janus; then zellij attach Janus; else zellij -s Janus -n flare-janus; fi
 ```
@@ -231,7 +234,7 @@ Thumb-Key, Unexpected Keyboard and Termux's extra keys.
 2. Agent features: image and file hand-off, approve/deny buttons for agent prompts, alerts
    that reach the phone while the app is suspended (a small relay or push from the host).
 3. Jump hosts, `~/.ssh/config` import, port forwarding beyond previews.
-4. Touch selection and scrolling improvements, pinch to zoom, and a WebGL renderer.
+4. Touch selection, pinch to zoom, and a WebGL renderer.
 
 ## Limits
 

@@ -57,7 +57,10 @@ Traps already hit in this exact stack:
   `src/features/terminal/ttyd.ts`.
 - **xterm.js 6** paints its viewport black under the themed layer; `terminal-view.css` hides
   the seam this leaves in light mode. Click `.xterm-screen` in Playwright to focus the terminal
-  (`.xterm-rows` never counts as stable).
+  (`.xterm-rows` never counts as stable). It scrolls only for a mouse wheel, never a finger:
+  `touch-scroll.ts` and the view's `scrollByTouch` do that (the scrollback, or wheel events
+  xterm.js encodes for tmux and zellij). In Playwright, drag a finger with CDP's
+  `Input.dispatchTouchEvent` (`e2e/web/scroll.spec.ts`); the mouse API makes no touches.
 - **React Compiler lint (`react-hooks/refs`)** treats any object that contains a ref as a ref,
   so returning a ref from a hook taints everything else it returns. Let the component own the
   ref and pass it in (see `useSessionView`).
@@ -137,7 +140,8 @@ src/components/ui/       Screen, Button, TextField primitives: build screens fro
 src/components/          ThemedText, ThemedView, ExternalLink
 src/features/terminal/   terminal-view ('use dom' xterm.js), transport.ts (interface), ttyd.ts,
                          ssh-transport.ts, open-transport.ts, keys.ts (bytes for keys), composer,
-                         cursor-tap.ts (a tap on the edited line as arrow keys)
+                         cursor-tap.ts (a tap on the edited line as arrow keys),
+                         touch-scroll.ts (a swipe as scrolling, or wheel reports)
 src/features/ssh/        SSH-2 client (client.ts), packets and ciphers, host keys, user keys
                          (user-key.ts: Ed25519, ECDSA, RSA signing), OpenSSH key files
                          (private-key.ts, bcrypt-pbkdf.ts), the person's keys (keys.ts, provider,
@@ -147,7 +151,7 @@ src/features/sessions/   SessionManager (every open session, headless xterm), al
                          (screen preview, needs you/finished/working/idle), prompts.ts
                          (read off the screen: approval menus, [y/N], an agent's working
                          line, the keys for Approve/Deny), provider,
-                         useSessionView, session strip, status, attention banner
+                         useSessionView, session strip, status, attention banner, scroll hint
 src/features/keyboard/   Accessory bar and coding keyboard: layout, gestures, touch tracking,
                          modifiers, haptics (docs/keyboard.md explains the design)
 src/features/shortcuts/  Shortcut type and groups, agent-command.ts (the command for an agent:
