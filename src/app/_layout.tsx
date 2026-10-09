@@ -10,6 +10,7 @@ import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 
 import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui/button';
@@ -63,46 +64,50 @@ export default function RootLayout() {
   if (!ready) return null;
 
   return (
-    <ThemeProvider value={THEMES[mode]}>
-      <PreferencesProvider>
-        <ConnectionsProvider>
-          <ShortcutsProvider>
-            <SessionsProvider>
-              <Stack
-                screenOptions={{
-                  headerShown: false,
-                  headerShadowVisible: false,
-                  headerTintColor: colors.text,
-                  headerStyle: { backgroundColor: colors.background },
-                  headerTitleStyle: { ...sans(600), fontSize: 17 },
-                  contentStyle: { backgroundColor: colors.background },
-                }}>
-                {/* The title is what the back button on pushed screens says. */}
-                <Stack.Screen name="(tabs)" options={{ title: 'Home' }} />
-                <Stack.Screen
-                  name="connections/new"
-                  options={{ headerShown: true, title: 'New connection' }}
-                />
-                <Stack.Screen
-                  name="connections/[id]"
-                  options={{ headerShown: true, title: 'Edit connection' }}
-                />
-                <Stack.Screen
-                  name="shortcuts/new"
-                  options={{ headerShown: true, title: 'New shortcut' }}
-                />
-                <Stack.Screen
-                  name="shortcuts/[id]"
-                  options={{ headerShown: true, title: 'Edit shortcut' }}
-                />
-                <Stack.Screen name="session/[id]" options={{ headerShown: true, title: '' }} />
-              </Stack>
-              <AttentionBanner />
-            </SessionsProvider>
-          </ShortcutsProvider>
-        </ConnectionsProvider>
-      </PreferencesProvider>
-    </ThemeProvider>
+    // Keyboard avoidance that works with Android's edge-to-edge layout, where the window no
+    // longer shrinks for the keyboard (see Screen and the session screen).
+    <KeyboardProvider>
+      <ThemeProvider value={THEMES[mode]}>
+        <PreferencesProvider>
+          <ConnectionsProvider>
+            <ShortcutsProvider>
+              <SessionsProvider>
+                <Stack
+                  screenOptions={{
+                    headerShown: false,
+                    headerShadowVisible: false,
+                    headerTintColor: colors.text,
+                    headerStyle: { backgroundColor: colors.background },
+                    headerTitleStyle: { ...sans(600), fontSize: 17 },
+                    contentStyle: { backgroundColor: colors.background },
+                  }}>
+                  {/* The title is what the back button on pushed screens says. */}
+                  <Stack.Screen name="(tabs)" options={{ title: 'Home' }} />
+                  <Stack.Screen
+                    name="connections/new"
+                    options={{ headerShown: true, title: 'New connection' }}
+                  />
+                  <Stack.Screen
+                    name="connections/[id]"
+                    options={{ headerShown: true, title: 'Edit connection' }}
+                  />
+                  <Stack.Screen
+                    name="shortcuts/new"
+                    options={{ headerShown: true, title: 'New shortcut' }}
+                  />
+                  <Stack.Screen
+                    name="shortcuts/[id]"
+                    options={{ headerShown: true, title: 'Edit shortcut' }}
+                  />
+                  <Stack.Screen name="session/[id]" options={{ headerShown: true, title: '' }} />
+                </Stack>
+                <AttentionBanner />
+              </SessionsProvider>
+            </ShortcutsProvider>
+          </ConnectionsProvider>
+        </PreferencesProvider>
+      </ThemeProvider>
+    </KeyboardProvider>
   );
 }
 

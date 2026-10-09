@@ -13,5 +13,8 @@ module.exports = {
   ),
   moduleNameMapper: {
     '\\.css$': '<rootDir>/jest/style-stub.js',
+    // No native side in Jest; the library ships a mock (plain View and ScrollView).
+    '^react-native-keyboard-controller$':
+      '<rootDir>/node_modules/react-native-keyboard-controller/jest',
   },
 };

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui/button';
@@ -62,151 +62,146 @@ export function ConnectionForm({
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <Screen scroll edges={['left', 'right', 'bottom']} style={styles.screen}>
-        <SegmentedControl
-          label="Connection type"
-          options={KIND_OPTIONS}
-          value={values.kind}
-          onChange={(kind) => {
-            setValues((current) => ({ ...current, kind }));
-            setErrors({});
-          }}
-        />
+    <Screen scroll edges={['left', 'right', 'bottom']} style={styles.screen}>
+      <SegmentedControl
+        label="Connection type"
+        options={KIND_OPTIONS}
+        value={values.kind}
+        onChange={(kind) => {
+          setValues((current) => ({ ...current, kind }));
+          setErrors({});
+        }}
+      />
 
-        {isSsh ? (
-          <>
-            <TextField
-              label="Host"
-              placeholder="lexbox, 100.101.102.103 or user@host"
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-              returnKeyType="next"
-              monospace
-              testID="connection-host"
-              {...field('host')}
-            />
+      {isSsh ? (
+        <>
+          <TextField
+            label="Host"
+            placeholder="lexbox, 100.101.102.103 or user@host"
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            returnKeyType="next"
+            monospace
+            testID="connection-host"
+            {...field('host')}
+          />
+          <TextField
+            label="Username"
+            placeholder="Your username on that computer"
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoComplete="username"
+            textContentType="username"
+            returnKeyType="next"
+            monospace
+            testID="connection-username"
+            {...field('username')}
+          />
+          <TextField
+            label="Port"
+            keyboardType="number-pad"
+            returnKeyType="next"
+            monospace
+            {...field('port')}
+          />
+        </>
+      ) : (
+        <>
+          <TextField
+            label="Address"
+            placeholder="https://devbox.tailnet.ts.net or 192.168.1.20:7681"
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            textContentType="URL"
+            returnKeyType="next"
+            monospace
+            testID="connection-address"
+            {...field('url')}
+          />
+          {warning ? <Callout tone="warning">{warning}</Callout> : null}
+          {secretsSupported ? (
             <TextField
               label="Username"
-              placeholder="Your username on that computer"
+              placeholder="Optional: the user from ttyd -c user:password"
               autoCapitalize="none"
               autoCorrect={false}
               autoComplete="username"
               textContentType="username"
               returnKeyType="next"
-              monospace
-              testID="connection-username"
               {...field('username')}
             />
-            <TextField
-              label="Port"
-              keyboardType="number-pad"
-              returnKeyType="next"
-              monospace
-              {...field('port')}
-            />
-          </>
-        ) : (
-          <>
-            <TextField
-              label="Address"
-              placeholder="https://devbox.tailnet.ts.net or 192.168.1.20:7681"
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-              textContentType="URL"
-              returnKeyType="next"
-              monospace
-              testID="connection-address"
-              {...field('url')}
-            />
-            {warning ? <Callout tone="warning">{warning}</Callout> : null}
-            {secretsSupported ? (
-              <TextField
-                label="Username"
-                placeholder="Optional: the user from ttyd -c user:password"
-                autoCapitalize="none"
-                autoCorrect={false}
-                autoComplete="username"
-                textContentType="username"
-                returnKeyType="next"
-                {...field('username')}
-              />
-            ) : null}
-          </>
-        )}
+          ) : null}
+        </>
+      )}
 
-        {secretsSupported ? (
-          <TextField
-            label="Password"
-            placeholder={isSsh ? 'Optional: leave empty to be asked each time' : undefined}
-            secureTextEntry
-            autoCapitalize="none"
-            autoComplete="password"
-            textContentType="password"
-            returnKeyType="done"
-            onSubmitEditing={submit}
-            {...field('password')}
+      {secretsSupported ? (
+        <TextField
+          label="Password"
+          placeholder={isSsh ? 'Optional: leave empty to be asked each time' : undefined}
+          secureTextEntry
+          autoCapitalize="none"
+          autoComplete="password"
+          textContentType="password"
+          returnKeyType="done"
+          onSubmitEditing={submit}
+          {...field('password')}
+        />
+      ) : null}
+
+      <TextField
+        label="Name"
+        placeholder="Optional, e.g. Lexbox"
+        returnKeyType="done"
+        testID="connection-name"
+        {...field('name')}
+      />
+
+      {!secretsSupported ? (
+        <Callout>
+          {isSsh
+            ? "SSH runs in the Android and iOS apps: browsers can't open SSH connections. You can still save it here."
+            : "Browsers can't send a ttyd username and password. Use the Android or iOS app for hosts started with -c, or put ttyd behind a sign-in proxy."}
+        </Callout>
+      ) : null}
+
+      {isSsh && hostKey ? (
+        <Card>
+          <View style={styles.inline}>
+            <Icon name="key" size={16} color="success" />
+            <ThemedText type="smallBold">Trusted host key</ThemedText>
+          </View>
+          <ThemedText
+            type="code"
+            selectable
+            style={[styles.well, { backgroundColor: theme.backgroundSelected }]}>
+            {hostKey.fingerprint}
+          </ThemedText>
+          <Button
+            title="Forget host key"
+            variant="secondary"
+            size="small"
+            onPress={hostKey.onForget}
+          />
+        </Card>
+      ) : null}
+
+      <View style={styles.actions}>
+        <Button title={submitLabel} onPress={submit} testID="connection-save" />
+        {onDelete ? (
+          <Button
+            title={confirmingDelete ? 'Tap again to delete' : 'Delete connection'}
+            variant="danger"
+            onPress={() => (confirmingDelete ? onDelete() : setConfirmingDelete(true))}
           />
         ) : null}
-
-        <TextField
-          label="Name"
-          placeholder="Optional, e.g. Lexbox"
-          returnKeyType="done"
-          testID="connection-name"
-          {...field('name')}
-        />
-
-        {!secretsSupported ? (
-          <Callout>
-            {isSsh
-              ? "SSH runs in the Android and iOS apps: browsers can't open SSH connections. You can still save it here."
-              : "Browsers can't send a ttyd username and password. Use the Android or iOS app for hosts started with -c, or put ttyd behind a sign-in proxy."}
-          </Callout>
-        ) : null}
-
-        {isSsh && hostKey ? (
-          <Card>
-            <View style={styles.inline}>
-              <Icon name="key" size={16} color="success" />
-              <ThemedText type="smallBold">Trusted host key</ThemedText>
-            </View>
-            <ThemedText
-              type="code"
-              selectable
-              style={[styles.well, { backgroundColor: theme.backgroundSelected }]}>
-              {hostKey.fingerprint}
-            </ThemedText>
-            <Button
-              title="Forget host key"
-              variant="secondary"
-              size="small"
-              onPress={hostKey.onForget}
-            />
-          </Card>
-        ) : null}
-
-        <View style={styles.actions}>
-          <Button title={submitLabel} onPress={submit} testID="connection-save" />
-          {onDelete ? (
-            <Button
-              title={confirmingDelete ? 'Tap again to delete' : 'Delete connection'}
-              variant="danger"
-              onPress={() => (confirmingDelete ? onDelete() : setConfirmingDelete(true))}
-            />
-          ) : null}
-        </View>
-      </Screen>
-    </KeyboardAvoidingView>
+      </View>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
   screen: { gap: Spacing.three + 4 },
   inline: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   well: {

@@ -84,6 +84,13 @@ Traps already hit in this exact stack:
 --platform android` before and after a change you mean to ship over the air. A build from a
   machine whose `node_modules` is stale fails EAS's "Configure expo-updates" phase (runtime
   version mismatch): `npm install` first, as `npm run build:preview` does.
+- **The keyboard covers inputs on Android**: apps draw edge-to-edge, so the window no longer
+  shrinks for the keyboard, and React Native's `KeyboardAvoidingView` (with Expo's suggested
+  `behavior={undefined}` on Android) does nothing. Forms use `<Screen scroll>`, which is a
+  `KeyboardAwareScrollView` from react-native-keyboard-controller (it keeps the focused field
+  in view); fixed layouts use that library's `KeyboardAvoidingView` with `behavior="padding"`.
+  Every nested ScrollView needs `keyboardShouldPersistTaps="handled"` too, or the first tap
+  with the keyboard open only closes it.
 - **Hermes** has `TextEncoder`, and Expo installs a streaming `TextDecoder`, `URL` and
   `URLSearchParams` on native, so use the standard APIs.
 - **`EXPO_PUBLIC_*`** variables are only inlined when written exactly as

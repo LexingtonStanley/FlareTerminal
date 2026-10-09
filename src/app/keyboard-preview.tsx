@@ -1,15 +1,8 @@
 import { Stack } from 'expo-router';
 import { useHeaderHeight } from 'expo-router/react-navigation';
 import { useEffect, useRef, useState } from 'react';
-import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -48,7 +41,8 @@ export default function KeyboardPreviewScreen() {
       <Stack.Screen options={{ headerShown: true, title: 'Keyboard preview' }} />
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        // keyboard-controller's version, so Android's edge-to-edge layout avoids it too.
+        behavior="padding"
         keyboardVerticalOffset={headerHeight}>
         <View style={[styles.flex, { backgroundColor: terminalTheme.background }]}>
           <TerminalView

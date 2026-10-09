@@ -3,14 +3,8 @@ import { Link, Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useHeaderHeight } from 'expo-router/react-navigation';
 import { useRef, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  Keyboard,
-  KeyboardAvoidingView,
-  Platform,
-  StyleSheet,
-  useWindowDimensions,
-  View,
-} from 'react-native';
+import { Keyboard, Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -106,7 +100,8 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
       <SessionStrip currentId={session.id} />
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        // keyboard-controller's version, so Android's edge-to-edge layout avoids it too.
+        behavior="padding"
         keyboardVerticalOffset={headerHeight}>
         <View style={[styles.flex, { backgroundColor: terminalTheme.background }]}>
           <TerminalView
