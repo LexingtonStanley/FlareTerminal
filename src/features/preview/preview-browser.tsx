@@ -49,7 +49,10 @@ export function PreviewBrowser({
   const theme = useTheme();
   const webView = useRef<WebViewHandle>(null);
   const origin = `http://localhost:${localPort}`;
-  const [start] = useState(`${origin}${path}`);
+  const [start, setStart] = useState(`${origin}${path}`);
+  // Android's renderer can die (memory); its web view can't be used again, so a new one
+  // takes its place at the same page.
+  const [renderer, setRenderer] = useState(0);
   const [navigation, setNavigation] = useState<Navigation>({
     url: start,
     canGoBack: false,
@@ -77,6 +80,7 @@ export function PreviewBrowser({
   return (
     <View style={styles.flex}>
       <WebView
+        key={renderer}
         ref={webView as never}
         source={{ uri: start }}
         aria-label={`Preview of localhost:${port}`}
@@ -99,9 +103,12 @@ export function PreviewBrowser({
         domStorageEnabled
         allowsBackForwardNavigationGestures
         allowsInlineMediaPlayback
-        // The system reclaimed the page's process: load it again rather than go blank.
+        // iOS reclaimed the page's process: load it again rather than go blank.
         onContentProcessDidTerminate={() => webView.current?.reload()}
-        onRenderProcessGone={() => webView.current?.reload()}
+        onRenderProcessGone={() => {
+          setStart(navigation.url);
+          setRenderer((count) => count + 1);
+        }}
         renderError={(_domain, _code, description) => (
           <ThemedView style={styles.failed}>
             <ThemedText type="headline" role="alert">

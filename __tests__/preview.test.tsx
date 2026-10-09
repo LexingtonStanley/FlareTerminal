@@ -1,5 +1,5 @@
-import { act, userEvent, waitFor } from '@testing-library/react-native';
-import { router } from 'expo-router';
+import { act, fireEvent, userEvent, waitFor } from '@testing-library/react-native';
+import { router, type Href } from 'expo-router';
 import { AppState, type AppStateStatus } from 'react-native';
 import { screen } from 'expo-router/testing-library';
 
@@ -173,6 +173,42 @@ describe('dev server preview', () => {
     expect(await webView(3000)).toBe('http://localhost:3000/');
     localServers[1].connect().events.onData(bytes('GET / HTTP/1.1\r\n\r\n'));
     await waitFor(() => expect(transport.tunnels).toHaveLength(2));
+
+    // Control Center or a Face ID sheet only makes the app inactive: the port stays.
+    await act(() => appStateListeners.forEach((listener) => listener('inactive')));
+    await act(() => appStateListeners.forEach((listener) => listener('active')));
+    expect(localServers).toHaveLength(2);
+  });
+
+  it('opens a new web view at the same page when Android’s renderer dies', async () => {
+    writeJson('flare.preview-ports.v1', { devbox: 3000 });
+    const { user } = await openSession();
+    await user.press(screen.getByRole('button', { name: 'Preview a dev server' }));
+    const view = await screen.findByLabelText('Preview of localhost:3000');
+    await act(() =>
+      fireEvent(view, 'navigationStateChange', {
+        url: 'http://localhost:3000/settings',
+        canGoBack: true,
+        canGoForward: false,
+      })
+    );
+
+    await act(() => fireEvent(view, 'renderProcessGone', { nativeEvent: { didCrash: false } }));
+
+    expect(await webView(3000)).toBe('http://localhost:3000/settings');
+    expect(screen.getByLabelText('Preview of localhost:3000')).not.toBe(view);
+  });
+
+  it('ignores a link that repeats its parameters', async () => {
+    const { app } = await openSession();
+    const sessionPath = (app as unknown as { getPathname(): string }).getPathname();
+
+    await act(() =>
+      router.push(`${sessionPath}/preview?port=3000&port=4000&path=/a&path=/b` as Href)
+    );
+
+    // No port to go to: it asks for one.
+    expect(await screen.findByLabelText('Port')).toBeOnTheScreen();
   });
 
   it('offers no preview over ttyd', async () => {

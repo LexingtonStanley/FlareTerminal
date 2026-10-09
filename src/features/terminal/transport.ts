@@ -27,12 +27,16 @@ export type TransportListener = {
 
 export type InputMode = 'normal' | 'secret';
 
-/** Bytes from the other end of a tunnel, and its end. */
+/**
+ * Bytes from the other end of a tunnel, and its end: it closed, or has nothing more to send.
+ * A handler that throws closes that tunnel only.
+ */
 export type TunnelEvents = {
   onData(bytes: Uint8Array): void;
   onClose(): void;
 };
 
+/** `close()` ends the tunnel from this side; no events follow it. */
 export type Tunnel = { write(bytes: Uint8Array): void; close(): void };
 
 export interface TerminalTransport {

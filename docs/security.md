@@ -76,7 +76,13 @@ makes opens a `direct-tcpip` channel to `localhost:<port>` as the host resolves 
 - **Who can reach the port.** The phone listens on 127.0.0.1 only, so other devices on the
   network can't use it. Other apps on the same phone can while the preview is open, as with
   any `ssh -L`. The port closes when the preview closes; its connections close then too, or
-  when the session drops.
+  when the session drops. The browser opens `localhost`, which can also mean `::1`: an app
+  already listening there on the same port would answer instead of the host.
+- **What the browser keeps.** Cookies, storage and the cache stay between previews, so a
+  login sticks, as in a desktop browser (chosen over starting clean each time). The
+  same goes across computers: two hosts previewed on the same port share that origin's
+  storage, cookies for `localhost` are sent to every port, and a service worker one page
+  registers can see later pages on its port.
 - **The page is the host's content**, untrusted like terminal output. The web view loads only
   `http`, `https`, `about`, `blob` and `data` addresses, so a page can't open other apps or
   Flare's own links, and new windows stay in the preview. Nothing connects the page to the

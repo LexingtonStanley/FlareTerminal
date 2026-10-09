@@ -10,6 +10,7 @@ export const listenNode: Listen = async (port, onConnection) => {
     socket.on('error', () => {});
     onConnection({
       write: (bytes) => socket.write(bytes),
+      end: () => socket.end(),
       close: () => socket.destroy(),
       listen: (events) => {
         socket.on('data', (data: Buffer) => events.onData(new Uint8Array(data)));

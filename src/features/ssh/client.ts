@@ -146,8 +146,10 @@ export class SshChannel {
   replies: ((ok: boolean) => void)[] = [];
   private dataHandler: ((bytes: Uint8Array) => void) | null = null;
   private closeHandler: ((channel: SshChannel) => void) | null = null;
+  private eofHandler: (() => void) | null = null;
   private buffered: Uint8Array[] = [];
   private closeSeen = false;
+  private eofSeen = false;
 
   constructor(
     private readonly client: SshClient,
@@ -170,10 +172,25 @@ export class SshChannel {
     if (this.closeSeen) handler(this);
   }
 
+  /**
+   * The host has nothing more to send (EOF). OpenSSH then waits for our EOF or close
+   * before it closes the channel itself.
+   */
+  set onEof(handler: () => void) {
+    this.eofHandler = handler;
+    if (this.eofSeen) handler();
+  }
+
   /** @internal */
   receiveData(bytes: Uint8Array) {
     if (this.dataHandler) this.dataHandler(bytes);
     else this.buffered.push(bytes);
+  }
+
+  /** @internal */
+  receiveEof() {
+    this.eofSeen = true;
+    this.eofHandler?.();
   }
 
   /** @internal */
@@ -923,6 +940,7 @@ export class SshClient {
         return;
       }
       case MSG.CHANNEL_EOF:
+        channel.receiveEof();
         return;
       case MSG.CHANNEL_CLOSE:
         this.closeChannel(channel);

@@ -62,8 +62,10 @@ export function usePortForward(sessionId: string, port: number, host: string) {
       Platform.OS === 'ios'
         ? AppState.addEventListener('change', (next) => {
             if (next === 'background') away = true;
-            if (next !== 'active' || !away || !forward) return;
+            if (next !== 'active' || !away) return;
             away = false;
+            // Still starting: it listens after this anyway.
+            if (!forward) return;
             const previous = forward;
             forward = null;
             previous.stop();

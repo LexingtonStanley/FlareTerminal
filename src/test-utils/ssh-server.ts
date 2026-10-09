@@ -81,7 +81,11 @@ export async function startTestSshServer({
             const stream = accept();
             stream.on('error', () => target.destroy());
             target.on('error', () => stream.close());
-            stream.pipe(target).pipe(stream);
+            stream.pipe(target);
+            // Like OpenSSH: EOF when the target closes, then the client closes the channel.
+            target.on('data', (data: Buffer) => stream.write(data));
+            target.on('end', () => stream.eof());
+            stream.on('close', () => target.destroy());
           });
         });
       }

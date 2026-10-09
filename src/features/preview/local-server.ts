@@ -13,8 +13,24 @@ function listenOn(
       socket.setNoDelay(true);
       // Errors end in 'close', which closes the tunnel.
       socket.on('error', () => {});
+      // Closing drops writes still queued (iOS) or races them (Android), so a close that
+      // must deliver them waits for the last one.
+      let writing = 0;
+      let ending = false;
       onConnection({
-        write: (bytes) => socket.write(bytes),
+        write: (bytes) => {
+          // Already gone (the browser reset it); its 'close' is on the way.
+          if (socket.destroyed) return;
+          writing += 1;
+          socket.write(bytes, undefined, () => {
+            writing -= 1;
+            if (ending && writing === 0) socket.destroy();
+          });
+        },
+        end: () => {
+          ending = true;
+          if (writing === 0) socket.destroy();
+        },
         close: () => socket.destroy(),
         listen: (events) => {
           socket.on('data', (data) =>

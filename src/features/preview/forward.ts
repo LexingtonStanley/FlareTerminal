@@ -10,6 +10,9 @@ import type { Tunnel, TunnelEvents } from '@/features/terminal/transport';
 /** A connection accepted on the phone's port, from the preview's browser. */
 export type LocalConnection = {
   write(bytes: Uint8Array): void;
+  /** Closes once everything written has gone out: the host finished its answer. */
+  end(): void;
+  /** Closes now, dropping what hasn't gone out. */
   close(): void;
   /** Call once, straight away: bytes from the browser, and its end. */
   listen(events: TunnelEvents): void;
@@ -53,11 +56,12 @@ export async function startForward({
     let tunnel: Tunnel | null = null;
     let pending: Uint8Array[] = [];
     let closed = false;
-    const close = () => {
+    const close = (finished = false) => {
       if (closed) return;
       closed = true;
       open.delete(close);
-      connection.close();
+      if (finished) connection.end();
+      else connection.close();
       tunnel?.close();
     };
     if (stopped) return connection.close();
@@ -65,9 +69,15 @@ export async function startForward({
 
     connection.listen({
       onData: (bytes) => (tunnel ? tunnel.write(bytes) : pending.push(bytes)),
-      onClose: close,
+      onClose: () => close(),
     });
-    openTunnel({ onData: (bytes) => connection.write(bytes), onClose: close }).then(
+    openTunnel({
+      onData: (bytes) => {
+        if (!closed) connection.write(bytes);
+      },
+      // The dev server finished: the browser still gets the end of its answer.
+      onClose: () => close(true),
+    }).then(
       (opened) => {
         if (closed) return opened.close();
         tunnel = opened;

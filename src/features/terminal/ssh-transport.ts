@@ -95,14 +95,36 @@ export class SshTransport implements TerminalTransport {
     }
     // "localhost" as the host resolves it: a dev server may listen on IPv4 or IPv6 only.
     const channel = await this.client.openDirectTcpip('localhost', port);
+    // The connection can end while the channel opens.
+    if (this.finished || this.closedByUs || channel.closed) {
+      channel.close();
+      throw new Error('Not connected');
+    }
     const end = () => {
       if (!this.tunnels.delete(end)) return;
       events.onClose();
     };
     this.tunnels.add(end);
-    channel.onData = (bytes) => events.onData(bytes);
+    channel.onData = (bytes) => {
+      if (!this.tunnels.has(end)) return;
+      try {
+        events.onData(bytes);
+      } catch {
+        // A tunnel whose other end failed closes alone, never the whole connection.
+        channel.close();
+        end();
+      }
+    };
+    // The dev server closed its connection (EOF), or the channel closed.
+    channel.onEof = end;
     channel.onClose = end;
-    return { write: (bytes) => channel.write(bytes), close: () => channel.close() };
+    return {
+      write: (bytes) => channel.write(bytes),
+      close: () => {
+        this.tunnels.delete(end);
+        channel.close();
+      },
+    };
   }
 
   private endTunnels() {

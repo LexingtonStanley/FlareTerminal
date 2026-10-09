@@ -3,7 +3,12 @@
  */
 import { once } from 'node:events';
 import { createServer, get, type RequestListener, type Server } from 'node:http';
-import { createConnection, type AddressInfo } from 'node:net';
+import {
+  createConnection,
+  createServer as createTcpServer,
+  type AddressInfo,
+  type Server as TcpServer,
+} from 'node:net';
 
 import { ChannelOpenError, OPEN_FAILURE } from '@/features/ssh/client';
 import type { KnownHosts } from '@/features/ssh/known-hosts';
@@ -23,12 +28,12 @@ import { startForward, tunnelErrorMessage, type LocalConnection } from './forwar
 jest.mock('@/lib/storage', () => jest.requireActual('@/test-utils/memory-storage'));
 
 const trustAll: KnownHosts = { get: () => null, trust: () => {}, forget: () => {} };
-const servers: Server[] = [];
+const servers: (Server | TcpServer)[] = [];
 
 afterEach(async () => {
   servers.splice(0).forEach((server) => {
     server.close();
-    server.closeAllConnections();
+    if ('closeAllConnections' in server) server.closeAllConnections();
   });
   await stopTestSshServers();
 });
@@ -83,7 +88,16 @@ async function connectedTransport() {
   );
   transport.connect({ cols: 80, rows: 24 });
   await waitFor(() => statuses.at(-1) === 'connected');
-  return { transport, sshServer };
+  return { transport, sshServer, statuses };
+}
+
+/** A server that answers each connection with `reply`, then closes it. */
+async function closingServer(reply: string) {
+  const server = createTcpServer((socket) => socket.end(reply));
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  servers.push(server);
+  return (server.address() as AddressInfo).port;
 }
 
 describe('startForward through SSH', () => {
@@ -156,6 +170,45 @@ describe('startForward through SSH', () => {
     }
   });
 
+  it('delivers a page the dev server ends by closing its connection', async () => {
+    // No Content-Length: the page ends when the connection does. OpenSSH sends EOF here
+    // and waits for the client to close the channel.
+    const port = await closingServer(
+      'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nthe whole page'
+    );
+    const { transport } = await connectedTransport();
+    const forward = await startForward({
+      port,
+      listen: listenNode,
+      openTunnel: (events) => transport.openTunnel(port, events),
+    });
+
+    expect(await load(`http://127.0.0.1:${forward.localPort}/`)).toBe('the whole page');
+    forward.stop();
+    transport.close();
+  });
+
+  it('closes only the tunnel when its other end fails, never the session', async () => {
+    const port = await closingServer('a reply the browser is gone for');
+    const { transport, statuses } = await connectedTransport();
+    const closed = jest.fn();
+
+    await transport.openTunnel(port, {
+      onData: () => {
+        // What react-native-tcp-socket throws when writing to a browser that went away.
+        throw new Error('Socket is closed.');
+      },
+      onClose: closed,
+    });
+
+    await waitFor(() => closed.mock.calls.length === 1);
+    expect(statuses.at(-1)).toBe('connected');
+    const again = jest.fn();
+    await transport.openTunnel(port, { onData: again, onClose: () => {} });
+    await waitFor(() => again.mock.calls.length > 0);
+    transport.close();
+  });
+
   it('closes a browser’s connection when its tunnel can’t open, and says why', async () => {
     const { transport } = await connectedTransport();
     const onError = jest.fn();
@@ -190,10 +243,12 @@ describe('startForward', () => {
         const browser = {
           received: [] as string[],
           closed: false,
+          ended: false,
           events: null as TunnelEvents | null,
         };
         accept({
           write: (bytes) => browser.received.push(new TextDecoder().decode(bytes)),
+          end: () => (browser.closed = browser.ended = true),
           close: () => (browser.closed = true),
           listen: (events) => (browser.events = events),
         });
@@ -255,8 +310,12 @@ describe('startForward', () => {
     const browser = local.connect();
     remote.opened();
     await Promise.resolve();
+    remote.events().onData(new TextEncoder().encode('the end'));
     remote.events().onClose();
-    expect(browser.closed).toBe(true);
+    // The dev server finished: its last bytes still reach the browser.
+    expect(browser.ended).toBe(true);
+    remote.events().onData(new TextEncoder().encode('more'));
+    expect(browser.received).toEqual(['the end']);
 
     const second = local.connect();
     second.events!.onClose();
@@ -278,7 +337,7 @@ describe('startForward', () => {
     forward.stop();
 
     expect(local.closed).toHaveBeenCalled();
-    expect(browser.closed).toBe(true);
+    expect(browser).toMatchObject({ closed: true, ended: false });
   });
 
   it('reports a tunnel that won’t open', async () => {

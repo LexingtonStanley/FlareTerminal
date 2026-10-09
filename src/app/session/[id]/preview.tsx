@@ -19,16 +19,21 @@ import { useTheme } from '@/hooks/use-theme';
 
 /** A session's dev server, forwarded over its SSH connection and shown in a browser. */
 export default function PreviewScreen() {
-  const { id, port, path } = useLocalSearchParams<{ id: string; port?: string; path?: string }>();
+  const { id, port, path } = useLocalSearchParams<{
+    id: string;
+    port?: string | string[];
+    path?: string | string[];
+  }>();
 
   return (
     <SessionGate id={id}>
       {(session) => (
         <Preview
           session={session}
-          linkedPort={parsePort(port ?? '')}
+          // A link that repeats a parameter gives a list: ignore it.
+          linkedPort={typeof port === 'string' ? parsePort(port) : null}
           // Only a path: the preview's own origin goes in front of it.
-          path={path?.startsWith('/') ? path : '/'}
+          path={typeof path === 'string' && path.startsWith('/') ? path : '/'}
         />
       )}
     </SessionGate>

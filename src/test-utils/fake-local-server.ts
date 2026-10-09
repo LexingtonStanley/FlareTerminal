@@ -12,7 +12,8 @@ export type FakeLocalServer = {
   /** The port asked for; it is also the port given. */
   port: number;
   closed: boolean;
-  connect(): { events: TunnelEvents; received: string[]; closed: boolean };
+  /** `ended`: closed after everything written went out, rather than dropped. */
+  connect(): { events: TunnelEvents; received: string[]; closed: boolean; ended: boolean };
 };
 
 export const localServers: FakeLocalServer[] = [];
@@ -26,9 +27,11 @@ export const listenLocal: Listen = async (port, onConnection) => {
         events: null as unknown as TunnelEvents,
         received: [] as string[],
         closed: false,
+        ended: false,
       };
       const connection: LocalConnection = {
         write: (bytes) => browser.received.push(new TextDecoder().decode(bytes)),
+        end: () => (browser.closed = browser.ended = true),
         close: () => (browser.closed = true),
         listen: (events) => (browser.events = events),
       };
