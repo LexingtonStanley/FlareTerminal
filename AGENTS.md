@@ -78,10 +78,12 @@ Traps already hit in this exact stack:
   `__tests__/native-globals.test.ts` loads every route with React Native's globals; a new
   native-only library may need a stub there.
 - **Over-the-air updates match builds by fingerprint** (`runtimeVersion.policy: fingerprint`):
-  the native project, app config and `package.json` scripts. Publish preview updates with
-  `APP_VARIANT=preview` or they never reach preview builds, and check
-  `APP_VARIANT=preview npx expo-updates runtimeversion:resolve --platform android` before and
-  after a change you mean to ship over the air.
+  the native project (from `node_modules`), app config and `package.json` scripts. Publish
+  preview updates with `APP_VARIANT=preview` (`npm run update:preview`) or they never reach
+  preview builds, and check `APP_VARIANT=preview npx expo-updates runtimeversion:resolve
+--platform android` before and after a change you mean to ship over the air. A build from a
+  machine whose `node_modules` is stale fails EAS's "Configure expo-updates" phase (runtime
+  version mismatch): `npm install` first, as `npm run build:preview` does.
 - **Hermes** has `TextEncoder`, and Expo installs a streaming `TextDecoder`, `URL` and
   `URLSearchParams` on native, so use the standard APIs.
 - **`EXPO_PUBLIC_*`** variables are only inlined when written exactly as
@@ -99,6 +101,8 @@ Traps already hit in this exact stack:
 | `npm start`                                   | Dev server (`w` opens web; native needs a development build)                        |
 | `npx expo install <pkg>`                      | Add a dependency at the SDK-compatible version. Never use plain `npm install <pkg>` |
 | `npm run doctor`                              | `expo-doctor`: dependency and config problems                                       |
+| `npm run build:preview`                       | `npm install`, then an Android preview build on EAS                                 |
+| `npm run update:preview -- --message "…"`     | Over-the-air update for preview builds (sets `APP_VARIANT=preview`)                 |
 | `npm run rename -- --name "X" --id com.x.app` | Give a new app its own name and IDs                                                 |
 
 ## Layout

@@ -35,9 +35,8 @@ The app needs a build of its own (SSH uses a native TCP socket, so Expo Go can't
 With a free [Expo](https://expo.dev/signup) account, from this folder on your laptop:
 
 ```bash
-npm install
 npx eas-cli@latest login
-npx eas-cli@latest build --profile preview --platform android   # an APK to install
+npm run build:preview   # npm install, then an APK built on EAS
 ```
 
 EAS builds in the cloud and gives a link and QR code to install it. For an iPhone, Apple only
@@ -52,13 +51,18 @@ For development, `--profile development` makes a development build that loads yo
 the air in about a minute, without a new build:
 
 ```bash
-APP_VARIANT=preview npx eas-cli@latest update --channel preview --environment preview --message "What changed"
+npm run update:preview -- --message "What changed"
 ```
 
-Then close and reopen the app (twice if needed). Keep `APP_VARIANT=preview`: a build only
-accepts updates whose runtime version (a fingerprint of the native project and app config)
-matches its own, and the preview app config differs. New native libraries, plugins, app config
-or `package.json` scripts change the fingerprint and need a new build.
+Then close and reopen the app (twice if needed). A build only accepts updates whose runtime
+version (a fingerprint of the native project and app config) matches its own; the script sets
+`APP_VARIANT=preview` so it does. New native libraries, plugins, app config or `package.json`
+scripts change the fingerprint and need a new build.
+
+**After pulling changes, run `npm install` before building or updating** (`build:preview` does
+it for you). The fingerprint comes from your `node_modules`, and EAS stops a build ("Configure
+expo-updates" fails with a runtime version mismatch) when it differs from the one EAS computes
+after a clean install.
 
 ## Connect to your computer
 
