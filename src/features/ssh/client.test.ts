@@ -4,7 +4,7 @@
 // Interoperability tests: our client against the ssh2 package's server (an independent
 // implementation) over a real TCP socket.
 import { once } from 'node:events';
-import { createConnection } from 'node:net';
+import { createConnection, createServer, type AddressInfo, type Socket } from 'node:net';
 import { utils, type AuthenticationType, type CipherAlgorithm } from 'ssh2';
 
 import {
@@ -17,7 +17,14 @@ import {
 import { generateTestKey, type TestKeyType } from '@/test-utils/ssh-keys';
 
 import { fromUtf8, utf8 } from './bytes';
-import { SshChannel, SshClient, type SshClientOptions, type SshCloseReason } from './client';
+import {
+  ChannelOpenError,
+  OPEN_FAILURE,
+  SshChannel,
+  SshClient,
+  type SshClientOptions,
+  type SshCloseReason,
+} from './client';
 import { fingerprint } from './host-keys';
 import { importPrivateKey } from './private-key';
 import { generateUserKey, publicKeyBlob, publicKeyLine } from './user-key';
@@ -303,6 +310,63 @@ describe('SshClient against the ssh2 server', () => {
     channel.write(utf8('after rekey\n'));
 
     await waitFor(() => output.text.includes('echo:after rekey'));
+  });
+
+  it('forwards a port alongside the shell (direct-tcpip)', async () => {
+    // A TCP service on the "host": it answers each line in capitals.
+    const service = createServer((socket) =>
+      socket.on('data', (data) => socket.write(data.toString().toUpperCase()))
+    );
+    service.listen(0, '127.0.0.1');
+    await once(service, 'listening');
+    const servicePort = (service.address() as AddressInfo).port;
+    const accepted: Socket[] = [];
+    service.on('connection', (socket) => accepted.push(socket));
+    const server = await startServer();
+    const { client } = await connect(server.port, { password: 'correct-horse' });
+    await client.handshake();
+    await client.authenticate();
+    const { channel: shellChannel, output } = await shell(client);
+
+    const tunnel = await client.openDirectTcpip('localhost', servicePort);
+    let received = '';
+    tunnel.onData = (data) => (received += fromUtf8(data));
+    tunnel.write(utf8('hello through ssh\n'));
+
+    await waitFor(() => received === 'HELLO THROUGH SSH\n');
+    expect(server.tunnels).toEqual([{ host: 'localhost', port: servicePort }]);
+    // The shell is untouched.
+    shellChannel.write(utf8('still here\n'));
+    await waitFor(() => output.text.includes('echo:still here'));
+
+    // Closing the tunnel ends the service's connection.
+    tunnel.close();
+    await waitFor(() => accepted[0]?.closed === true);
+    service.close();
+  });
+
+  it('says why a port can’t be forwarded', async () => {
+    const refusing = await startServer();
+    const { client } = await connect(refusing.port, { password: 'correct-horse' });
+    await client.handshake();
+    await client.authenticate();
+    // Nothing listens on port 1.
+    const nothing = await client.openDirectTcpip('localhost', 1).catch((error) => error);
+    expect(nothing).toBeInstanceOf(ChannelOpenError);
+    expect(nothing.reason).toBe(OPEN_FAILURE.CONNECT_FAILED);
+
+    const locked = await startServer({ forwarding: false });
+    const other = await connect(locked.port, { password: 'correct-horse' });
+    await other.client.handshake();
+    await other.client.authenticate();
+    const prohibited = await other.client.openDirectTcpip('localhost', 80).catch((error) => error);
+    expect(prohibited).toBeInstanceOf(ChannelOpenError);
+    expect(prohibited.reason).toBe(OPEN_FAILURE.ADMINISTRATIVELY_PROHIBITED);
+
+    // A refused tunnel leaves the connection usable.
+    const { channel, output } = await shell(other.client);
+    channel.write(utf8('ok\n'));
+    await waitFor(() => output.text.includes('echo:ok'));
   });
 
   it('reports the exit status when the shell ends', async () => {

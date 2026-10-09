@@ -7,6 +7,8 @@ import type {
   TerminalSize,
   TerminalTransport,
   TransportListener,
+  Tunnel,
+  TunnelEvents,
 } from '@/features/terminal/transport';
 
 import { parseOsc777, parseOsc9, parseOsc99, type AgentAlert } from './alerts';
@@ -268,6 +270,20 @@ class Session {
     return lines;
   }
 
+  /** The last `limit` lines of the screen and its scrollback, wrapped lines joined. */
+  recentText(limit: number): string {
+    const buffer = this.headless.buffer.active;
+    const end = buffer.baseY + this.headless.rows;
+    const lines: string[] = [];
+    for (let y = Math.max(0, end - limit); y < end; y++) {
+      const line = buffer.getLine(y);
+      const text = line?.translateToString(true) ?? '';
+      if (line?.isWrapped && lines.length) lines[lines.length - 1] += text;
+      else lines.push(text);
+    }
+    return lines.join('\n');
+  }
+
   /** Reads the screen after a burst of output: questions, and agents starting or stopping. */
   private checkScreen() {
     if (this.closed) return;
@@ -366,6 +382,14 @@ class Session {
     this.size = size;
     this.headless.resize(size.cols, size.rows);
     this.transport?.resize(size);
+  }
+
+  /** A tunnel through the session's current connection (it changes on a reconnect). */
+  openTunnel(port: number, events: TunnelEvents): Promise<Tunnel> {
+    if (this.snapshot.status.state !== 'connected' || !this.transport?.openTunnel) {
+      return Promise.reject(new Error('Not connected'));
+    }
+    return this.transport.openTunnel(port, events);
   }
 
   /** Reconnects now, e.g. from the Reconnect button: a fresh run of retries if it fails. */
@@ -530,6 +554,14 @@ export class SessionManager {
     this.sessions.get(id)?.reconnect();
   }
 
+  /** Opens a tunnel to `port` on the session's host (see TerminalTransport.openTunnel). */
+  openTunnel(id: string, port: number, events: TunnelEvents): Promise<Tunnel> {
+    return (
+      this.sessions.get(id)?.openTunnel(port, events) ??
+      Promise.reject(new Error('The session was closed'))
+    );
+  }
+
   close(id: string) {
     const session = this.sessions.get(id);
     if (!session) return;
@@ -542,6 +574,11 @@ export class SessionManager {
   /** What a session's screen shows, for the inbox; null for a closed session. */
   activity(id: string): SessionActivity | null {
     return this.sessions.get(id)?.activity() ?? null;
+  }
+
+  /** The end of a session's output as text (its screen and recent scrollback). */
+  recentText(id: string, limit = 1000): string {
+    return this.sessions.get(id)?.recentText(limit) ?? '';
   }
 
   /** The headless copy of a session's screen (tests, previews). */

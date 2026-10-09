@@ -5,7 +5,8 @@
 # socket SSH uses. A session connects only after that WebView has loaded and measured
 # the terminal, so reaching "Couldn't reach" proves the terminal renders and the socket
 # module loads on the device. Tapping the keyboard key checks that the in-app keyboard's
-# touch surface receives native touches.
+# touch surface receives native touches. The preview, asked for a port on a session that
+# isn't connected, says so (a page needs a real host with a dev server: check that by hand).
 appId: com.lexingtonstanley.flareterminal
 ---
 - launchApp:
@@ -30,3 +31,12 @@ appId: com.lexingtonstanley.flareterminal
 - tapOn: 'Coding keyboard'
 - assertVisible: 'System keyboard'
 - assertVisible: 'Backspace'
+- tapOn: 'Preview a dev server'
+- tapOn:
+    id: 'preview-port'
+- inputText: '3000'
+# The button sits above the number pad, which has no key to close it on iOS.
+- tapOn: 'Open preview'
+- extendedWaitUntil:
+    visible: 'The session isn.t connected.*'
+    timeout: 10000

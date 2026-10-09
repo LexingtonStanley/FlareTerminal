@@ -16,6 +16,8 @@ export type TestServer = {
   ptys: { term: string; cols: number; rows: number }[];
   resizes: { cols: number; rows: number }[];
   received: string[];
+  /** Where clients asked to be forwarded (direct-tcpip), in order. */
+  tunnels: { host: string; port: number }[];
   /** The server side of the latest shell. */
   shell: () => ServerChannel;
   rekey: () => Promise<void>;
@@ -42,6 +44,7 @@ function generateHostKey(type: HostKeyType) {
 export async function startTestSshServer({
   hostKey = 'ed25519',
   algorithms,
+  forwarding = true,
   authenticate = (ctx) =>
     ctx.method === 'password' && ctx.password === 'correct-horse'
       ? ctx.accept()
@@ -49,6 +52,8 @@ export async function startTestSshServer({
 }: {
   hostKey?: HostKeyType;
   algorithms?: ConstructorParameters<typeof Server>[0]['algorithms'];
+  /** Whether it forwards ports (direct-tcpip), connecting from this machine like sshd. */
+  forwarding?: boolean;
   authenticate?: (ctx: AuthContext) => void;
 } = {}): Promise<TestServer> {
   const keys = generateHostKey(hostKey);
@@ -59,12 +64,31 @@ export async function startTestSshServer({
     ptys: [] as TestServer['ptys'],
     resizes: [] as TestServer['resizes'],
     received: [] as string[],
+    tunnels: [] as TestServer['tunnels'],
   };
 
   const server = new Server({ hostKeys: [keys.private], algorithms }, (connection) => {
     latestConnection = connection as unknown as typeof latestConnection;
     connection.on('authentication', authenticate);
     connection.on('ready', () => {
+      if (forwarding) {
+        connection.on('tcpip', (accept, reject, info) => {
+          state.tunnels.push({ host: info.destIP, port: info.destPort });
+          const host = info.destIP === 'localhost' ? '127.0.0.1' : info.destIP;
+          const target = createConnection({ host, port: info.destPort });
+          target.once('error', () => reject());
+          target.once('connect', () => {
+            const stream = accept();
+            stream.on('error', () => target.destroy());
+            target.on('error', () => stream.close());
+            stream.pipe(target);
+            // Like OpenSSH: EOF when the target closes, then the client closes the channel.
+            target.on('data', (data: Buffer) => stream.write(data));
+            target.on('end', () => stream.eof());
+            stream.on('close', () => target.destroy());
+          });
+        });
+      }
       connection.on('session', (accept) => {
         const session = accept();
         session.on('pty', (acceptPty, _reject, info) => {

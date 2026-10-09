@@ -9,7 +9,8 @@ import { useSessionManager } from '@/features/sessions/sessions-provider';
 import { useLock } from './lock-provider';
 import { useProtection } from './use-protection';
 
-const SESSION_PATH = /^\/session\/([^/]+)$/;
+/** A session's screens: its terminal and its preview. */
+const SESSION_PATH = /^\/session\/([^/]+)(?:\/preview)?$/;
 
 /**
  * Leaving a session closes the door behind it: a protected connection or group asks for

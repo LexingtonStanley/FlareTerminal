@@ -4,7 +4,12 @@ import type {
   TerminalSize,
   TerminalTransport,
   TransportListener,
+  Tunnel,
+  TunnelEvents,
 } from '@/features/terminal/transport';
+
+/** A tunnel the app opened, played from the host's side. */
+export type FakeTunnel = { port: number; events: TunnelEvents; sent: string[]; closed: boolean };
 
 /**
  * Replaces src/features/terminal/open-transport.ts. Every transport the app opens is
@@ -18,12 +23,29 @@ export class FakeTransport implements TerminalTransport {
   written: string[] = [];
   resizes: TerminalSize[] = [];
   closed = false;
+  tunnels: FakeTunnel[] = [];
+  /** Set to make tunnels fail, as a host does when nothing listens on the port. */
+  refuseTunnels: Error | null = null;
+  /** Like the real transports: SSH can forward ports, ttyd can't. */
+  openTunnel?: (port: number, events: TunnelEvents) => Promise<Tunnel>;
 
   constructor(
     readonly connection: Connection,
     readonly password: string | null,
     private readonly listener: TransportListener
-  ) {}
+  ) {
+    if (connection.kind === 'ssh') {
+      this.openTunnel = async (port, events) => {
+        if (this.refuseTunnels) throw this.refuseTunnels;
+        const tunnel: FakeTunnel = { port, events, sent: [], closed: false };
+        this.tunnels.push(tunnel);
+        return {
+          write: (bytes) => tunnel.sent.push(new TextDecoder().decode(bytes)),
+          close: () => (tunnel.closed = true),
+        };
+      };
+    }
+  }
 
   connect(size: TerminalSize) {
     this.size = size;

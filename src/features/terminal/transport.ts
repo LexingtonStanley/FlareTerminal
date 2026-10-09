@@ -27,6 +27,18 @@ export type TransportListener = {
 
 export type InputMode = 'normal' | 'secret';
 
+/**
+ * Bytes from the other end of a tunnel, and its end: it closed, or has nothing more to send.
+ * A handler that throws closes that tunnel only.
+ */
+export type TunnelEvents = {
+  onData(bytes: Uint8Array): void;
+  onClose(): void;
+};
+
+/** `close()` ends the tunnel from this side; no events follow it. */
+export type Tunnel = { write(bytes: Uint8Array): void; close(): void };
+
 export interface TerminalTransport {
   /** Opens the session at the terminal's current size. Call once per transport. */
   connect(size: TerminalSize): void;
@@ -35,4 +47,9 @@ export interface TerminalTransport {
   resize(size: TerminalSize): void;
   /** Closes without reporting a status change: the caller is already moving on. */
   close(): void;
+  /**
+   * Opens a byte stream to `port` on the host itself, alongside the terminal (SSH port
+   * forwarding). Missing when the transport can't; rejects while it isn't connected.
+   */
+  openTunnel?(port: number, events: TunnelEvents): Promise<Tunnel>;
 }

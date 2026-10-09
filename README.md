@@ -21,6 +21,10 @@ web build), started from the RapidAppToolkit template.
 - **Agent alerts.** When an agent rings the bell or sends a terminal notification (OSC 9, 777
   or 99), the app flags the session, shows a banner on other screens, and posts a phone
   notification while the app is in the background.
+- **Previews of what your agent is building.** When a dev server prints
+  `http://localhost:5173`, tap the link (or the preview button) and the page opens in the app,
+  forwarded through the session's SSH connection like `ssh -L`. Back, forward, reload and the
+  address bar work as in a browser, and the port closes when you leave.
 - **A coding keyboard** in place of the phone's: no autocorrect, every key reaches the
   terminal. Esc, Tab/Shift+Tab, sticky Ctrl and Alt, an arrows joystick, Home/End and the
   symbols phones bury, all fixed in place. Tap the line you're editing to move the cursor
@@ -191,6 +195,9 @@ host at `/keyboard-preview`.
   against OpenSSH 9.6 and Go's `x/crypto/ssh`. `ttyd.ts` implements ttyd's protocol, checked
   by hand against ttyd 1.7.7; Playwright drives it against a fake host
   (`e2e/web/fake-ttyd.ts`).
+- `src/features/preview/` forwards a port for the dev server preview: a listener on the
+  phone's 127.0.0.1 (`local-server.ts`) whose connections each open an SSH `direct-tcpip`
+  channel to `localhost:<port>` on the host (`forward.ts`), shown in react-native-webview.
 
 ## Open source used
 
@@ -198,7 +205,8 @@ host at `/keyboard-preview`.
 | -------------------------------------------------------------------------------------------------------- | ------- | --------------------------------------- |
 | [xterm.js](https://github.com/xtermjs/xterm.js), headless, and its fit, serialize, Unicode 11, web-links | MIT     | Terminal rendering, session screens     |
 | [noble ciphers, curves and hashes](https://github.com/paulmillr)                                         | MIT     | SSH cryptography                        |
-| [react-native-tcp-socket](https://github.com/Rapsssito/react-native-tcp-socket)                          | MIT     | The SSH connection on Android/iOS       |
+| [react-native-tcp-socket](https://github.com/Rapsssito/react-native-tcp-socket)                          | MIT     | SSH connections and the preview's port  |
+| [react-native-webview](https://github.com/react-native-webview/react-native-webview)                     | MIT     | The dev server preview                  |
 | [Expo](https://github.com/expo/expo) (DOM components, SecureStore, notifications, haptics)               | MIT     | App, WebView host, Keychain, alerts     |
 | [ssh2](https://github.com/mscdex/ssh2)                                                                   | MIT     | Test SSH server (development only)      |
 | [ttyd](https://github.com/tsl0922/ttyd)                                                                  | MIT     | Optional, on your computer; not shipped |
@@ -218,14 +226,14 @@ Thumb-Key, Unexpected Keyboard and Termux's extra keys.
 1. Mosh-style resilience: resume a dropped SSH session automatically on network changes.
 2. Agent features: image and file hand-off, approve/deny buttons for agent prompts, alerts
    that reach the phone while the app is suspended (a small relay or push from the host).
-3. Jump hosts, `~/.ssh/config` import, port forwarding.
+3. Jump hosts, `~/.ssh/config` import, port forwarding beyond previews.
 4. Touch selection and scrolling improvements, pinch to zoom, and a WebGL renderer.
 
 ## Limits
 
 - The web checks prove logic, layout and the protocols. On-device behaviour (the WebView, TCP
   sockets, the soft keyboard and IMEs, Keychain/Keystore, notifications, haptics) needs a
-  device run: `.maestro/terminal.yaml` covers the basics on EAS
+  device run, as does the preview (its WebView and local port): `.maestro/terminal.yaml` covers the basics on EAS
   (`npx eas-cli@latest workflow:run .eas/workflows/e2e.yml`).
 - SSH agent forwarding, X11 and SFTP aren't supported.
 

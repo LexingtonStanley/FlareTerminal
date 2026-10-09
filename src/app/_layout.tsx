@@ -132,6 +132,10 @@ function ThemedApp() {
                     />
                     <Stack.Screen name="keys/[id]" options={{ headerShown: true, title: 'Key' }} />
                     <Stack.Screen name="session/[id]" options={{ headerShown: true, title: '' }} />
+                    <Stack.Screen
+                      name="session/[id]/preview"
+                      options={{ headerShown: true, title: 'Preview' }}
+                    />
                   </Stack>
                   <AttentionBanner />
                   <AccessGuard />

@@ -69,6 +69,9 @@ Traps already hit in this exact stack:
   `'up'`, `'down'`, `'left'`, `'right'` flick). In Playwright, click it, or drive the mouse for
   flicks (`e2e/web/keyboard.spec.ts`). Modifier keys are `role="switch"`.
 - **noble** (`@noble/*`) ships ES modules only; `jest.config.js` transforms it.
+- **react-native-webview** has no native side in Jest: `jest/webview-stub.js` renders a View
+  that keeps its props, so find it by its `aria-label` and read `source`. Jest's `fetch` is a
+  stub too; load pages from node servers with `node:http`.
 - **Coding agents' git worktrees** (`.claude/worktrees/`) hold a second copy of the app; Jest,
   Metro, ESLint, Prettier and `tsc` all ignore them. Keep it that way.
 - **React Native's globals are thinner than Jest's.** Jest runs on Node, but on Android and iOS
@@ -127,6 +130,7 @@ src/app/                 Routes only. Every file here is a screen; never put tes
   keys/                  new.tsx (import a key), [id].tsx (a key: public half, share, delete)
   session/[id].tsx       A session: session strip, view, coding keyboard (or, for writing,
                          the key bar and composer with the phone's keyboard)
+  session/[id]/preview.tsx  The session's dev server in a browser, over an SSH port forward
   keyboard-preview.tsx   Both keyboards against a pretend shell, no host needed
   +not-found.tsx
 src/components/ui/       Screen, Button, TextField primitives: build screens from these
@@ -149,6 +153,10 @@ src/features/keyboard/   Accessory bar and coding keyboard: layout, gestures, to
 src/features/shortcuts/  Shortcut type and groups, agent-command.ts (the command for an agent:
                          Claude Code/Codex/Hermes/pi in tmux/zellij), shell quoting, provider,
                          form, Home tile
+src/features/preview/    Dev server preview: local-urls.ts (localhost links and ports in output),
+                         forward.ts (ssh -L: a phone port whose connections are SSH tunnels),
+                         local-server.ts (listens on 127.0.0.1; .web refuses), use-port-forward,
+                         port picker, browser (react-native-webview)
 src/features/notifications/ Local notifications for agent alerts, with Approve/Deny actions (no-op
                          on web)
 src/features/connections/ Connection type (SSH or ttyd), validation, ConnectionsProvider, form
@@ -160,12 +168,14 @@ src/features/<name>/     Feature logic and its colocated *.test.ts(x)
 src/lib/                 storage.ts (JSON in localStorage / SQLite), secrets.ts (Keychain/Keystore),
                          vault-key.ts (seals secrets while an app lock is set)
 src/test-utils/          Jest helpers: renderApp, memory-storage, fake-terminal-view, fake-transport,
-                         fake-notify, ssh-server (a real SSH server from ssh2), ssh-keys (OpenSSH
-                         key files written by ssh2, so no key is checked in)
+                         fake-notify, fake-local-server (the preview's port), node-listen (it over
+                         node:net), ssh-server (a real SSH server from ssh2, with forwarding),
+                         ssh-keys (OpenSSH key files written by ssh2, so no key is checked in)
 __tests__/               Router-level Jest tests (render the real src/app tree)
 e2e/web/                 Playwright specs; fake-ttyd.ts plays a ttyd host via page.routeWebSocket
 .maestro/                Device flows, run on EAS
 .eas/workflows/          EAS cloud workflows (device E2E, production deploy)
+patches/                 Fixes to libraries' native code (patch-package, applied by postinstall)
 app.json / app.config.ts Identity / build variants (APP_VARIANT = development | preview | production)
 ```
 
@@ -174,6 +184,10 @@ app.json / app.config.ts Identity / build variants (APP_VARIANT = development | 
 - **Native code**: `ios/` and `android/` are generated and git-ignored. Never create or edit
   them. Configure native behaviour with `app.json` and config plugins. A new native library
   needs a new development build (`eas build --profile development`) before it runs on a device.
+  A bug in a library's native code is fixed in `patches/` (`npx patch-package <name>` after
+  editing it in `node_modules`), with a comment in the code saying why; check whether a new
+  version of the library still needs it. react-native-tcp-socket's patch stops Android
+  keeping two idle threads for every socket that ever opened.
 - **Screens**: wrap content in `<Screen>`; use `ThemedText`, `ThemedView` and `useTheme()`
   colors, never hard-coded colors. Every screen must work in light and dark mode and at phone
   width on web.
@@ -223,8 +237,9 @@ app.json / app.config.ts Identity / build variants (APP_VARIANT = development | 
   - `testID` is only for Maestro flows (`.maestro/`).
 - **Limits of the web check**: it can't catch native-only behaviour (the WebView hosting the
   terminal, TCP sockets, soft keyboards and IMEs, `inputmode="none"`, Keychain/Keystore,
-  cleartext networking, notifications, the foreground service, haptics, multi-touch). Cover
-  those with a Maestro flow and say in your summary that they need a device run.
+  cleartext networking, notifications, the foreground service, haptics, multi-touch, the
+  preview's WebView and local port). Cover those with a Maestro flow and say in your summary
+  that they need a device run.
 - **Checking against a real ttyd**: download a release binary from
   https://github.com/tsl0922/ttyd/releases, run `ttyd -W -i lo -p 7690 bash`, serve the web
   build (`npm run web:build && node scripts/serve-web.mjs`) and connect to `localhost:7690`.
