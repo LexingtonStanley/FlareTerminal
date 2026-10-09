@@ -26,8 +26,8 @@ const QUESTION_REACH = 8;
 const BORDER = /[─-╿]/g;
 const POINTER = /^[❯›>▶▸●◉→]\s*/u;
 const OPTION = /^(?:([❯›>▶▸●◉→])\s*)?(\d)[.)]\s+(.+)$/u;
-/** A one-letter shortcut at the end of an option: Codex's "Yes, proceed (y)". */
-const SHORTCUT = /\s*\(([a-z])\)$/i;
+/** A key shortcut at the end of an option: Codex's "Yes, proceed (y)", "No, … (esc)". */
+const SHORTCUT = /\s*\(([a-z]|esc)\)$/i;
 /** "[y/N]", "(y/n)", "[Y/n]", "(yes/no)", at the end of the line or before a default. */
 const YES_NO = /[[(](y(?:es)?)\/(n(?:o)?)[\])]\s*\??:?\s*$/i;
 /** Aider: "Run shell command? (Y)es/(N)o/(D)on't ask again [Yes]:". */
@@ -44,26 +44,37 @@ export function detectPrompt(lines: readonly string[]): DetectedPrompt | null {
 
 /** Numbered options, one of them under a pointer: an interactive menu, not a list in prose. */
 function menuPrompt(live: string[]): DetectedPrompt | null {
-  // The last run of numbered lines counting up from 1.
-  let end = -1;
-  for (let index = live.length - 1; index >= 0; index--) {
-    if (OPTION.test(live[index])) {
-      end = index;
+  let end = live.length - 1;
+  while (end >= 0 && !OPTION.test(live[end])) end--;
+  if (end < 0) return null;
+  // The last run of numbered options, from the bottom up to "1.". An option too long for a
+  // narrow screen goes on over a line or two (the agent wraps it), which belong to its label.
+  const options: { match: RegExpMatchArray; more: string[] }[] = [];
+  let more: string[] = [];
+  let index = end;
+  for (; index >= 0; index--) {
+    const match = live[index].match(OPTION);
+    if (match) {
+      options.unshift({ match, more });
+      more = [];
+      if (match[2] === '1') {
+        index--;
+        break;
+      }
+    } else if (more.length === 2 || live[index].endsWith('?')) {
       break;
+    } else {
+      more.unshift(live[index]);
     }
   }
-  if (end < 0) return null;
-  let start = end;
-  while (start > 0 && OPTION.test(live[start - 1])) start--;
-  const matches = live.slice(start, end + 1).map((line) => line.match(OPTION)!);
-  if (matches.length < 2) return null;
-  if (matches.some((match, index) => Number(match[2]) !== index + 1)) return null;
-  if (matches.filter((match) => match[1]).length !== 1) return null;
+  if (options.length < 2) return null;
+  if (options.some(({ match }, number) => Number(match[2]) !== number + 1)) return null;
+  if (options.filter(({ match }) => match[1]).length !== 1) return null;
 
   let question: string | null = null;
-  for (let index = start - 1; index >= Math.max(0, start - QUESTION_REACH); index--) {
-    if (live[index].endsWith('?') || live[index].endsWith('?:')) {
-      question = live[index].replace(POINTER, '').replace(/:$/, '');
+  for (let above = index; above >= 0 && above > index - QUESTION_REACH; above--) {
+    if (live[above].endsWith('?') || live[above].endsWith('?:')) {
+      question = live[above].replace(POINTER, '').replace(/:$/, '');
       break;
     }
   }
@@ -71,11 +82,12 @@ function menuPrompt(live: string[]): DetectedPrompt | null {
 
   return {
     question,
-    options: matches.map(([, , number, text]) => {
-      const shortcut = text.match(SHORTCUT);
+    options: options.map(({ match: [, , number, text], more }) => {
+      const label = [text, ...more].join(' ');
+      const shortcut = label.match(SHORTCUT)?.[1].toLowerCase();
       return {
-        label: text.replace(SHORTCUT, '').trim(),
-        input: shortcut ? shortcut[1].toLowerCase() : number,
+        label: label.replace(SHORTCUT, '').trim(),
+        input: shortcut === 'esc' ? '\x1b' : (shortcut ?? number),
       };
     }),
   };
@@ -111,4 +123,40 @@ export function samePrompt(a: DetectedPrompt, b: DetectedPrompt): boolean {
     a.options.length === b.options.length &&
     a.options.every((option, index) => option.label === b.options[index].label)
   );
+}
+
+export type PromptAnswer = 'approve' | 'deny';
+
+const APPROVE = /^(yes|allow|approve|proceed|accept|run|continue|ok)\b/i;
+const DENY = /^(no|deny|reject|decline|cancel)\b/i;
+
+/**
+ * What to type to approve or deny a prompt: its first option when that is a yes, and its
+ * first no. Null when the prompt isn't a plain yes/no (a choice between plans, say), so
+ * nothing guesses on the person's behalf.
+ */
+export function answersFor(prompt: DetectedPrompt): Record<PromptAnswer, string> | null {
+  const [first] = prompt.options;
+  const deny = prompt.options.find(({ label }) => DENY.test(label));
+  if (!first || !APPROVE.test(first.label) || !deny) return null;
+  return { approve: first.input, deny: deny.input };
+}
+
+/**
+ * The line agents keep on screen while they work: Claude Code's "✻ Pondering… (12s · esc to
+ * interrupt)", Codex's "Working (8s • esc to interrupt)", Gemini CLI's "Thinking... (esc to
+ * cancel, 5s)". A bare "Esc to cancel" (under a menu) has no timer, so it doesn't count.
+ */
+const WORKING = [
+  /\besc to interrupt\b/i,
+  /\besc to cancel\b.*\b\d+s\b|\b\d+s\b.*\besc to cancel\b/i,
+];
+
+/** Whether an agent's working line is near the bottom of the screen. */
+export function isWorking(lines: readonly string[]): boolean {
+  return lines
+    .map(clean)
+    .filter(Boolean)
+    .slice(-LIVE_LINES)
+    .some((line) => WORKING.some((pattern) => pattern.test(line)));
 }

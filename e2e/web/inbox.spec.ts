@@ -59,3 +59,33 @@ test('notices an agent’s question on screen, with no escape codes', async ({ p
   session.output('\x1b[2J\x1b[H⏺ Running npm test\r\n');
   await expect(page.getByText('Needs you · 1')).toBeHidden();
 });
+
+test('approves from the inbox, and says when an agent finishes', async ({ page }) => {
+  const ttyd = await fakeTtyd(page);
+  await page.goto('/connections/new');
+  await page.getByRole('radio', { name: 'ttyd' }).click();
+  await page.getByLabel('Name').fill('Devbox');
+  await page.getByLabel('Address').fill(FAKE_TTYD_ADDRESS);
+  await page.getByRole('button', { name: 'Save' }).click();
+  await page.getByRole('button', { name: 'Open Devbox' }).click();
+  const session = await ttyd.session(0);
+  await expect(page.getByLabel('Status: Connected')).toBeVisible();
+  await page.goBack();
+  await page.getByRole('tab', { name: 'Inbox' }).click();
+
+  session.output(
+    '\x1b[2J\x1b[HBash command\r\n  npm test\r\nDo you want to proceed?\r\n' +
+      '❯ 1. Yes\r\n  2. No, and tell Claude what to do differently (esc)\r\n'
+  );
+  await page.getByRole('button', { name: 'Approve: Do you want to proceed?' }).click();
+  await expect.poll(() => session.inputs.at(-1)).toBe('1');
+  await expect(page.getByRole('button', { name: /^Approve: / })).toBeHidden();
+
+  // The agent works, then stops without asking anything.
+  session.output('\x1b[2J\x1b[H✻ Running npm test… (3s · esc to interrupt)\r\n');
+  await expect(page.getByText('Working · 1')).toBeVisible();
+  session.output('\x1b[2J\x1b[H⏺ All 41 tests pass.\r\n');
+  await expect(page.getByText('Finished · 1')).toBeVisible();
+  const row = page.getByRole('button', { name: /^Open Devbox/ });
+  await expect(row.getByText('All 41 tests pass.')).toBeVisible();
+});

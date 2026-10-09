@@ -64,7 +64,11 @@ export function AttentionBanner() {
           }}
           style={({ pressed }) => [styles.body, pressed && styles.pressed]}>
           <View style={[styles.icon, { backgroundColor: theme.primaryMuted }]}>
-            <Icon name="bell" size={16} color="attention" />
+            {latest.attention.kind === 'finished' ? (
+              <Icon name="check" size={16} color="success" />
+            ) : (
+              <Icon name="bell" size={16} color="attention" />
+            )}
           </View>
           <View style={styles.text}>
             <ThemedText type="smallBold" numberOfLines={1}>

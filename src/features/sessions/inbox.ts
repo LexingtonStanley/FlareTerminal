@@ -1,11 +1,11 @@
-import type { SessionSnapshot } from './session-manager';
+import type { AttentionKind, SessionSnapshot } from './session-manager';
 
 /**
  * The agent inbox: every open session, sorted by what it needs from the person. All of it
  * comes from the session's headless screen, so nothing runs on the host.
  */
 
-export type InboxGroup = 'needs-you' | 'working' | 'idle';
+export type InboxGroup = 'needs-you' | 'finished' | 'working' | 'idle';
 
 /** What a session's screen shows, read from its headless copy (see SessionManager.activity). */
 export type SessionActivity = {
@@ -17,18 +17,21 @@ export type SessionActivity = {
 
 /**
  * What a session wants from the person, if anything: an alert they haven't seen, or a
- * question still on its screen (which keeps waiting after they've looked and left).
+ * question still on its screen (which keeps waiting after they've looked and left, until
+ * it's answered).
  */
 export function waitingFor(
   session: Pick<SessionSnapshot, 'attention' | 'prompt'>
-): { message: string; since: number } | null {
+): { message: string; since: number; kind: AttentionKind } | null {
+  const prompt = session.prompt?.answered ? null : session.prompt;
   if (session.attention) {
     return {
-      message: session.attention.body || session.prompt?.question || 'Needs your attention',
+      message: session.attention.body || prompt?.question || 'Needs your attention',
       since: session.attention.at,
+      kind: session.attention.kind,
     };
   }
-  if (session.prompt) return { message: session.prompt.question, since: session.prompt.at };
+  if (prompt) return { message: prompt.question, since: prompt.at, kind: 'question' };
   return null;
 }
 
@@ -53,7 +56,7 @@ const CHROME = [
   // Claude Code and Codex hints. Not "esc to interrupt": that's on the spinner line, which
   // says what the agent is doing and is the only line that moves while it thinks.
   /\? for shortcuts/i,
-  /esc to (cancel|go back)/i,
+  /^(press enter to confirm or )?esc to (cancel|go back)$/i,
   /shift\+tab to/i,
   /ctrl\+[a-z] to /i,
 ];
@@ -85,8 +88,8 @@ export function lastMeaningfulLine(lines: readonly string[]): string | null {
 
 /**
  * Which part of the inbox a session belongs in. An unseen alert or a question on screen
- * needs the person; a screen
- * that changed in the last few seconds is working; anything else (quiet, connecting,
+ * needs the person; an agent that stopped by itself, unseen, is finished; a screen that
+ * changed in the last few seconds is working; anything else (quiet, connecting,
  * disconnected) is idle.
  */
 export function inboxGroup(
@@ -94,7 +97,8 @@ export function inboxGroup(
   activity: SessionActivity | null,
   now: number
 ): InboxGroup {
-  if (waitingFor(session)) return 'needs-you';
+  const waiting = waitingFor(session);
+  if (waiting) return waiting.kind === 'finished' ? 'finished' : 'needs-you';
   if (
     session.status.state === 'connected' &&
     activity &&
