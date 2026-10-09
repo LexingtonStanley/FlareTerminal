@@ -16,6 +16,7 @@ import { useConnections } from '@/features/connections/connections-provider';
 import { SessionHealthStrip } from '@/features/health/health-strip';
 import { parseLocalUrl, type LocalAddress } from '@/features/preview/local-urls';
 import { ReadingPill } from '@/features/reading/reading-pill';
+import { AwayChip } from '@/features/sessions/away-chip';
 import { ScrollHint } from '@/features/sessions/scroll-hint';
 import { SessionGate } from '@/features/sessions/session-gate';
 import { StatusBadge } from '@/features/sessions/session-status';
@@ -73,11 +74,19 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
   const [unscrollableAt, setUnscrollableAt] = useState<number | null>(null);
   // When the last swipe went back into the history; a new one keeps reading mode offered.
   const [scrolledBackAt, setScrolledBackAt] = useState<number | null>(null);
+  const { away } = session;
+  // Typing on the app's keyboards moves on from what arrived while the person was away.
+  const typed =
+    <T extends unknown[]>(send: (...args: T) => void) =>
+    (...args: T) => {
+      if (away) manager.dismissAway(session.id);
+      send(...args);
+    };
   const keys = {
     modifiers: view.modifiers,
     onModifiersChange: view.setModifiers,
-    onKey: view.pressKey,
-    onText: view.type,
+    onKey: typed(view.pressKey),
+    onText: typed(view.type),
   };
 
   function closeSession() {
@@ -90,6 +99,17 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
     setUnscrollableAt(null);
     setScrolledBackAt(null);
     router.push({ pathname: '/session/[id]/reading', params: { id: session.id } });
+  }
+
+  /** Goes to what arrived while the person was away: up the scrollback, or reading mode. */
+  function openAway() {
+    if (away?.lines === null) {
+      router.push({ pathname: '/session/[id]/reading', params: { id: session.id, from: 'away' } });
+      return;
+    }
+    const lines = manager.awayScroll(session.id);
+    if (lines !== null) viewRef.current?.scrollUp(lines);
+    manager.dismissAway(session.id);
   }
 
   function preview(address?: LocalAddress) {
@@ -166,6 +186,12 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
               onOpen={read}
               onDismiss={() => setScrolledBackAt(null)}
             />
+          ) : away ? (
+            <AwayChip
+              away={away}
+              onOpen={openAway}
+              onDismiss={() => manager.dismissAway(session.id)}
+            />
           ) : null}
           {session.status.state === 'closed' ? (
             <ThemedView
@@ -213,8 +239,8 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
             <Composer
               modifiers={toModifiers(view.modifiers)}
               secure={session.inputMode === 'secret'}
-              onSubmit={view.submit}
-              onModifiedKey={view.type}
+              onSubmit={typed(view.submit)}
+              onModifiedKey={typed(view.type)}
             />
           </>
         ) : input === 'keys' ? (

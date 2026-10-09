@@ -68,6 +68,9 @@ Traps already hit in this exact stack:
   ref and pass it in (see `useSessionView`).
 - **`@xterm/headless` 6.0.0** names a missing file in its `"module"` field, which web builds
   read first; `metro.config.js` resolves it to `lib-headless/xterm-headless.js`.
+- **renderRouter fakes timers and the clock** (`jest.useFakeTimers()`), so a spy on
+  `Date.now` sees nothing in router tests: move the clock with `jest.setSystemTime()`. In
+  Playwright, `page.clock.setFixedTime()` moves it while timers keep running.
 - **The in-app keyboard's keys have no `onPress`**: one touch surface tracks every finger. In
   Jest, act on a key by name with
   `fireEvent(key, 'accessibilityAction', { nativeEvent: { actionName } })` (`'activate'` taps;
@@ -154,8 +157,10 @@ src/features/ssh/        SSH-2 client (client.ts), packets and ciphers, host key
 src/features/sessions/   SessionManager (every open session, headless xterm), alerts, inbox.ts
                          (screen preview, needs you/finished/working/idle), prompts.ts
                          (read off the screen: approval menus, [y/N], an agent's working
-                         line, the keys for Approve/Deny), provider,
-                         useSessionView, session strip, status, attention banner, scroll hint
+                         line, the keys for Approve/Deny), away.ts (what arrived while the
+                         person was away, and where it starts in a history), provider,
+                         useSessionView, session strip, status, attention banner, scroll
+                         hint, away chip
 src/features/reading/    Reading mode: capture.ts (the script that lists tmux/zellij sessions
                          and prints one's history; which session a command opens), history.ts
                          (SGR codes or an xterm buffer as styled lines), transcript.ts (tool

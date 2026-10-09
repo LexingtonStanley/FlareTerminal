@@ -41,6 +41,8 @@ export type TerminalViewHandle = {
   paste(text: string): void;
   /** Clears the screen and scrollback before another session's screen is drawn. */
   reset(): void;
+  /** Scrolls the scrollback so the screen starts `lines` above the bottom one (0: the end). */
+  scrollUp(lines: number): void;
 };
 
 export type TerminalViewProps = {
@@ -122,6 +124,10 @@ export default function TerminalView({
       },
       reset() {
         terminalRef.current?.reset();
+      },
+      scrollUp(lines: number) {
+        const terminal = terminalRef.current;
+        if (terminal) terminal.scrollToLine(Math.max(0, terminal.buffer.active.baseY - lines));
       },
     }),
     []

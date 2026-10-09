@@ -1,4 +1,5 @@
 import { SerializeAddon } from '@xterm/addon-serialize';
+import type { IMarker } from '@xterm/headless';
 import { Terminal, type HeadlessTerminal } from './headless-terminal';
 
 import type { HistorySource } from '@/features/reading/capture';
@@ -13,6 +14,7 @@ import type {
 } from '@/features/terminal/transport';
 
 import { parseOsc777, parseOsc9, parseOsc99, type AgentAlert } from './alerts';
+import { AWAY_MIN_MS, JUMP_CONTEXT_LINES, screenContent } from './away';
 import { contentLines, lastMeaningfulLine, type SessionActivity } from './inbox';
 import {
   answersFor,
@@ -53,6 +55,22 @@ export type AgentPrompt = DetectedPrompt & {
   answered?: boolean;
 };
 
+/** What a session wrote while the person looked elsewhere (see away.ts). */
+export type Away = {
+  /** When they left. */
+  since: number;
+  /**
+   * How many lines it added to the normal screen, where a jump scrolls back to them; null
+   * when a full-screen program (tmux, zellij) drew over its screen instead, so only reading
+   * mode can find them.
+   */
+  lines: number | null;
+  /** The first of them have left the scrollback: more than `lines` arrived. */
+  more: boolean;
+  /** What was on screen when they left, for reading mode to find the place. */
+  screen: string[];
+};
+
 /** What became of an answer sent from a notification or the inbox. */
 export type AnswerResult = 'sent' | 'gone' | 'disconnected';
 
@@ -73,6 +91,8 @@ export type SessionSnapshot = SessionTarget & {
    * (null: this screen). Until then reading mode goes by the command.
    */
   history?: HistorySource | null;
+  /** What arrived while the person was away, until they jump to it, read it or dismiss it. */
+  away: Away | null;
 };
 
 /** Where a session's output goes while a terminal view shows it. */
@@ -113,6 +133,14 @@ export const FINISH_SETTLE_MS = 2_000;
  */
 export const RECONNECT_DELAYS_MS = [1_000, 5_000, 15_000];
 
+/** What the person last saw of a session before looking elsewhere. */
+type Departure = {
+  at: number;
+  /** The cursor's line on the normal screen: it moves up as output scrolls past. */
+  marker: IMarker | null;
+  screen: string[];
+};
+
 class Session {
   readonly headless: HeadlessTerminal;
   private readonly serializer = new SerializeAddon();
@@ -135,6 +163,15 @@ class Session {
   private cancelFinish: (() => void) | null = null;
   /** An alert to notify once the burst of output that raised it has been read. */
   private notifyPending = false;
+  /** The view attached to this session, while there is one. */
+  private attached: ViewSink | null = null;
+  /** The person is looking at it: its view is on screen and the app is in front. */
+  private watched = false;
+  private departure: Departure | null = null;
+  /** Where the person left off, while `snapshot.away` offers a jump back to it. */
+  private awayMarker: IMarker | null = null;
+  /** Counts comings and goings, so the summary of a visit that has ended is dropped. */
+  private visits = 0;
   snapshot: SessionSnapshot;
 
   constructor(
@@ -151,6 +188,7 @@ class Session {
       attention: null,
       prompt: null,
       reconnecting: false,
+      away: null,
     };
     this.lastOutputAt = this.changedAt = manager.now();
     this.headless = new Terminal({
@@ -222,7 +260,12 @@ class Session {
     else this.replayBuffer?.push(text);
   }
 
+  get isAttached() {
+    return this.attached !== null;
+  }
+
   attach(view: ViewSink, size: TerminalSize) {
+    this.attached = view;
     this.view = null;
     this.resize(size);
     if (this.snapshot.attention) this.update({ attention: null });
@@ -379,8 +422,89 @@ class Session {
   }
 
   detach(view: ViewSink) {
+    if (this.attached === view) this.attached = null;
     if (this.view === view) this.view = null;
     this.replayBuffer = null;
+  }
+
+  /** The person started or stopped looking at the session. */
+  setWatched(watched: boolean) {
+    if (watched === this.watched || this.closed) return;
+    this.watched = watched;
+    if (watched) this.comeBack();
+    else this.leave();
+  }
+
+  /**
+   * Remembers what the person saw as they looked away, once the headless copy has read what
+   * arrived before. (Its write callbacks run in order, so comeBack's runs after this one.)
+   */
+  private leave() {
+    this.visits++;
+    const at = this.manager.now();
+    this.dismissAway();
+    this.headless.write('', () => {
+      if (this.closed) return;
+      const normal = this.headless.buffer.active.type === 'normal';
+      this.departure?.marker?.dispose();
+      this.departure = {
+        at,
+        marker: normal ? (this.headless.registerMarker(0) ?? null) : null,
+        screen: this.screenLines(),
+      };
+    });
+  }
+
+  /** Back on the session: says what arrived meanwhile, once the headless copy has read it. */
+  private comeBack() {
+    const visit = ++this.visits;
+    this.headless.write('', () => {
+      const departure = this.departure;
+      this.departure = null;
+      if (!departure) return;
+      // Not if the person has already left again.
+      const away = visit === this.visits && !this.closed ? this.awaySince(departure) : null;
+      if (!away?.lines) departure.marker?.dispose();
+      if (!away) return;
+      if (away.lines) this.awayMarker = departure.marker;
+      this.update({ away });
+    });
+  }
+
+  /**
+   * What arrived since the person left, if it's worth saying: they were gone a while, and
+   * new lines scrolled where they left off out of view, or a full-screen program's screen
+   * says something else now.
+   */
+  private awaySince({ at, marker, screen }: Departure): Away | null {
+    if (this.manager.now() - at < AWAY_MIN_MS) return null;
+    const buffer = this.headless.buffer.active;
+    if (marker && buffer.type === 'normal') {
+      const more = marker.isDisposed;
+      if (!more && marker.line - JUMP_CONTEXT_LINES >= buffer.baseY) return null;
+      const lines = Math.max(1, buffer.baseY + buffer.cursorY - (more ? 0 : marker.line));
+      return { since: at, lines, more, screen };
+    }
+    if (screenContent(this.screenLines()) === screenContent(screen)) return null;
+    return { since: at, lines: null, more: false, screen };
+  }
+
+  /**
+   * How many lines above the bottom screen a view starts when it shows where the person
+   * left off, a little before the first new line; null when there's no such place.
+   */
+  awayScroll(): number | null {
+    const marker = this.awayMarker;
+    const buffer = this.headless.buffer.active;
+    if (!marker || buffer.type !== 'normal') return null;
+    const top = marker.isDisposed ? 0 : Math.max(0, marker.line - JUMP_CONTEXT_LINES);
+    return Math.max(0, buffer.baseY - top);
+  }
+
+  dismissAway() {
+    this.awayMarker?.dispose();
+    this.awayMarker = null;
+    if (this.snapshot.away) this.update({ away: null });
   }
 
   write(data: string) {
@@ -549,10 +673,12 @@ export class SessionManager {
 
   attach(id: string, view: ViewSink, size: TerminalSize) {
     this.sessions.get(id)?.attach(view, size);
+    this.updateWatched();
   }
 
   detach(id: string, view: ViewSink) {
     this.sessions.get(id)?.detach(view);
+    this.updateWatched();
   }
 
   write(id: string, data: string) {
@@ -570,6 +696,19 @@ export class SessionManager {
 
   reconnect(id: string) {
     this.sessions.get(id)?.reconnect();
+  }
+
+  /** Forgets what arrived while the person was away: they've seen it, or don't care. */
+  dismissAway(id: string) {
+    this.sessions.get(id)?.dismissAway();
+  }
+
+  /**
+   * How many lines above the bottom screen to scroll a view to, to show where the person
+   * left off (see Session.awayScroll); null when there's nowhere to go.
+   */
+  awayScroll(id: string): number | null {
+    return this.sessions.get(id)?.awayScroll() ?? null;
   }
 
   /** Remembers where reading mode reads the session's history from. */
@@ -622,11 +761,20 @@ export class SessionManager {
   /** The session on screen, or null. Alerts from it don't notify. */
   setFocused(id: string | null) {
     this.focusedId = id;
+    this.updateWatched();
   }
 
   setAppActive(active: boolean) {
     this.appActive = active;
+    this.updateWatched();
     if (active) this.sessions.forEach((session) => session.resume());
+  }
+
+  /** Tells each session whether the person is looking at it: on screen, app in front. */
+  private updateWatched() {
+    this.sessions.forEach((session, id) =>
+      session.setWatched(this.appActive && this.focusedId === id && session.isAttached)
+    );
   }
 
   /** @internal */

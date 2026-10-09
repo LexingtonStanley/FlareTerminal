@@ -47,6 +47,7 @@ const ICONS = {
   read: { ios: 'text.book.closed', android: 'menu_book', web: 'menu_book' },
   expand: { ios: 'chevron.down', android: 'expand_more', web: 'expand_more' },
   collapse: { ios: 'chevron.up', android: 'expand_less', web: 'expand_less' },
+  up: { ios: 'arrow.up', android: 'arrow_upward', web: 'arrow_upward' },
 } satisfies Record<string, SymbolViewProps['name']>;
 
 export type IconName = keyof typeof ICONS;

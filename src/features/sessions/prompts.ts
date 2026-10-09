@@ -152,6 +152,12 @@ const WORKING = [
   /\besc to cancel\b.*\b\d+s\b|\b\d+s\b.*\besc to cancel\b/i,
 ];
 
+/** Whether a line is an agent's working line. */
+export function isWorkingLine(line: string): boolean {
+  const cleaned = clean(line);
+  return WORKING.some((pattern) => pattern.test(cleaned));
+}
+
 /** Whether an agent's working line is near the bottom of the screen. */
 export function isWorking(lines: readonly string[]): boolean {
   return lines
