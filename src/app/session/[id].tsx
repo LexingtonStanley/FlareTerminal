@@ -7,7 +7,6 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   StyleSheet,
   useWindowDimensions,
   View,
@@ -17,7 +16,8 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
 import { Screen } from '@/components/ui/screen';
-import { Spacing, TerminalColors } from '@/constants/theme';
+import { IconButton } from '@/components/ui/icon-button';
+import { Radius, Spacing } from '@/constants/theme';
 import { StatusBadge } from '@/features/sessions/session-status';
 import type { SessionSnapshot } from '@/features/sessions/session-manager';
 import { SessionStrip } from '@/features/sessions/session-strip';
@@ -29,7 +29,7 @@ import { CodingKeyboard } from '@/features/keyboard/coding-keyboard';
 import { toModifiers } from '@/features/keyboard/modifiers';
 import { Composer } from '@/features/terminal/composer';
 import TerminalView, { type TerminalViewHandle } from '@/features/terminal/terminal-view';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useTerminalTheme } from '@/features/settings/use-terminal-theme';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function SessionScreen() {
@@ -61,7 +61,7 @@ function openLink(url: string) {
 }
 
 function TerminalSession({ session }: { session: SessionSnapshot }) {
-  const scheme = useColorScheme() === 'dark' ? 'dark' : 'light';
+  const terminalTheme = useTerminalTheme();
   const { fontSize } = usePreferences();
   const headerHeight = useHeaderHeight();
   const manager = useSessionManager();
@@ -93,15 +93,7 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
           headerRight: () => (
             <View style={styles.headerRight}>
               <StatusBadge status={session.status} />
-              <Pressable
-                role="button"
-                aria-label="Close session"
-                onPress={closeSession}
-                style={styles.close}>
-                <ThemedText type="smallBold" themeColor="textSecondary">
-                  ✕
-                </ThemedText>
-              </Pressable>
+              <IconButton icon="close" label="Close session" onPress={closeSession} />
             </View>
           ),
         }}
@@ -111,10 +103,10 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={headerHeight}>
-        <View style={[styles.flex, { backgroundColor: TerminalColors[scheme].background }]}>
+        <View style={[styles.flex, { backgroundColor: terminalTheme.background }]}>
           <TerminalView
             ref={viewRef}
-            theme={TerminalColors[scheme]}
+            theme={terminalTheme}
             fontSize={fontSize}
             {...view.viewCallbacks}
             onOpenLink={openLink}
@@ -128,7 +120,9 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
             }}
           />
           {session.status.state === 'closed' ? (
-            <ThemedView type="backgroundElement" style={styles.banner}>
+            <ThemedView
+              type="backgroundRaised"
+              style={[styles.banner, { borderColor: theme.border }]}>
               <ThemedText type="small" role="alert">
                 {session.status.message}
               </ThemedText>
@@ -177,11 +171,11 @@ function SessionTitle({ name, title }: { name: string; title: string | null }) {
 
   return (
     <View style={{ maxWidth: width - HEADER_SIDES_WIDTH }}>
-      <ThemedText type="smallBold" role="heading" numberOfLines={1}>
+      <ThemedText type="headline" role="heading" numberOfLines={1}>
         {name}
       </ThemedText>
       {title ? (
-        <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+        <ThemedText type="code" themeColor="textSecondary" numberOfLines={1} style={styles.title}>
           {title}
         </ThemedText>
       ) : null}
@@ -192,15 +186,16 @@ function SessionTitle({ name, title }: { name: string; title: string | null }) {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   screen: { padding: 0, gap: 0, maxWidth: '100%' },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
-  close: { padding: Spacing.two },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one },
+  title: { fontSize: 12, lineHeight: 16 },
   banner: {
     position: 'absolute',
     left: Spacing.three,
     right: Spacing.three,
     bottom: Spacing.three,
-    gap: Spacing.two,
+    gap: Spacing.three - 4,
     padding: Spacing.three,
-    borderRadius: Spacing.three,
+    borderRadius: Radius.large,
+    borderWidth: StyleSheet.hairlineWidth,
   },
 });
