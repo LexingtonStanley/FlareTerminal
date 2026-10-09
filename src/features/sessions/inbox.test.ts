@@ -4,6 +4,7 @@ import {
   inboxGroup,
   isMeaningful,
   lastMeaningfulLine,
+  waitingFor,
   WORKING_WINDOW_MS,
 } from './inbox';
 
@@ -70,13 +71,20 @@ describe('isMeaningful and cleanLine', () => {
 
 describe('inboxGroup', () => {
   const now = 1_000_000;
-  const connected = { status: { state: 'connected' } as const, reconnecting: false };
+  const connected = { status: { state: 'connected' } as const, reconnecting: false, prompt: null };
 
   it('puts an unseen alert first, whatever the screen does', () => {
     const attention = { title: 'Claude', body: 'Approve?', at: now - 1000 };
     expect(inboxGroup({ ...connected, attention }, { preview: null, changedAt: now }, now)).toBe(
       'needs-you'
     );
+  });
+
+  it('keeps a question on screen in Needs you after its alert was seen', () => {
+    const prompt = { question: 'Proceed?', options: [], at: now - 60_000 };
+    const session = { ...connected, attention: null, prompt };
+    expect(inboxGroup(session, { preview: null, changedAt: now }, now)).toBe('needs-you');
+    expect(waitingFor(session)).toEqual({ message: 'Proceed?', since: now - 60_000 });
   });
 
   it('is working while the screen changes, idle once it settles', () => {
@@ -93,6 +101,7 @@ describe('inboxGroup', () => {
       status: { state: 'closed', message: 'gone' } as const,
       reconnecting: false,
       attention: null,
+      prompt: null,
     };
     expect(inboxGroup(session, { preview: null, changedAt: now }, now)).toBe('idle');
   });

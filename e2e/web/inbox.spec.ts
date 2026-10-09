@@ -30,3 +30,32 @@ test('lists a session by what it needs, with its last screen line', async ({ pag
   await row.click();
   await expect(page.getByLabel('Status: Connected')).toBeVisible();
 });
+
+test('notices an agent’s question on screen, with no escape codes', async ({ page }) => {
+  const ttyd = await fakeTtyd(page);
+  await page.goto('/connections/new');
+  await page.getByRole('radio', { name: 'ttyd' }).click();
+  await page.getByLabel('Name').fill('Devbox');
+  await page.getByLabel('Address').fill(FAKE_TTYD_ADDRESS);
+  await page.getByRole('button', { name: 'Save' }).click();
+  await page.getByRole('button', { name: 'Open Devbox' }).click();
+  const session = await ttyd.session(0);
+  await expect(page.getByLabel('Status: Connected')).toBeVisible();
+  await page.goBack();
+  await page.getByRole('tab', { name: 'Inbox' }).click();
+
+  session.output(
+    '\x1b[2J\x1b[H╭────────────────────────╮\r\n│ Bash command           │\r\n│   npm test             │\r\n' +
+      '│ Do you want to proceed? │\r\n│ ❯ 1. Yes               │\r\n│   2. No (esc)          │\r\n' +
+      '╰────────────────────────╯\r\n'
+  );
+
+  await expect(page.getByText('Needs you · 1')).toBeVisible();
+  const row = page.getByRole('button', { name: /^Open Devbox/ });
+  await expect(row.getByText('Do you want to proceed?')).toBeVisible();
+  await expect(page.getByRole('tab', { name: /Inbox, 1 need you/ })).toBeVisible();
+
+  // Answered elsewhere: it leaves the inbox's Needs you.
+  session.output('\x1b[2J\x1b[H⏺ Running npm test\r\n');
+  await expect(page.getByText('Needs you · 1')).toBeHidden();
+});

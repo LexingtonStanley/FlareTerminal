@@ -13,6 +13,7 @@ import { connectionLabel } from '@/features/connections/connections';
 import { useConnections } from '@/features/connections/connections-provider';
 import { ALL_GROUPS, GroupTabs } from '@/features/groups/group-tabs';
 import { useGroups } from '@/features/groups/groups-provider';
+import { waitingFor } from '@/features/sessions/inbox';
 import type { SessionTarget } from '@/features/sessions/session-manager';
 import { STATUS_LABELS, StatusDot } from '@/features/sessions/session-status';
 import {
@@ -47,7 +48,7 @@ export default function HomeScreen() {
 
   const openSession = (id: string) => router.push({ pathname: '/session/[id]', params: { id } });
   const start = (target: SessionTarget) => openSession(startSession(target));
-  const waiting = allSessions.filter((session) => session.attention).length;
+  const waiting = allSessions.filter((session) => waitingFor(session)).length;
   const { groups: shortcutGroups, ungrouped } = groupShortcuts(shortcuts);
 
   const tile = (shortcut: Shortcut) => (

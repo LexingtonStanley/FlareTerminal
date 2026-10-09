@@ -15,6 +15,23 @@ export type SessionActivity = {
   changedAt: number;
 };
 
+/**
+ * What a session wants from the person, if anything: an alert they haven't seen, or a
+ * question still on its screen (which keeps waiting after they've looked and left).
+ */
+export function waitingFor(
+  session: Pick<SessionSnapshot, 'attention' | 'prompt'>
+): { message: string; since: number } | null {
+  if (session.attention) {
+    return {
+      message: session.attention.body || session.prompt?.question || 'Needs your attention',
+      since: session.attention.at,
+    };
+  }
+  if (session.prompt) return { message: session.prompt.question, since: session.prompt.at };
+  return null;
+}
+
 /** A screen that changed this recently is an agent (or a build) at work. */
 export const WORKING_WINDOW_MS = 4_000;
 
@@ -67,16 +84,17 @@ export function lastMeaningfulLine(lines: readonly string[]): string | null {
 }
 
 /**
- * Which part of the inbox a session belongs in. An unseen alert needs the person; a screen
+ * Which part of the inbox a session belongs in. An unseen alert or a question on screen
+ * needs the person; a screen
  * that changed in the last few seconds is working; anything else (quiet, connecting,
  * disconnected) is idle.
  */
 export function inboxGroup(
-  session: Pick<SessionSnapshot, 'attention' | 'status' | 'reconnecting'>,
+  session: Pick<SessionSnapshot, 'attention' | 'prompt' | 'status' | 'reconnecting'>,
   activity: SessionActivity | null,
   now: number
 ): InboxGroup {
-  if (session.attention) return 'needs-you';
+  if (waitingFor(session)) return 'needs-you';
   if (
     session.status.state === 'connected' &&
     activity &&

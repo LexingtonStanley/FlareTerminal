@@ -328,4 +328,73 @@ describe('SessionManager', () => {
     });
     expect(manager.activity('nope')).toBeNull();
   });
+
+  describe('prompts on screen', () => {
+    const MENU = 'Do you want to proceed?\r\n\u276f 1. Yes\r\n  2. No (esc)\r\n';
+
+    it('alerts for a question on screen, and drops the alert once it is answered', async () => {
+      const { manager, transports, view, alerts, session } = setup();
+      const id = manager.start({ connectionId: 'box', name: 'Claude', command: null });
+      const sink = view();
+      manager.attach(id, sink, SIZE);
+      manager.detach(id, sink);
+
+      transports[0].output(`Bash command\r\n  npm test\r\n${MENU}`);
+      await parsed(manager, id);
+
+      expect(session(id).prompt).toMatchObject({
+        question: 'Do you want to proceed?',
+        options: [
+          { label: 'Yes', input: '1' },
+          { label: 'No (esc)', input: '2' },
+        ],
+      });
+      expect(session(id).attention?.body).toBe('Do you want to proceed?');
+      expect(alerts).toHaveLength(1);
+
+      // Redrawn, not new: no second alert.
+      transports[0].output(`\x1b[2J\x1b[H${MENU}`);
+      await parsed(manager, id);
+      expect(alerts).toHaveLength(1);
+
+      // Answered on the laptop: the screen moves on.
+      transports[0].output('\x1b[2J\x1b[H\u23fa Running npm test\r\n');
+      await parsed(manager, id);
+      expect(session(id).prompt).toBeNull();
+      expect(session(id).attention).toBeNull();
+    });
+
+    it('keeps the agent’s own message, but replaces a bare bell', async () => {
+      const { manager, transports, view, session } = setup();
+      const id = manager.start({ connectionId: 'box', name: 'Claude', command: null });
+      const sink = view();
+      manager.attach(id, sink, SIZE);
+      manager.detach(id, sink);
+
+      transports[0].output(`\x1b]9;Claude needs your permission to use Bash\x07${MENU}`);
+      await parsed(manager, id);
+      expect(session(id).attention?.body).toBe('Claude needs your permission to use Bash');
+
+      const other = manager.start({ connectionId: 'box', name: 'Shell', command: null });
+      manager.attach(other, sink, SIZE);
+      manager.detach(other, sink);
+      transports[1].output('\x07Continue? [y/N] ');
+      await parsed(manager, other);
+      expect(session(other).attention?.body).toBe('Continue?');
+    });
+
+    it('notes the question but stays quiet for the session on screen', async () => {
+      const { manager, transports, view, alerts, session } = setup();
+      const id = manager.start({ connectionId: 'box', name: 'Claude', command: null });
+      manager.attach(id, view(), SIZE);
+      manager.setFocused(id);
+
+      transports[0].output(MENU);
+      await parsed(manager, id);
+
+      expect(session(id).prompt?.question).toBe('Do you want to proceed?');
+      expect(session(id).attention).toBeNull();
+      expect(alerts).toHaveLength(0);
+    });
+  });
 });
