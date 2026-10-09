@@ -78,6 +78,24 @@ export type SshCloseReason = {
 
 export class SshError extends Error {}
 
+/** Why the host refused to open a channel (RFC 4254 section 5.1). */
+export const OPEN_FAILURE = {
+  ADMINISTRATIVELY_PROHIBITED: 1,
+  CONNECT_FAILED: 2,
+  UNKNOWN_CHANNEL_TYPE: 3,
+  RESOURCE_SHORTAGE: 4,
+} as const;
+
+/** The host refused to open a channel; `reason` is one of OPEN_FAILURE. */
+export class ChannelOpenError extends SshError {
+  constructor(
+    readonly reason: number,
+    readonly description: string
+  ) {
+    super(`The host refused: ${description || 'no reason given'}`);
+  }
+}
+
 type Negotiated = {
   kex: string;
   hostKey: string;
@@ -748,6 +766,27 @@ export class SshClient {
 
   // ───────────────────────────── channels ─────────────────────────────
 
+  /** Opens a channel of `type`; `build` writes what that type adds to the request. */
+  private async openChannel(
+    type: string,
+    build?: (writer: SshWriter) => unknown
+  ): Promise<SshChannel> {
+    if (this.closed) throw new SshError('Not connected');
+    const channel = new SshChannel(this, this.nextChannelId++);
+    this.channels.set(channel.localId, channel);
+    const opened = new Promise<void>((resolve, reject) =>
+      this.opening.set(channel.localId, { resolve, reject })
+    );
+    this.send(
+      this.message(MSG.CHANNEL_OPEN, (w) => {
+        w.string(type).uint32(channel.localId).uint32(LOCAL_WINDOW).uint32(LOCAL_MAX_PACKET);
+        build?.(w);
+      })
+    );
+    await opened;
+    return channel;
+  }
+
   async openShell({
     term,
     cols,
@@ -757,17 +796,13 @@ export class SshClient {
     cols: number;
     rows: number;
   }): Promise<SshChannel> {
-    const channel = new SshChannel(this, this.nextChannelId++);
-    this.channels.set(channel.localId, channel);
-    const opened = new Promise<void>((resolve, reject) =>
-      this.opening.set(channel.localId, { resolve, reject })
-    );
-    this.send(
-      this.message(MSG.CHANNEL_OPEN, (w) =>
-        w.string('session').uint32(channel.localId).uint32(LOCAL_WINDOW).uint32(LOCAL_MAX_PACKET)
-      )
-    );
-    await opened;
+    let channel: SshChannel;
+    try {
+      channel = await this.openChannel('session');
+    } catch (error) {
+      if (!(error instanceof ChannelOpenError)) throw error;
+      throw new SshError(`The host refused a session: ${error.description || 'no reason given'}`);
+    }
 
     // Terminal modes: VERASE = DEL, IUTF8 on (so backspace removes whole UTF-8 characters).
     const modes = new SshWriter().byte(3).uint32(127).byte(42).uint32(1).byte(0).toBytes();
@@ -778,6 +813,18 @@ export class SshClient {
     const shell = await this.channelRequest(channel, 'shell', true);
     if (!shell) throw new SshError('The host refused to start a shell');
     return channel;
+  }
+
+  /**
+   * A byte stream to `host`:`port` as the host sees them (RFC 4254 section 7.2), like
+   * `ssh -L`: `localhost` is the host itself. Rejects with a ChannelOpenError when the host
+   * doesn't allow forwarding or nothing answers there.
+   */
+  openDirectTcpip(host: string, port: number): Promise<SshChannel> {
+    // The originator is this phone, which has no address worth telling the host.
+    return this.openChannel('direct-tcpip', (w) =>
+      w.string(host).uint32(port).string('127.0.0.1').uint32(0)
+    );
   }
 
   /** @internal Sends a channel request; resolves with the reply when one is wanted. */
@@ -848,12 +895,10 @@ export class SshClient {
         return;
       }
       case MSG.CHANNEL_OPEN_FAILURE: {
-        r.uint32();
+        const reason = r.uint32();
         const description = r.utf8();
         this.channels.delete(channel.localId);
-        this.opening
-          .get(channel.localId)
-          ?.reject(new SshError(`The host refused a session: ${description || 'no reason given'}`));
+        this.opening.get(channel.localId)?.reject(new ChannelOpenError(reason, description));
         this.opening.delete(channel.localId);
         return;
       }

@@ -9,7 +9,13 @@ import { hostId, type KnownHosts } from '@/features/ssh/known-hosts';
 import type { OpenSocket } from '@/features/ssh/socket';
 import type { UserKey } from '@/features/ssh/user-key';
 
-import type { TerminalSize, TerminalTransport, TransportListener } from './transport';
+import type {
+  TerminalSize,
+  TerminalTransport,
+  TransportListener,
+  Tunnel,
+  TunnelEvents,
+} from './transport';
 
 /**
  * A terminal session over SSH, like `ssh user@host`. Questions OpenSSH would ask (an
@@ -52,6 +58,8 @@ export class SshTransport implements TerminalTransport {
   private finished = false;
   private closeMessage: string | null = null;
   private readonly decoder = new TextDecoder();
+  /** Ends each open tunnel; the client drops its channels silently with the connection. */
+  private readonly tunnels = new Set<() => void>();
 
   constructor(
     private readonly options: SshTransportOptions,
@@ -77,6 +85,28 @@ export class SshTransport implements TerminalTransport {
     this.closedByUs = true;
     this.reader?.resolve(null);
     this.client?.close();
+    this.endTunnels();
+  }
+
+  async openTunnel(port: number, events: TunnelEvents): Promise<Tunnel> {
+    // Only once signed in: a shell channel means the session is up.
+    if (!this.client || !this.channel || this.finished || this.closedByUs) {
+      throw new Error('Not connected');
+    }
+    // "localhost" as the host resolves it: a dev server may listen on IPv4 or IPv6 only.
+    const channel = await this.client.openDirectTcpip('localhost', port);
+    const end = () => {
+      if (!this.tunnels.delete(end)) return;
+      events.onClose();
+    };
+    this.tunnels.add(end);
+    channel.onData = (bytes) => events.onData(bytes);
+    channel.onClose = end;
+    return { write: (bytes) => channel.write(bytes), close: () => channel.close() };
+  }
+
+  private endTunnels() {
+    [...this.tunnels].forEach((end) => end());
   }
 
   private print(text: string) {
@@ -84,6 +114,7 @@ export class SshTransport implements TerminalTransport {
   }
 
   private finish(message: string, retry = false) {
+    this.endTunnels();
     if (this.finished || this.closedByUs) return;
     this.finished = true;
     const closeMessage = this.closeMessage;

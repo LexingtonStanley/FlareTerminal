@@ -8,7 +8,8 @@ import type { TerminalViewProps } from '@/features/terminal/terminal-view';
  * Stands in for the xterm.js DOM component, which renders a WebView on native. Shows
  * everything written to it as text (label "Terminal output"), reports a fixed size,
  * turns pressKey/paste into onInput the way xterm does (without bracketed paste), and
- * reports a press on it as a tap.
+ * reports a press on it as a tap. Each web link in the output is also a link (named by its
+ * URL) that reports a tap through onOpenLink, as xterm's link addon does.
  *
  *   jest.mock('@/features/terminal/terminal-view', () =>
  *     jest.requireActual('@/test-utils/fake-terminal-view')
@@ -22,8 +23,10 @@ export default function FakeTerminalView({
   onReady,
   onInput,
   onTap,
+  onOpenLink,
 }: TerminalViewProps) {
   const [output, setOutput] = useState('');
+  const links = [...new Set(output.match(/https?:\/\/[^\s]+/g) ?? [])];
 
   useImperativeHandle(ref, () => ({
     write: (data: string) => setOutput((current) => current + data),
@@ -40,8 +43,13 @@ export default function FakeTerminalView({
   }, []);
 
   return (
-    <Text aria-label="Terminal output" style={{ fontSize }} onPress={onTap}>
-      {output}
-    </Text>
+    <>
+      <Text aria-label="Terminal output" style={{ fontSize }} onPress={onTap}>
+        {output}
+      </Text>
+      {links.map((url) => (
+        <Text key={url} role="link" aria-label={url} onPress={() => onOpenLink(url)} />
+      ))}
+    </>
   );
 }

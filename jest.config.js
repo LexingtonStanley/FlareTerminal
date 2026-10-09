@@ -16,5 +16,7 @@ module.exports = {
     // No native side in Jest; the library ships a mock (plain View and ScrollView).
     '^react-native-keyboard-controller$':
       '<rootDir>/node_modules/react-native-keyboard-controller/jest',
+    // No native WebView in Jest: a plain View that keeps its props.
+    '^react-native-webview$': '<rootDir>/jest/webview-stub.js',
   },
 };
