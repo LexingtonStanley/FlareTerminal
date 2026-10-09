@@ -71,6 +71,7 @@ class Session {
   private replayBuffer: string[] | null = null;
   private size: TerminalSize = { cols: 80, rows: 24 };
   private lastAlertAt = -Infinity;
+  private lastAlertWasBell = false;
   snapshot: SessionSnapshot;
 
   constructor(
@@ -93,7 +94,7 @@ class Session {
       allowProposedApi: true,
     });
     this.headless.loadAddon(this.serializer);
-    this.headless.onBell(() => this.alert({ title: null, body: 'Needs your attention' }));
+    this.headless.onBell(() => this.alert({ title: null, body: 'Needs your attention' }, true));
     this.headless.onTitleChange((title) => this.update({ title }));
     const handlers: [number, (data: string) => AgentAlert | null][] = [
       [9, parseOsc9],
@@ -114,14 +115,19 @@ class Session {
     this.manager.changed();
   }
 
-  private alert({ title, body }: AgentAlert) {
+  private alert({ title, body }: AgentAlert, bell = false) {
     const now = this.manager.now();
     const watching = this.manager.isWatching(this.snapshot.id);
     if (watching) return;
+    const recent = now - this.lastAlertAt < ALERT_INTERVAL_MS;
+    // Agents can ring the bell with a message (Claude Code's iterm2_with_bell): the bell
+    // adds nothing to the message, and the message is worth a notification of its own.
+    if (bell && recent && this.snapshot.attention) return;
     const attention = { title: title ?? this.snapshot.name, body, at: now };
     this.update({ attention });
-    if (now - this.lastAlertAt < ALERT_INTERVAL_MS) return;
+    if (recent && (bell || !this.lastAlertWasBell)) return;
     this.lastAlertAt = now;
+    this.lastAlertWasBell = bell;
     this.manager.attention(this.snapshot, attention);
   }
 

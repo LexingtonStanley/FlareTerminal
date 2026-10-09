@@ -46,8 +46,9 @@ Traps already hit in this exact stack:
 - **DOM components** (`'use dom'`, `src/features/terminal/terminal-view.tsx`): on native they run
   in a WebView (`@expo/dom-webview`), so props must be JSON-serializable, function props become
   async calls back to the app, and the component can't share React state with the app. Push
-  data in through the imperative handle (`useDOMImperativeHandle`), never through changing
-  props, and batch it: each call is an `injectJavaScript`. Its methods aren't callable until
+  streaming data in through the imperative handle (`useDOMImperativeHandle`), never through
+  changing props, and batch it: each call is an `injectJavaScript`. Settings that rarely change
+  (theme, font size, `systemKeyboard`) are props. Its methods aren't callable until
   the view has called `onReady`. Expo types handle methods as `(...args: JSONValue[])`; the view
   wraps that once (`useTypedDOMImperativeHandle`) so callers keep precise types.
 - **ttyd** ignores input unless started with `-W`, needs the `Authorization: Basic` header on
@@ -59,7 +60,17 @@ Traps already hit in this exact stack:
   (`.xterm-rows` never counts as stable).
 - **React Compiler lint (`react-hooks/refs`)** treats any object that contains a ref as a ref,
   so returning a ref from a hook taints everything else it returns. Let the component own the
-  ref and pass it in (see `useTerminalSession`).
+  ref and pass it in (see `useSessionView`).
+- **`@xterm/headless` 6.0.0** names a missing file in its `"module"` field, which web builds
+  read first; `metro.config.js` resolves it to `lib-headless/xterm-headless.js`.
+- **The in-app keyboard's keys have no `onPress`**: one touch surface tracks every finger. In
+  Jest, act on a key by name with
+  `fireEvent(key, 'accessibilityAction', { nativeEvent: { actionName } })` (`'activate'` taps;
+  `'up'`, `'down'`, `'left'`, `'right'` flick). In Playwright, click it, or drive the mouse for
+  flicks (`e2e/web/keyboard.spec.ts`). Modifier keys are `role="switch"`.
+- **noble** (`@noble/*`) ships ES modules only; `jest.config.js` transforms it.
+- **Coding agents' git worktrees** (`.claude/worktrees/`) hold a second copy of the app; Jest,
+  Metro, ESLint, Prettier and `tsc` all ignore them. Keep it that way.
 - **Hermes** has `TextEncoder`, and Expo installs a streaming `TextDecoder`, `URL` and
   `URLSearchParams` on native, so use the standard APIs.
 - **`EXPO_PUBLIC_*`** variables are only inlined when written exactly as
@@ -83,20 +94,32 @@ Traps already hit in this exact stack:
 
 ```
 src/app/                 Routes only. Every file here is a screen; never put tests or helpers here.
-  _layout.tsx            Providers (preferences, connections), stack, root ErrorBoundary
-  (tabs)/                Tab navigator: index (connections list), settings
+  _layout.tsx            Providers (preferences, connections, shortcuts, sessions), stack,
+                         attention banner, root ErrorBoundary
+  (tabs)/                Tab navigator: index (Home: sessions, shortcuts, connections), settings
   connections/           new.tsx, [id].tsx (edit): the connection form
-  terminal/[id].tsx      A terminal session: view, key bar, composer, status
+  shortcuts/             new.tsx, [id].tsx (edit): the shortcut form
+  session/[id].tsx       A session: session strip, view, keyboard (bar + composer, or coding)
+  keyboard-preview.tsx   Both keyboards against a pretend shell, no host needed
   +not-found.tsx
 src/components/ui/       Screen, Button, TextField primitives: build screens from these
 src/components/          ThemedText, ThemedView, ExternalLink
 src/features/terminal/   terminal-view ('use dom' xterm.js), transport.ts (interface), ttyd.ts,
-                         open-transport.ts, use-terminal-session.ts, keys.ts, key-bar, composer
-src/features/connections/ Connection type, validation, ConnectionsProvider, form
-src/features/settings/   PreferencesProvider (font size)
+                         ssh-transport.ts, open-transport.ts, keys.ts (bytes for keys), composer
+src/features/ssh/        SSH-2 client (client.ts), packets and ciphers, host and user keys,
+                         known hosts, the app's key, socket.ts (TCP; socket.web.ts refuses)
+src/features/sessions/   SessionManager (every open session, headless xterm), alerts, provider,
+                         useSessionView, session strip, status, attention banner
+src/features/keyboard/   Accessory bar and coding keyboard: layout, gestures, touch tracking,
+                         modifiers, haptics (docs/keyboard.md explains the design)
+src/features/shortcuts/  Shortcut type, presets (Claude in tmux/zellij), provider, form
+src/features/notifications/ Local notifications for agent alerts (no-op on web)
+src/features/connections/ Connection type (SSH or ttyd), validation, ConnectionsProvider, form
+src/features/settings/   PreferencesProvider (font size, keyboard)
 src/features/<name>/     Feature logic and its colocated *.test.ts(x)
 src/lib/                 storage.ts (JSON in localStorage / SQLite), secrets.ts (Keychain/Keystore)
-src/test-utils/          Jest helpers: renderApp, memory-storage, fake-terminal-view, fake-transport
+src/test-utils/          Jest helpers: renderApp, memory-storage, fake-terminal-view, fake-transport,
+                         fake-notify, ssh-server (a real SSH server from ssh2)
 __tests__/               Router-level Jest tests (render the real src/app tree)
 e2e/web/                 Playwright specs; fake-ttyd.ts plays a ttyd host via page.routeWebSocket
 .maestro/                Device flows, run on EAS
@@ -117,10 +140,14 @@ app.json / app.config.ts Identity / build variants (APP_VARIANT = development | 
   Supabase auth was removed; RapidAppToolkit has it if a backend (for example syncing
   connections) is ever needed.
 - **Terminal architecture**: the view only renders; a `TerminalTransport` only moves bytes;
-  `useTerminalSession` joins them (connect after `onReady`, batch output per frame, sticky
-  modifiers, reconnect). A new way to reach a host (SSH, a relay) is a new transport behind the
-  same interface, chosen in `open-transport.ts`. Keep byte-level logic pure and unit-tested
-  (`keys.ts`, the ttyd framing).
+  `SessionManager` owns sessions, which outlive their screens (each keeps a headless xterm for
+  replay and alerts); `useSessionView` joins a view to a session (attach after `onReady`, batch
+  output per frame, modifiers). A new way to reach a host (mosh, a relay) is a new transport
+  behind the same interface, chosen in `open-transport.ts`. Keep byte-level logic pure and
+  unit-tested (`keys.ts`, the ttyd framing, the SSH packets).
+- **SSH is security code.** Never weaken host-key checking (a changed key refuses to connect),
+  add algorithms without a reason, or log secrets. `client.test.ts` runs against a real SSH
+  server (`ssh2`); a change to the protocol also gets a manual run against OpenSSH.
 - **Terminal output is untrusted.** Only open `http(s)` links from it, never evaluate it, and
   don't enable xterm.js features that write to the clipboard or file system without a prompt.
 - **Data on the device**: small JSON through `src/lib/storage.ts`; passwords and keys only
@@ -133,14 +160,19 @@ app.json / app.config.ts Identity / build variants (APP_VARIANT = development | 
     fake terminal view and fake transport from `src/test-utils/` (see the `jest.mock` lines at
     the top of `__tests__/terminal-flow.test.tsx`). Drive the host with `act(() => transport.…)`.
   - Web E2E: `e2e/web/*.spec.ts` against the real xterm.js and `TtydTransport`, with
-    `fakeTtyd(page)` playing the host. Extend its shell when a test needs more commands.
+    `fakeTtyd(page)` playing the host. Extend its shell when a test needs more commands. SSH
+    can't run in a browser; its end-to-end tests are in Jest.
   - `testID` is only for Maestro flows (`.maestro/`).
 - **Limits of the web check**: it can't catch native-only behaviour (the WebView hosting the
-  terminal, soft keyboards and IMEs, Keychain/Keystore, cleartext networking, gestures). Cover
+  terminal, TCP sockets, soft keyboards and IMEs, `inputmode="none"`, Keychain/Keystore,
+  cleartext networking, notifications, haptics, multi-touch). Cover
   those with a Maestro flow and say in your summary that they need a device run.
 - **Checking against a real ttyd**: download a release binary from
   https://github.com/tsl0922/ttyd/releases, run `ttyd -W -i lo -p 7690 bash`, serve the web
   build (`npm run web:build && node scripts/serve-web.mjs`) and connect to `localhost:7690`.
+- **Checking against a real OpenSSH**: run `/usr/sbin/sshd -D -p 2222 -f <config>` with its own
+  host key, then point a temporary Jest test at it with `openNodeSocket` from
+  `src/test-utils/ssh-server.ts` (the client takes any socket). Remove the test afterwards.
 
 ## Builds and releases
 

@@ -48,6 +48,8 @@ export async function ensureNotificationPermission(): Promise<boolean> {
 export function postAgentNotification(sessionId: string, title: string, body: string) {
   configure();
   void Notifications.scheduleNotificationAsync({
+    // One notification per session: a newer alert replaces the older one.
+    identifier: `agent-${sessionId}`,
     content: { title, body, data: { sessionId } },
     trigger: Platform.OS === 'android' ? { channelId: CHANNEL_ID } : null,
   });

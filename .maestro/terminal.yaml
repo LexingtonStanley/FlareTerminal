@@ -4,7 +4,8 @@
 # The web tests can't see the native WebView that hosts xterm.js, or the native TCP
 # socket SSH uses. A session connects only after that WebView has loaded and measured
 # the terminal, so reaching "Couldn't reach" proves the terminal renders and the socket
-# module loads on the device.
+# module loads on the device. Tapping the keyboard key checks that the in-app keyboard's
+# touch surface receives native touches.
 appId: com.lexingtonstanley.flareterminal
 ---
 - launchApp:
@@ -24,5 +25,8 @@ appId: com.lexingtonstanley.flareterminal
 - extendedWaitUntil:
     visible: "Couldn't reach 127.0.0.1:9.*"
     timeout: 30000
-- assertVisible: 'esc'
 - assertVisible: 'Reconnect'
+- assertVisible: 'Escape'
+- tapOn: 'Coding keyboard'
+- assertVisible: 'System keyboard'
+- assertVisible: 'Backspace'

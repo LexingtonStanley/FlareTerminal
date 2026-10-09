@@ -142,11 +142,25 @@ describe('SessionManager', () => {
     expect(alerts).toHaveLength(1);
     expect(alerts[0].appActive).toBe(true);
 
-    // Within the burst window the attention updates but nothing new is sent.
+    // More bells in the burst are quiet; a message replaces the bare bell, once.
+    transports[0].output('\x07');
+    await parsed(manager, id);
+    expect(alerts).toHaveLength(1);
     transports[0].output('\x1b]9;Claude needs your permission to use Bash\x07');
     await parsed(manager, id);
     expect(session(id).attention?.body).toBe('Claude needs your permission to use Bash');
-    expect(alerts).toHaveLength(1);
+    expect(alerts).toHaveLength(2);
+
+    // A bell that comes with the message doesn't replace it, and later messages in the
+    // burst update the session without notifying again.
+    transports[0].output('\x07');
+    transports[0].output('\x1b]9;Still waiting\x07');
+    await parsed(manager, id);
+    expect(session(id).attention?.body).toBe('Still waiting');
+    expect(alerts).toHaveLength(2);
+    transports[0].output('\x07');
+    await parsed(manager, id);
+    expect(session(id).attention?.body).toBe('Still waiting');
 
     advance(20_000);
     manager.setAppActive(false);
