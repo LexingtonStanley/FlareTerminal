@@ -2,8 +2,8 @@ import type { PropsWithChildren, ReactNode } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Radius, Spacing, type ThemeColor } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { Spacing, type ThemeColor } from '@/constants/theme';
+import { shadows, useShape, useTheme } from '@/hooks/use-theme';
 
 import { Icon, type IconName } from './icon';
 
@@ -13,16 +13,23 @@ type CardProps = PropsWithChildren<{
   style?: StyleProp<ViewStyle>;
 }>;
 
-/** A surface for a group of related content: a hairline-bordered card. */
+/** A surface for a group of related content: a bordered card, raised in some themes. */
 export function Card({ children, flush = false, style }: CardProps) {
   const theme = useTheme();
+  const shape = useShape();
 
   return (
     <View
       style={[
         styles.card,
         !flush && styles.padded,
-        { backgroundColor: theme.backgroundElement, borderColor: theme.border },
+        {
+          backgroundColor: theme.backgroundElement,
+          borderColor: theme.border,
+          borderRadius: shape.radius.large,
+          borderWidth: shape.hairline,
+          boxShadow: shadows(shape.shadowCard),
+        },
         style,
       ]}>
       {children}
@@ -33,7 +40,8 @@ export function Card({ children, flush = false, style }: CardProps) {
 /** A hairline between rows in a flush card. */
 export function Divider({ inset = 0 }: { inset?: number }) {
   const theme = useTheme();
-  return <View style={[styles.divider, { backgroundColor: theme.border, marginLeft: inset }]} />;
+  const { hairline } = useShape();
+  return <View style={{ height: hairline, backgroundColor: theme.border, marginLeft: inset }} />;
 }
 
 type SectionProps = PropsWithChildren<{
@@ -73,6 +81,7 @@ const CALLOUT: Record<
 /** A short note in the flow of a form: what to know before going on. */
 export function Callout({ tone = 'info', children }: CalloutProps) {
   const theme = useTheme();
+  const shape = useShape();
   const look = CALLOUT[tone];
 
   return (
@@ -80,6 +89,8 @@ export function Callout({ tone = 'info', children }: CalloutProps) {
       style={[
         styles.callout,
         {
+          borderRadius: shape.radius.medium,
+          borderWidth: Math.max(1, shape.borderWidth),
           backgroundColor: tone === 'info' ? theme.backgroundSelected : 'transparent',
           borderColor: tone === 'info' ? 'transparent' : theme.danger,
         },
@@ -93,13 +104,9 @@ export function Callout({ tone = 'info', children }: CalloutProps) {
 }
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: Radius.large,
-    borderWidth: StyleSheet.hairlineWidth,
-    overflow: 'hidden',
-  },
+  // Clips rows to the corners; a card's own shadow still draws outside it.
+  card: { overflow: 'hidden' },
   padded: { padding: Spacing.three, gap: Spacing.two + 2 },
-  divider: { height: StyleSheet.hairlineWidth },
   section: { gap: Spacing.two + 2 },
   sectionHeader: {
     flexDirection: 'row',
@@ -112,8 +119,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: Spacing.two + 2,
     padding: Spacing.three - 2,
-    borderRadius: Radius.medium,
-    borderWidth: 1,
   },
   calloutIcon: { marginTop: 1 },
 });

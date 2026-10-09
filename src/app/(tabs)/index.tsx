@@ -8,7 +8,7 @@ import { Card, Divider, Section } from '@/components/ui/card';
 import { Icon } from '@/components/ui/icon';
 import { IconButton } from '@/components/ui/icon-button';
 import { Screen } from '@/components/ui/screen';
-import { mono, Radius, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
 import { connectionLabel } from '@/features/connections/connections';
 import { useConnections } from '@/features/connections/connections-provider';
 import { ALL_GROUPS, GroupTabs } from '@/features/groups/group-tabs';
@@ -25,7 +25,7 @@ import { NewShortcutTile, ShortcutTile } from '@/features/shortcuts/shortcut-til
 import { groupShortcuts, startupCommand, type Shortcut } from '@/features/shortcuts/shortcuts';
 import { useShortcuts } from '@/features/shortcuts/shortcuts-provider';
 import { useProtection } from '@/features/vault/use-protection';
-import { useTheme } from '@/hooks/use-theme';
+import { shadows, useShape, useTheme, useType } from '@/hooks/use-theme';
 
 export default function HomeScreen() {
   const { connections: allConnections } = useConnections();
@@ -45,6 +45,10 @@ export default function HomeScreen() {
   const startSession = useStartSession();
   const router = useRouter();
   const theme = useTheme();
+  const shape = useShape();
+  const { mono, glow } = useType();
+  // Small marks keep their slight rounding, except in square themes.
+  const mark = (radius: number) => ({ borderRadius: Math.min(radius, shape.radius.small) });
 
   const openSession = (id: string) => router.push({ pathname: '/session/[id]', params: { id } });
   const start = (target: SessionTarget) => openSession(startSession(target));
@@ -71,10 +75,16 @@ export default function HomeScreen() {
     <Screen scroll style={styles.screen}>
       <View style={styles.header}>
         <View style={styles.wordmark}>
-          <ThemedText role="heading" aria-label="Flare" style={styles.brand}>
+          <ThemedText role="heading" aria-label="Flare" style={[styles.brand, mono(600), glow]}>
             flare
           </ThemedText>
-          <View style={[styles.cursor, { backgroundColor: theme.primary }]} />
+          <View
+            style={[
+              styles.cursor,
+              mark(2),
+              { backgroundColor: theme.primary, boxShadow: shadows(shape.glowPrimary) },
+            ]}
+          />
         </View>
         <ThemedText type="small" themeColor="textSecondary">
           {allSessions.length === 0
@@ -96,7 +106,7 @@ export default function HomeScreen() {
                 {index > 0 ? <Divider inset={Spacing.three + 20} /> : null}
                 <View style={styles.row}>
                   {session.attention ? (
-                    <View style={[styles.flare, { backgroundColor: theme.attention }]} />
+                    <View style={[styles.flare, mark(2), { backgroundColor: theme.attention }]} />
                   ) : null}
                   <Pressable
                     role="button"
@@ -195,13 +205,24 @@ export default function HomeScreen() {
             <View
               style={[
                 styles.window,
-                { backgroundColor: theme.background, borderColor: theme.border },
+                {
+                  backgroundColor: theme.background,
+                  borderColor: theme.border,
+                  borderRadius: shape.radius.medium,
+                  borderWidth: shape.hairline,
+                },
               ]}>
               <View style={styles.windowBar}>
                 {[0, 1, 2].map((dot) => (
                   <View
                     key={dot}
-                    style={[styles.windowDot, { backgroundColor: theme.backgroundSelected }]}
+                    style={[
+                      styles.windowDot,
+                      {
+                        backgroundColor: theme.backgroundSelected,
+                        borderRadius: Math.min(shape.radius.dot, 4.5),
+                      },
+                    ]}
                   />
                 ))}
               </View>
@@ -212,7 +233,9 @@ export default function HomeScreen() {
                 <ThemedText type="code" selectable style={styles.promptText}>
                   ssh lexde@lexbox
                 </ThemedText>
-                <View style={[styles.promptCursor, { backgroundColor: theme.primary }]} />
+                <View
+                  style={[styles.promptCursor, mark(1.5), { backgroundColor: theme.primary }]}
+                />
               </View>
             </View>
             <ThemedText type="headline">Connect to your computer over SSH</ThemedText>
@@ -240,8 +263,15 @@ export default function HomeScreen() {
                       styles.rowMain,
                       pressed && { backgroundColor: theme.backgroundSelected },
                     ]}>
-                    <View style={[styles.monogram, { backgroundColor: theme.backgroundSelected }]}>
-                      <ThemedText style={styles.monogramText}>
+                    <View
+                      style={[
+                        styles.monogram,
+                        {
+                          backgroundColor: theme.backgroundSelected,
+                          borderRadius: Math.max(0, shape.radius.medium - 2),
+                        },
+                      ]}>
+                      <ThemedText style={[styles.monogramText, mono(600)]}>
                         {(connection.name.trim()[0] ?? '?').toUpperCase()}
                       </ThemedText>
                     </View>
@@ -298,10 +328,10 @@ const styles = StyleSheet.create({
   screen: { gap: Spacing.four + 4 },
   header: { gap: Spacing.half, paddingTop: Spacing.two },
   wordmark: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one + 1 },
-  brand: { ...mono(600), fontSize: 30, lineHeight: 38, letterSpacing: -1 },
-  cursor: { width: 13, height: 27, borderRadius: 2, marginTop: 2 },
+  brand: { fontSize: 30, lineHeight: 38, letterSpacing: -1 },
+  cursor: { width: 13, height: 27, marginTop: 2 },
   row: { flexDirection: 'row', alignItems: 'center' },
-  flare: { position: 'absolute', left: 0, top: 10, bottom: 10, width: 3, borderRadius: 2 },
+  flare: { position: 'absolute', left: 0, top: 10, bottom: 10, width: 3 },
   rowMain: {
     flex: 1,
     flexDirection: 'row',
@@ -320,20 +350,17 @@ const styles = StyleSheet.create({
   monogram: {
     width: 40,
     height: 40,
-    borderRadius: Radius.medium - 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  monogramText: { ...mono(600), fontSize: 17, lineHeight: 22 },
+  monogramText: { fontSize: 17, lineHeight: 22 },
   empty: { gap: Spacing.three - 4, padding: Spacing.three },
   window: {
-    borderRadius: Radius.medium,
-    borderWidth: StyleSheet.hairlineWidth,
     paddingBottom: Spacing.three,
     marginBottom: Spacing.one,
   },
   windowBar: { flexDirection: 'row', gap: 6, padding: Spacing.two + 2 },
-  windowDot: { width: 9, height: 9, borderRadius: 4.5 },
+  windowDot: { width: 9, height: 9 },
   prompt: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -341,5 +368,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
   },
   promptText: { fontSize: 15, lineHeight: 22 },
-  promptCursor: { width: 9, height: 18, borderRadius: 1.5, marginLeft: -4 },
+  promptCursor: { width: 9, height: 18, marginLeft: -4 },
 });

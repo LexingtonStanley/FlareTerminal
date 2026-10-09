@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, Divider, Section } from '@/components/ui/card';
 import { Icon } from '@/components/ui/icon';
 import { Screen } from '@/components/ui/screen';
-import { Radius, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
 import { useConnections } from '@/features/connections/connections-provider';
 import {
   formatSince,
@@ -21,7 +21,7 @@ import type { SessionSnapshot } from '@/features/sessions/session-manager';
 import { STATUS_LABELS, StatusDot } from '@/features/sessions/session-status';
 import { useSessionManager, useSessions } from '@/features/sessions/sessions-provider';
 import { useProtection } from '@/features/vault/use-protection';
-import { useTheme } from '@/hooks/use-theme';
+import { useShape, useTheme } from '@/hooks/use-theme';
 
 const GROUPS: { group: InboxGroup; title: string }[] = [
   { group: 'needs-you', title: 'Needs you' },
@@ -44,6 +44,7 @@ export default function InboxScreen() {
   const scopeOf = useProtection();
   const router = useRouter();
   const theme = useTheme();
+  const { radius } = useShape();
 
   // Screens are read once a second while the inbox is on screen, not on every write.
   const [look, setLook] = useState<Look>(() => ({ now: Date.now(), activity: new Map() }));
@@ -110,7 +111,12 @@ export default function InboxScreen() {
       <View>
         <View style={styles.row}>
           {group === 'needs-you' ? (
-            <View style={[styles.flare, { backgroundColor: theme.attention }]} />
+            <View
+              style={[
+                styles.flare,
+                { backgroundColor: theme.attention, borderRadius: Math.min(2, radius.small) },
+              ]}
+            />
           ) : null}
           <Pressable
             role="button"
@@ -160,7 +166,11 @@ export default function InboxScreen() {
                 </View>
               ) : null}
               {preview ? (
-                <View style={[styles.preview, { backgroundColor: theme.backgroundSelected }]}>
+                <View
+                  style={[
+                    styles.preview,
+                    { backgroundColor: theme.backgroundSelected, borderRadius: radius.small },
+                  ]}>
                   <ThemedText type="code" themeColor="textSecondary" numberOfLines={1}>
                     {preview}
                   </ThemedText>
@@ -255,7 +265,7 @@ const styles = StyleSheet.create({
   header: { gap: Spacing.half, paddingTop: Spacing.two },
   empty: { gap: Spacing.two, padding: Spacing.three },
   row: { flexDirection: 'row', alignItems: 'center' },
-  flare: { position: 'absolute', left: 0, top: 10, bottom: 10, width: 3, borderRadius: 2 },
+  flare: { position: 'absolute', left: 0, top: 10, bottom: 10, width: 3 },
   rowMain: {
     flex: 1,
     flexDirection: 'row',
@@ -282,6 +292,5 @@ const styles = StyleSheet.create({
     marginTop: Spacing.half,
     paddingHorizontal: Spacing.two,
     paddingVertical: Spacing.one,
-    borderRadius: Radius.small,
   },
 });

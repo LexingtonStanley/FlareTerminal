@@ -155,7 +155,7 @@ src/features/connections/ Connection type (SSH or ttyd), validation, Connections
 src/features/groups/     Connection groups: type, provider, Home's group tabs, form
 src/features/vault/      App lock and encrypted vault (vault.ts), LockProvider (lock screen),
                          UnlockPanel, AccessGuard (protected connections/groups, keep-alive)
-src/features/settings/   PreferencesProvider (font size)
+src/features/settings/   PreferencesProvider (theme, light/dark, font size), theme picker
 src/features/<name>/     Feature logic and its colocated *.test.ts(x)
 src/lib/                 storage.ts (JSON in localStorage / SQLite), secrets.ts (Keychain/Keystore),
                          vault-key.ts (seals secrets while an app lock is set)
@@ -178,8 +178,11 @@ app.json / app.config.ts Identity / build variants (APP_VARIANT = development | 
   colors, never hard-coded colors. Every screen must work in light and dark mode and at phone
   width on web.
 - **Design**: `docs/design.md` has the direction and the tokens (colour, type, space) and when
-  to use each. One ember accent per screen; Geist Mono only for what a computer reads. Fonts
-  are per-weight families, so style text with `sans(600)` / `mono()`, never `fontWeight`.
+  to use each, across ten themes (`src/constants/app-themes.ts`). One accent per screen; mono
+  only for what a computer reads. Take colours, corners and type from `useTheme()`,
+  `useShape()` and `useType()` (`src/hooks/use-theme.ts`), never constants, so every theme
+  applies. Fonts are per-weight families, so style text with `sans(600)` / `mono()` from
+  `useType()`, never `fontWeight`.
 - **Navigation**: routes are typed, so a bad `href` or `router.push()` fails typecheck.
 - **No accounts**: the hosts a person connects to do the authentication. The template's
   Supabase auth was removed; RapidAppToolkit has it if a backend (for example syncing

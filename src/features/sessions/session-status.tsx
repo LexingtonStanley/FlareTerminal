@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react';
 import { AccessibilityInfo, Animated, Easing, Platform, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { Radius, Spacing, type ThemeColor } from '@/constants/theme';
+import { Spacing, type ThemeColor } from '@/constants/theme';
 import type { SessionStatus } from '@/features/terminal/transport';
-import { useTheme } from '@/hooks/use-theme';
+import { useShape, useTheme } from '@/hooks/use-theme';
 
 export const STATUS_LABELS: Record<SessionStatus['state'], string> = {
   connecting: 'Connecting',
@@ -49,6 +49,9 @@ type LiveDotProps = {
 /** A status light: a dot in a soft halo of its own colour. */
 export function LiveDot({ color, pulsing = false, size = 8 }: LiveDotProps) {
   const reduceMotion = useReduceMotion();
+  const { radius } = useShape();
+  // Round, or square in themes whose dots are (Concrete).
+  const round = (width: number) => Math.min(radius.dot, width / 2);
   const [pulse] = useState(() => new Animated.Value(0));
   const animate = pulsing && !reduceMotion;
 
@@ -78,7 +81,7 @@ export function LiveDot({ color, pulsing = false, size = 8 }: LiveDotProps) {
           {
             width: halo,
             height: halo,
-            borderRadius: halo / 2,
+            borderRadius: round(halo),
             backgroundColor: color,
             opacity: animate
               ? pulse.interpolate({ inputRange: [0, 1], outputRange: [0.1, 0.35] })
@@ -89,7 +92,9 @@ export function LiveDot({ color, pulsing = false, size = 8 }: LiveDotProps) {
           },
         ]}
       />
-      <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: color }} />
+      <View
+        style={{ width: size, height: size, borderRadius: round(size), backgroundColor: color }}
+      />
     </View>
   );
 }
@@ -101,12 +106,18 @@ export function StatusDot({ status }: { status: SessionStatus }) {
 /** The session's connection state in the header: a light and a word. */
 export function StatusBadge({ status }: { status: SessionStatus }) {
   const theme = useTheme();
+  const shape = useShape();
 
   return (
     <View
       style={[
         styles.badge,
-        { backgroundColor: theme.backgroundElement, borderColor: theme.border },
+        {
+          backgroundColor: theme.backgroundElement,
+          borderColor: theme.border,
+          borderRadius: shape.radius.pill,
+          borderWidth: shape.hairline,
+        },
       ]}
       aria-label={`Status: ${STATUS_LABELS[status.state]}`}>
       <StatusDot status={status} />
@@ -125,8 +136,6 @@ const styles = StyleSheet.create({
     height: 28,
     paddingLeft: Spacing.one,
     paddingRight: Spacing.two + 2,
-    borderRadius: Radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
   },
   dotBox: { alignItems: 'center', justifyContent: 'center' },
   halo: { position: 'absolute' },

@@ -1,7 +1,8 @@
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { StyleSheet, Text, View, type TextStyle, type ViewStyle } from 'react-native';
 
-import { mono, Radius, sans, type Theme } from '@/constants/theme';
+import type { Theme } from '@/constants/theme';
+import { shadows, useShape, useType, type Type } from '@/hooks/use-theme';
 
 import type { Point, Rect } from './geometry';
 import { DIRECTIONS, type Direction, type KeyDef, type Secondary } from './layout';
@@ -10,10 +11,10 @@ import type { ModifierMode } from './modifiers';
 /**
  * How keys look. Purely presentational: the surface owns touches and passes in what
  * each key is doing. Character keys are raised on a tray with quieter function keys, as
- * on the iOS and Gboard keyboards, so the layout reads at a glance. Letters are set in
- * Geist; punctuation and the terminal's own keys (esc, tab, ctrl, F1) in Geist Mono, so
- * ' and ` or | and l can't be confused. Ember marks what is live: Enter, an armed
- * modifier, the flick the finger has chosen.
+ * on the iOS and Gboard keyboards, so the layout reads at a glance. Letters are set in the
+ * theme's UI face; punctuation and the terminal's own keys (esc, tab, ctrl, F1) in its mono
+ * face, so ' and ` or | and l can't be confused. The accent marks what is live: Enter, an
+ * armed modifier, the flick the finger has chosen.
  */
 
 type SymbolName = SymbolViewProps['name'];
@@ -66,7 +67,7 @@ type KeyCapProps = {
 
 function faceColors(theme: Theme, def: KeyDef, mode: ModifierMode | null, pressed: boolean) {
   if (mode === 'locked') return { background: theme.primary, foreground: theme.onPrimary };
-  if (mode === 'once') return { background: theme.keyArmed, foreground: theme.primary };
+  if (mode === 'once') return { background: theme.keyArmed, foreground: theme.primaryText };
   if (def.tone === 'accent') return { background: theme.primary, foreground: theme.onPrimary };
   if (def.tone === 'char') {
     return { background: pressed ? theme.keyFunction : theme.key, foreground: theme.text };
@@ -81,7 +82,7 @@ function visibleHints(def: KeyDef): [Direction, Secondary][] {
   });
 }
 
-function labelStyle(def: KeyDef, label: string, compact: boolean): TextStyle {
+function labelStyle(def: KeyDef, label: string, compact: boolean, { sans, mono }: Type): TextStyle {
   if (def.tone === 'char' && /^[a-zA-Z0-9]$/.test(label)) {
     return { ...sans(400), fontSize: 23 };
   }
@@ -102,6 +103,8 @@ function labelStyle(def: KeyDef, label: string, compact: boolean): TextStyle {
 /** The visible face of one key. */
 export function KeyCap({ def, label, mode, state, theme, compact }: KeyCapProps) {
   const { background, foreground } = faceColors(theme, def, mode, state.pressed);
+  const shape = useShape();
+  const type = useType();
   const hints = visibleHints(def);
   // One hint sits in the corner (like Gboard's digits); several go to their edges.
   const cross = hints.length > 1;
@@ -114,7 +117,11 @@ export function KeyCap({ def, label, mode, state, theme, compact }: KeyCapProps)
         styles.face,
         {
           backgroundColor: background,
-          boxShadow: `0 1px 0 ${theme.keyShadow}`,
+          borderRadius: shape.radius.key,
+          boxShadow: shadows(
+            `0 1px 0 ${theme.keyShadow}`,
+            def.tone === 'accent' && shape.glowPrimary
+          ),
           opacity: def.tone === 'accent' && state.pressed ? 0.8 : 1,
         },
       ]}>
@@ -129,7 +136,7 @@ export function KeyCap({ def, label, mode, state, theme, compact }: KeyCapProps)
         <Text
           numberOfLines={1}
           style={[
-            labelStyle(def, label, compact),
+            labelStyle(def, label, compact, type),
             { color: def.tone === 'char' && label.length > 1 ? theme.textSecondary : foreground },
             cross && styles.crossLabel,
             // Room for a corner hint above a word label (tab, ctrl, 123).
@@ -142,7 +149,10 @@ export function KeyCap({ def, label, mode, state, theme, compact }: KeyCapProps)
         <View
           style={[
             mode === 'locked' ? styles.lockBar : styles.onceDot,
-            { backgroundColor: foreground },
+            {
+              backgroundColor: foreground,
+              borderRadius: Math.min(shape.radius.dot, mode === 'locked' ? 1.5 : 2.5),
+            },
           ]}
         />
       ) : null}
@@ -153,8 +163,8 @@ export function KeyCap({ def, label, mode, state, theme, compact }: KeyCapProps)
           style={[
             styles.hint,
             cross ? CROSS_HINT[direction] : styles.cornerHint,
-            /^[\x20-\x7e]$/.test(secondary.label) ? styles.hintMono : styles.hintSans,
-            { color: state.direction === direction ? theme.primary : secondaryColor },
+            /^[\x20-\x7e]$/.test(secondary.label) ? type.mono(500) : type.sans(500),
+            { color: state.direction === direction ? theme.primaryText : secondaryColor },
           ]}>
           {secondary.label}
         </Text>
@@ -176,7 +186,8 @@ function ArrowsFace({ state, theme }: { state: KeyVisualState; theme: Theme }) {
   const { offset, direction, paging, pressed } = state;
   const nubX = Math.max(-NUB_TRAVEL.x, Math.min(NUB_TRAVEL.x, offset?.x ?? 0));
   const nubY = Math.max(-NUB_TRAVEL.y, Math.min(NUB_TRAVEL.y, offset?.y ?? 0));
-  const colorFor = (side: Direction) => (direction === side ? theme.primary : theme.textSecondary);
+  const colorFor = (side: Direction) =>
+    direction === side ? theme.primaryText : theme.textSecondary;
 
   return (
     <View style={StyleSheet.absoluteFill}>
@@ -275,6 +286,8 @@ const CENTER = { width: 40, height: 42 };
  * releasing will type, with the flick options around it and the chosen one highlighted.
  */
 export function KeyBubble({ def, label, rect, direction, surfaceWidth, theme }: BubbleProps) {
+  const shape = useShape();
+  const { mono } = useType();
   // The joystick and the trackpad show their state on the key itself.
   if (def.behavior === 'arrows' || def.behavior === 'space') return null;
   const isCharacter = def.tone === 'char' && [...label].length === 1;
@@ -296,9 +309,18 @@ export function KeyBubble({ def, label, rect, direction, surfaceWidth, theme }: 
     if (!secondary) return null;
     const selected = direction === side;
     return (
-      <View style={[styles.cell, selected && { backgroundColor: theme.primary }]}>
+      <View
+        style={[
+          styles.cell,
+          { borderRadius: shape.radius.small },
+          selected && { backgroundColor: theme.primary },
+        ]}>
         <Text
-          style={[styles.cellText, { color: selected ? theme.onPrimary : theme.textSecondary }]}>
+          style={[
+            styles.cellText,
+            mono(500),
+            { color: selected ? theme.onPrimary : theme.textSecondary },
+          ]}>
           {secondary.label}
         </Text>
       </View>
@@ -318,7 +340,9 @@ export function KeyBubble({ def, label, rect, direction, surfaceWidth, theme }: 
           height,
           backgroundColor: theme.backgroundRaised,
           borderColor: theme.border,
-          boxShadow: `0 6px 18px ${theme.shadow}55`,
+          borderRadius: shape.radius.medium,
+          borderWidth: shape.hairline,
+          boxShadow: shadows(shape.shadowFloat),
         },
       ]}>
       {cell('up')}
@@ -327,12 +351,14 @@ export function KeyBubble({ def, label, rect, direction, surfaceWidth, theme }: 
         <View
           style={[
             styles.center,
+            { borderRadius: Math.min(shape.radius.small + 1, shape.radius.medium) },
             centerSelected && !isCharacter && { backgroundColor: theme.primary },
           ]}>
           <Text
             numberOfLines={1}
             style={[
               styles.centerText,
+              mono(isCharacter ? 400 : 600),
               !isCharacter && styles.centerWord,
               {
                 color: !isCharacter
@@ -369,7 +395,6 @@ const ARROW_SLOT = {
 const styles = StyleSheet.create({
   face: {
     flex: 1,
-    borderRadius: Radius.small - 1,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -384,18 +409,14 @@ const styles = StyleSheet.create({
   },
   triangleGroup: { alignItems: 'center', justifyContent: 'center', gap: 1 },
   hint: { position: 'absolute', fontSize: 10, lineHeight: 12 },
-  hintMono: mono(500),
-  hintSans: sans(500),
   cornerHint: { top: 3, right: 5 },
-  onceDot: { position: 'absolute', bottom: 4, width: 5, height: 5, borderRadius: 2.5 },
-  lockBar: { position: 'absolute', bottom: 4, width: 14, height: 3, borderRadius: 1.5 },
+  onceDot: { position: 'absolute', bottom: 4, width: 5, height: 5 },
+  lockBar: { position: 'absolute', bottom: 4, width: 14, height: 3 },
   arrowSlot: { position: 'absolute' },
   nubSlot: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
   nub: { width: 16, height: 16, borderRadius: 8, borderWidth: 1 },
   bubble: {
     position: 'absolute',
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
     padding: 4,
     alignItems: 'center',
     justifyContent: 'center',
@@ -405,19 +426,17 @@ const styles = StyleSheet.create({
   cell: {
     width: CELL,
     height: CELL,
-    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cellText: { ...mono(500), fontSize: 16 },
+  cellText: { fontSize: 16 },
   center: {
     minWidth: CENTER.width,
     height: CENTER.height,
     paddingHorizontal: 6,
-    borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  centerText: { ...mono(400), fontSize: 26 },
-  centerWord: { ...mono(600), fontSize: 16 },
+  centerText: { fontSize: 26 },
+  centerWord: { fontSize: 16 },
 });

@@ -9,12 +9,12 @@ import { Screen } from '@/components/ui/screen';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { TextField } from '@/components/ui/text-field';
 import { ToggleRow } from '@/components/ui/toggle-row';
-import { Radius, sans, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
 import { useGroups } from '@/features/groups/groups-provider';
 import { NO_KEY } from '@/features/ssh/keys';
 import { useKeys } from '@/features/ssh/keys-provider';
 import { useLock } from '@/features/vault/lock-provider';
-import { useTheme } from '@/hooks/use-theme';
+import { useShape, useTheme, useType } from '@/hooks/use-theme';
 import { secretsSupported } from '@/lib/secrets';
 
 import {
@@ -49,6 +49,7 @@ export function ConnectionForm({
   hostKey,
 }: ConnectionFormProps) {
   const theme = useTheme();
+  const { radius } = useShape();
   const [values, setValues] = useState(initial);
   const [errors, setErrors] = useState<ConnectionErrors>({});
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -251,7 +252,13 @@ export function ConnectionForm({
           <ThemedText
             type="code"
             selectable
-            style={[styles.well, { backgroundColor: theme.backgroundSelected }]}>
+            style={[
+              styles.well,
+              {
+                backgroundColor: theme.backgroundSelected,
+                borderRadius: Math.min(radius.small + 2, radius.small * 2),
+              },
+            ]}>
             {hostKey.fingerprint}
           </ThemedText>
           <Button
@@ -290,6 +297,8 @@ function Chips({
   onChange(id: string): void;
 }) {
   const theme = useTheme();
+  const shape = useShape();
+  const { sans } = useType();
   return (
     <View style={styles.field}>
       <ThemedText type="eyebrow" themeColor="textSecondary">
@@ -310,9 +319,16 @@ function Chips({
                 {
                   backgroundColor: selected ? theme.primaryMuted : theme.backgroundElement,
                   borderColor: selected ? theme.primary : theme.border,
+                  borderRadius: shape.radius.pill,
+                  borderWidth: shape.hairline,
                 },
               ]}>
-              <Text style={[styles.chipText, { color: selected ? theme.primary : theme.text }]}>
+              <Text
+                style={[
+                  styles.chipText,
+                  sans(600),
+                  { color: selected ? theme.primaryText : theme.text },
+                ]}>
                 {option.name}
               </Text>
             </Pressable>
@@ -328,7 +344,6 @@ const styles = StyleSheet.create({
   inline: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   well: {
     padding: Spacing.three - 4,
-    borderRadius: Radius.small + 2,
     overflow: 'hidden',
     fontSize: 12,
   },
@@ -339,8 +354,6 @@ const styles = StyleSheet.create({
     minHeight: 40,
     justifyContent: 'center',
     paddingHorizontal: Spacing.three,
-    borderRadius: Radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
   },
-  chipText: { ...sans(600), fontSize: 14 },
+  chipText: { fontSize: 14 },
 });

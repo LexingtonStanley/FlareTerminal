@@ -5,8 +5,8 @@ import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { TextField } from '@/components/ui/text-field';
-import { Radius, Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { Spacing } from '@/constants/theme';
+import { useShape, useTheme } from '@/hooks/use-theme';
 
 import { useLock } from './lock-provider';
 
@@ -36,6 +36,7 @@ export function UnlockPanel({
 }: UnlockPanelProps) {
   const { settings, unlock, unlockWithBiometrics } = useLock();
   const theme = useTheme();
+  const { radius } = useShape();
   const [secret, setSecret] = useState('');
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -71,8 +72,9 @@ export function UnlockPanel({
 
   return (
     <View style={styles.panel}>
-      <View style={[styles.badge, { backgroundColor: theme.primaryMuted }]}>
-        <Icon name="lock" size={22} color="primary" />
+      <View
+        style={[styles.badge, { backgroundColor: theme.primaryMuted, borderRadius: radius.pill }]}>
+        <Icon name="lock" size={22} color="primaryText" />
       </View>
       <View style={styles.heading}>
         <ThemedText type="subtitle" role="heading" style={styles.center}>
@@ -117,7 +119,6 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     width: 52,
     height: 52,
-    borderRadius: Radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
   },

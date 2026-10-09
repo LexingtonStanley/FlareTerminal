@@ -16,8 +16,8 @@ jest.mock('@/features/notifications/notify', () => jest.requireActual('@/test-ut
 
 beforeEach(() => clearMemoryStorage());
 
-describe('terminal colours', () => {
-  it('starts with Flare, then remembers the scheme chosen in Settings', async () => {
+describe('appearance', () => {
+  it('starts with Flare, then remembers the theme chosen in Settings', async () => {
     const user = userEvent.setup();
     await renderApp('/settings');
 
@@ -26,6 +26,17 @@ describe('terminal colours', () => {
 
     expect(screen.getByRole('radio', { name: 'Gruvbox' })).toBeChecked();
     expect(screen.getByRole('radio', { name: 'Flare' })).not.toBeChecked();
-    expect(readJson('flare.preferences.v1')).toMatchObject({ terminalScheme: 'gruvbox' });
+    expect(readJson('flare.preferences.v1')).toMatchObject({ appTheme: 'gruvbox' });
+  });
+
+  it('switches between light and dark, or follows the phone', async () => {
+    const user = userEvent.setup();
+    await renderApp('/settings');
+
+    expect(await screen.findByRole('radio', { name: 'System' })).toBeChecked();
+    await user.press(screen.getByRole('radio', { name: 'Dark' }));
+
+    expect(screen.getByRole('radio', { name: 'Dark' })).toBeChecked();
+    expect(readJson('flare.preferences.v1')).toMatchObject({ appearance: 'dark' });
   });
 });

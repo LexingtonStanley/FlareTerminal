@@ -8,13 +8,13 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Icon } from '@/components/ui/icon';
 import { Screen } from '@/components/ui/screen';
-import { mono, Radius, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
 import { AccessoryBar } from '@/features/keyboard/accessory-bar';
 import { CodingKeyboard } from '@/features/keyboard/coding-keyboard';
 import { describeInput, usePreviewSession } from '@/features/keyboard/preview-session';
 import { useTerminalTheme } from '@/features/settings/use-terminal-theme';
 import TerminalView, { type TerminalViewHandle } from '@/features/terminal/terminal-view';
-import { useTheme } from '@/hooks/use-theme';
+import { useShape, useTheme, useType } from '@/hooks/use-theme';
 
 /**
  * Both in-app keyboards on a real terminal view, with a log of the exact bytes each key
@@ -23,6 +23,8 @@ import { useTheme } from '@/hooks/use-theme';
  */
 export default function KeyboardPreviewScreen() {
   const theme = useTheme();
+  const shape = useShape();
+  const { mono } = useType();
   const terminalTheme = useTerminalTheme();
   const headerHeight = useHeaderHeight();
   const [mode, setMode] = useState<'bar' | 'keyboard'>('bar');
@@ -79,7 +81,9 @@ export default function KeyboardPreviewScreen() {
                   key={index}
                   style={[
                     styles.chip,
+                    mono(500),
                     {
+                      borderRadius: Math.max(0, shape.radius.small - 2),
                       color: theme.text,
                       backgroundColor: theme.key,
                       boxShadow: `0 1px 0 ${theme.keyShadow}`,
@@ -134,11 +138,9 @@ const styles = StyleSheet.create({
   },
   chips: { flexDirection: 'row', gap: Spacing.one + 1, alignItems: 'center', paddingBottom: 1 },
   chip: {
-    ...mono(500),
     fontSize: 13,
     paddingHorizontal: Spacing.two,
     paddingVertical: Spacing.half,
-    borderRadius: Radius.small - 2,
     overflow: 'hidden',
   },
   systemKeyboard: {

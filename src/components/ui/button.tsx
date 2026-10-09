@@ -1,7 +1,7 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Radius, sans, Spacing, type ThemeColor } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import { Spacing, type ThemeColor } from '@/constants/theme';
+import { shadows, useShape, useTheme, useType } from '@/hooks/use-theme';
 
 import { Icon, type IconName } from './icon';
 
@@ -39,7 +39,7 @@ const VARIANTS: Record<
     border: true,
   },
   danger: { background: null, pressed: 'backgroundSelected', text: 'danger', border: true },
-  ghost: { background: null, pressed: 'backgroundSelected', text: 'primary', border: false },
+  ghost: { background: null, pressed: 'backgroundSelected', text: 'primaryText', border: false },
 };
 
 export function Button({
@@ -54,7 +54,10 @@ export function Button({
   testID,
 }: ButtonProps) {
   const theme = useTheme();
+  const shape = useShape();
+  const { sans } = useType();
   const look = VARIANTS[variant];
+  const raised = variant === 'primary' || variant === 'secondary';
   const isDisabled = disabled || loading;
   const textColor = theme[look.text];
 
@@ -72,14 +75,35 @@ export function Button({
         styles.base,
         size === 'small' && styles.small,
         {
+          borderRadius:
+            size === 'small'
+              ? Math.min(shape.radius.small + 2, shape.radius.small * 2)
+              : shape.radius.medium,
+          borderWidth: shape.hairline,
           backgroundColor: pressed
             ? theme[look.pressed]
             : look.background
               ? theme[look.background]
               : 'transparent',
-          borderColor: look.border ? theme.border : 'transparent',
+          borderColor: look.border
+            ? theme.border
+            : variant === 'primary'
+              ? theme.primaryBorder
+              : 'transparent',
+          // Pressing presses a raised button into its shadow (Concrete), or shrinks it.
+          boxShadow: pressed
+            ? undefined
+            : raised
+              ? shadows(variant === 'primary' && shape.glowPrimary, shape.shadowControl)
+              : undefined,
         },
-        pressed && styles.pressed,
+        pressed && {
+          transform: [
+            { translateX: shape.pressShift },
+            { translateY: shape.pressShift },
+            { scale: shape.pressScale },
+          ],
+        },
         pressed && variant === 'primary' && styles.pressedPrimary,
         isDisabled && styles.disabled,
       ]}>
@@ -90,7 +114,12 @@ export function Button({
           {icon ? <Icon name={icon} size={size === 'small' ? 16 : 18} color={look.text} /> : null}
           <Text
             numberOfLines={1}
-            style={[styles.label, size === 'small' && styles.labelSmall, { color: textColor }]}>
+            style={[
+              styles.label,
+              sans(600),
+              size === 'small' && styles.labelSmall,
+              { color: textColor },
+            ]}>
             {title}
           </Text>
         </View>
@@ -103,16 +132,13 @@ const styles = StyleSheet.create({
   base: {
     minHeight: 50,
     paddingHorizontal: Spacing.four,
-    borderRadius: Radius.medium,
-    borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  small: { minHeight: 38, paddingHorizontal: Spacing.three, borderRadius: Radius.small + 2 },
+  small: { minHeight: 38, paddingHorizontal: Spacing.three },
   content: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
-  label: { ...sans(600), fontSize: 16, letterSpacing: -0.1 },
+  label: { fontSize: 16, letterSpacing: -0.1 },
   labelSmall: { fontSize: 14 },
-  pressed: { transform: [{ scale: 0.985 }] },
   pressedPrimary: { opacity: 0.86 },
   disabled: { opacity: 0.45 },
 });

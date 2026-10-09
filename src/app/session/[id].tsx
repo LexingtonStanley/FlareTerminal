@@ -11,7 +11,7 @@ import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
 import { Screen } from '@/components/ui/screen';
 import { IconButton } from '@/components/ui/icon-button';
-import { Radius, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
 import { StatusBadge } from '@/features/sessions/session-status';
 import type { SessionSnapshot } from '@/features/sessions/session-manager';
 import { SessionStrip } from '@/features/sessions/session-strip';
@@ -27,7 +27,7 @@ import { useTerminalTheme } from '@/features/settings/use-terminal-theme';
 import { useLock } from '@/features/vault/lock-provider';
 import { UnlockPanel } from '@/features/vault/unlock-panel';
 import { useProtection } from '@/features/vault/use-protection';
-import { useTheme } from '@/hooks/use-theme';
+import { shadows, useShape, useTheme } from '@/hooks/use-theme';
 
 export default function SessionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -88,6 +88,7 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
   const viewRef = useRef<TerminalViewHandle>(null);
   const view = useSessionView(viewRef, session.id);
   const theme = useTheme();
+  const shape = useShape();
   const insets = useSafeAreaInsets();
   // The coding keyboard; none, to see the whole terminal (a tap brings it back); or
   // "writing": a text field with the phone's keyboard, for prose (autocorrect, swiping,
@@ -147,7 +148,15 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
           {session.status.state === 'closed' ? (
             <ThemedView
               type="backgroundRaised"
-              style={[styles.banner, { borderColor: theme.border }]}>
+              style={[
+                styles.banner,
+                {
+                  borderColor: theme.border,
+                  borderRadius: shape.radius.large,
+                  borderWidth: shape.hairline,
+                  boxShadow: shadows(shape.shadowFloat),
+                },
+              ]}>
               <ThemedText type="small" role="alert">
                 {session.reconnecting
                   ? `${session.status.message}. Reconnecting…`
@@ -234,7 +243,5 @@ const styles = StyleSheet.create({
     bottom: Spacing.three,
     gap: Spacing.three - 4,
     padding: Spacing.three,
-    borderRadius: Radius.large,
-    borderWidth: StyleSheet.hairlineWidth,
   },
 });

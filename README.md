@@ -28,8 +28,11 @@ web build), started from the RapidAppToolkit template.
 - **Writing with the phone's keyboard**: the globe key opens a text field for prompts, with
   autocorrect, swiping and dictation, sent as a paste then Enter, and the coding keys above.
 - [xterm.js](https://xtermjs.org) rendering (colours, full-screen apps, resize, Unicode,
-  links), light and dark mode, adjustable font size, and colour schemes (Flare, Tokyo Night,
-  Catppuccin, Solarized, Gruvbox), each following the phone's light or dark mode.
+  links) and adjustable font size.
+- **Ten themes**, each in light and dark: Flare, Phosphor, Tokyo Night, Catppuccin, Gruvbox,
+  Solarized, Graphite, Orbit, Neon and Concrete. A theme sets the app's colours, type and
+  shape and the terminal's colours together; light or dark follows the phone or is set in
+  Settings.
 
 ## Put it on your phone
 
@@ -200,7 +203,10 @@ host at `/keyboard-preview`.
 | [ssh2](https://github.com/mscdex/ssh2)                                                                   | MIT     | Test SSH server (development only)      |
 | [ttyd](https://github.com/tsl0922/ttyd)                                                                  | MIT     | Optional, on your computer; not shipped |
 | [Geist and Geist Mono](https://github.com/vercel/geist-font) (`assets/fonts`, with its licence)          | OFL 1.1 | The app's typefaces                     |
-| Colour schemes: Tokyo Night (Apache-2.0), Catppuccin, Solarized, Gruvbox                                 | MIT     | Terminal colours to choose in Settings  |
+| [Chakra Petch](https://github.com/m4rc1e/Chakra-Petch) (`assets/fonts`, with its licence)                | OFL 1.1 | Orbit's headings                        |
+| [Tilt Neon](https://github.com/googlefonts/Tilt-Fonts) (`assets/fonts`, with its licence)                | OFL 1.1 | Neon's headings                         |
+| [IBM Plex Mono](https://github.com/IBM/plex) (`assets/fonts`, with its licence)                          | OFL 1.1 | Concrete's typeface                     |
+| Colour schemes: Tokyo Night (Apache-2.0), Catppuccin, Solarized, Gruvbox                                 | MIT     | Those themes' terminal colours          |
 
 Projects that were evaluated and not used: Whip (an Expo, xterm.js and SSH terminal, but
 AGPL), `@fressh/react-native-terminal` (MIT; a native SSH and terminal renderer, no web),

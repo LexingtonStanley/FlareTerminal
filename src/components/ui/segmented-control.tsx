@@ -1,8 +1,8 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Radius, sans, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { useTheme } from '@/hooks/use-theme';
+import { useShape, useTheme, useType } from '@/hooks/use-theme';
 
 type SegmentedControlProps<T extends string> = {
   /** The group's accessible name. */
@@ -20,6 +20,8 @@ export function SegmentedControl<T extends string>({
   onChange,
 }: SegmentedControlProps<T>) {
   const theme = useTheme();
+  const shape = useShape();
+  const { sans } = useType();
   const dark = useColorScheme() === 'dark';
 
   return (
@@ -30,8 +32,10 @@ export function SegmentedControl<T extends string>({
       style={[
         styles.group,
         {
-          backgroundColor: dark ? theme.backgroundElement : theme.backgroundSelected,
+          backgroundColor: theme.segmentTrack,
           borderColor: theme.border,
+          borderRadius: shape.radius.medium,
+          borderWidth: shape.hairline,
         },
       ]}>
       {options.map((option) => {
@@ -45,12 +49,18 @@ export function SegmentedControl<T extends string>({
             onPress={() => onChange(option.value)}
             style={[
               styles.option,
+              { borderRadius: Math.max(0, shape.radius.medium - 3) },
               selected && {
-                backgroundColor: dark ? theme.backgroundRaised : theme.backgroundElement,
+                backgroundColor: theme.segmentThumb,
                 boxShadow: `0 1px 2px ${theme.shadow}${dark ? '80' : '1F'}`,
               },
             ]}>
-            <Text style={[styles.text, { color: selected ? theme.text : theme.textSecondary }]}>
+            <Text
+              style={[
+                styles.text,
+                sans(600),
+                { color: selected ? theme.text : theme.textSecondary },
+              ]}>
               {option.label}
             </Text>
           </Pressable>
@@ -65,15 +75,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     padding: 3,
     gap: Spacing.half,
-    borderRadius: Radius.medium,
-    borderWidth: StyleSheet.hairlineWidth,
   },
   option: {
     flex: 1,
     minHeight: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: Radius.small + 1,
   },
-  text: { ...sans(600), fontSize: 15 },
+  text: { fontSize: 15 },
 });

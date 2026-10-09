@@ -4,11 +4,11 @@ import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 
 import { ThemedText } from '@/components/themed-text';
 import { Icon } from '@/components/ui/icon';
-import { mono, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
 import { passwordKey } from '@/features/connections/connections';
 import { useConnections } from '@/features/connections/connections-provider';
 import { APP_KEY_SECRET } from '@/features/ssh/app-key';
-import { useTheme } from '@/hooks/use-theme';
+import { useTheme, useType } from '@/hooks/use-theme';
 import { biometricsSupported, secretsSupported } from '@/lib/secrets';
 
 import { UnlockPanel } from './unlock-panel';
@@ -164,13 +164,14 @@ function LockScreen() {
 /** What the app switcher's snapshot shows: the wordmark, nothing from the sessions. */
 function PrivacyCover() {
   const theme = useTheme();
+  const { mono, glow } = useType();
 
   return (
     <View
       aria-hidden
       style={[StyleSheet.absoluteFill, styles.cover, { backgroundColor: theme.background }]}>
       <Icon name="lock" size={28} color="textSecondary" />
-      <ThemedText style={styles.brand}>flare</ThemedText>
+      <ThemedText style={[styles.brand, mono(600), glow]}>flare</ThemedText>
     </View>
   );
 }
@@ -178,5 +179,5 @@ function PrivacyCover() {
 const styles = StyleSheet.create({
   cover: { zIndex: 100, alignItems: 'center', justifyContent: 'center', gap: Spacing.two },
   panel: { width: '100%', maxWidth: 420, padding: Spacing.four },
-  brand: { ...mono(600), fontSize: 24, lineHeight: 30 },
+  brand: { fontSize: 24, lineHeight: 30 },
 });
