@@ -185,23 +185,48 @@ test('reports a finished session and reconnects', async ({ page }) => {
   await expect(page.getByRole('alert')).toBeHidden();
 });
 
-test('runs a shortcut: connects and types its command', async ({ page }) => {
+test('runs an agent shortcut: connects and types the command made for it', async ({ page }) => {
+  const janus =
+    `mkdir -p ~/.config/zellij/layouts && ` +
+    `echo 'layout { pane command="claude" { args "--dangerously-skip-permissions"; }; }' ` +
+    `> ~/.config/zellij/layouts/flare-janus.kdl && ` +
+    `cd ~/agents/janus && ` +
+    `if zellij ls -s 2>/dev/null | grep -qx Janus; then zellij attach Janus; ` +
+    `else zellij -s Janus -n flare-janus; fi`;
   const ttyd = await fakeTtyd(page);
   await addConnection(page, 'Devbox', FAKE_TTYD_ADDRESS);
   await page.getByRole('button', { name: 'New shortcut' }).click();
-  await page.getByRole('button', { name: 'Use Claude in zellij' }).click();
-  await page.getByLabel('Folder').fill('~/code/flare');
-  await expect(
-    page.getByText("cd ~/'code/flare' && zellij attach -c claude -- claude")
-  ).toBeVisible();
+  await page.getByLabel('Folder').fill('~/agents/janus');
+  await page.getByLabel('Name').fill('Janus');
+  await page.getByRole('radio', { name: 'zellij' }).click();
+  await page.getByRole('switch', { name: 'Skip permission prompts' }).click();
+  await expect(page.getByRole('textbox', { name: 'Command' })).toHaveValue(janus);
   await page.getByRole('button', { name: 'Save' }).click();
 
-  await page.getByRole('button', { name: 'Run Claude' }).click();
+  await expect(page.getByRole('heading', { name: 'Agents' })).toBeVisible();
+  await page.getByRole('button', { name: 'Run Janus' }).click();
   const session = await ttyd.session(0);
 
-  await expect
-    .poll(() => session.inputs)
-    .toEqual(["cd ~/'code/flare' && zellij attach -c claude -- claude\r"]);
+  await expect.poll(() => session.inputs).toEqual([`${janus}\r`]);
+  await expect(page.locator('.xterm-rows')).toContainText('fake-shell: mkdir: command not found');
+});
+
+test('runs a command shortcut in its folder', async ({ page }) => {
+  const ttyd = await fakeTtyd(page);
+  await addConnection(page, 'Devbox', FAKE_TTYD_ADDRESS);
+  await page.getByRole('button', { name: 'New shortcut' }).click();
+  await page.getByRole('radio', { name: 'Command' }).click();
+  await page.getByRole('button', { name: 'Use Disk space' }).click();
+  await page.getByLabel('Folder').fill('~/code/flare');
+  await page.getByRole('radio', { name: 'Maintenance' }).click();
+  await expect(page.getByText('cd ~/code/flare && df -h')).toBeVisible();
+  await page.getByRole('button', { name: 'Save' }).click();
+
+  await expect(page.getByRole('heading', { name: 'Maintenance' })).toBeVisible();
+  await page.getByRole('button', { name: 'Run Disk space' }).click();
+  const session = await ttyd.session(0);
+
+  await expect.poll(() => session.inputs).toEqual(['cd ~/code/flare && df -h\r']);
   await expect(page.locator('.xterm-rows')).toContainText('fake-shell: cd: command not found');
 });
 
@@ -274,7 +299,8 @@ for (const colorScheme of ['light', 'dark'] as const) {
       const ttyd = await fakeTtyd(page);
       await addConnection(page, 'Devbox', FAKE_TTYD_ADDRESS);
       await page.getByRole('button', { name: 'New shortcut' }).click();
-      await page.getByRole('button', { name: 'Use Claude in tmux' }).click();
+      await page.getByLabel('Folder').fill('~/code/flare');
+      await page.getByLabel('Name').fill('Claude');
       await shot('shortcut-form');
       await page.getByRole('button', { name: 'Save' }).click();
 

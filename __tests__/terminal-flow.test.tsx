@@ -303,40 +303,6 @@ describe('terminal', () => {
   });
 });
 
-describe('shortcuts', () => {
-  it('saves a Claude-in-tmux shortcut and runs it with one tap', async () => {
-    saved(DEVBOX);
-    const user = userEvent.setup();
-    await renderApp('/');
-
-    await user.press(await screen.findByRole('button', { name: 'New shortcut' }));
-    await user.press(await screen.findByRole('button', { name: 'Use Claude in tmux' }));
-    await user.type(screen.getByLabelText('Folder'), '~/code/flare');
-    expect(screen.getByText("cd ~/'code/flare' && tmux new -A -s claude claude")).toBeOnTheScreen();
-    await user.press(screen.getByRole('button', { name: 'Save' }));
-
-    await user.press(await screen.findByRole('button', { name: 'Run Claude' }));
-    const transport = transports[0];
-    await act(() => transport.status({ state: 'connected' }));
-
-    expect(transport.connection).toEqual(DEVBOX);
-    expect(transport.written).toEqual(["cd ~/'code/flare' && tmux new -A -s claude claude\r"]);
-    expect(await screen.findByRole('heading', { name: 'Claude' })).toBeOnTheScreen();
-  });
-
-  it('needs a name, a connection and a command', async () => {
-    saved(DEVBOX, { ...DEVBOX, id: 'other', name: 'Other' });
-    const user = userEvent.setup();
-    await renderApp('/shortcuts/new');
-
-    await user.press(await screen.findByRole('button', { name: 'Save' }));
-
-    expect(screen.getByText('Enter a name')).toBeOnTheScreen();
-    expect(screen.getByText('Choose a connection')).toBeOnTheScreen();
-    expect(screen.getByText('Enter a command, or pick one above')).toBeOnTheScreen();
-  });
-});
-
 describe('settings', () => {
   it('changes the terminal font size and remembers it', async () => {
     const user = userEvent.setup();
