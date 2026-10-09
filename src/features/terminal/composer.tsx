@@ -8,6 +8,8 @@ import type { Modifiers } from './keys';
 
 type ComposerProps = {
   modifiers: Modifiers;
+  /** The host is asking for a password: hide what's typed. */
+  secure?: boolean;
   /** The draft as a paste followed by Enter. */
   onSubmit(text: string): void;
   /** A single key typed while Ctrl or Alt is armed, e.g. "c" for Ctrl+C. */
@@ -19,7 +21,7 @@ type ComposerProps = {
  * Phone keyboards, autocorrect and dictation work here even where typing straight
  * into the terminal doesn't (Android IMEs hold back xterm.js input until Enter).
  */
-export function Composer({ modifiers, onSubmit, onModifiedKey }: ComposerProps) {
+export function Composer({ modifiers, secure = false, onSubmit, onModifiedKey }: ComposerProps) {
   const theme = useTheme();
   const [draft, setDraft] = useState('');
   const armed = modifiers.ctrl || modifiers.alt;
@@ -46,7 +48,10 @@ export function Composer({ modifiers, onSubmit, onModifiedKey }: ComposerProps) 
         onChangeText={handleChange}
         onSubmitEditing={submit}
         submitBehavior="submit"
-        placeholder={armed ? 'Type a key for the combination' : 'Command or prompt'}
+        placeholder={
+          armed ? 'Type a key for the combination' : secure ? 'Password' : 'Command or prompt'
+        }
+        secureTextEntry={secure}
         placeholderTextColor={theme.textSecondary}
         autoCapitalize="none"
         autoCorrect={false}

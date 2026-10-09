@@ -1,10 +1,11 @@
 import { openBrowserAsync } from 'expo-web-browser';
-import { Link, Stack, useLocalSearchParams } from 'expo-router';
+import { Link, Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useHeaderHeight } from 'expo-router/react-navigation';
 import { useRef } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   StyleSheet,
   useWindowDimensions,
   View,
@@ -15,37 +16,36 @@ import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
 import { Screen } from '@/components/ui/screen';
 import { Spacing, TerminalColors } from '@/constants/theme';
-import type { Connection } from '@/features/connections/connections';
-import { useConnections } from '@/features/connections/connections-provider';
+import { StatusBadge } from '@/features/sessions/session-status';
+import type { SessionSnapshot } from '@/features/sessions/session-manager';
+import { SessionStrip } from '@/features/sessions/session-strip';
+import { useSessionManager, useSessions } from '@/features/sessions/sessions-provider';
+import { useSessionView } from '@/features/sessions/use-session-view';
 import { usePreferences } from '@/features/settings/preferences-provider';
 import { Composer } from '@/features/terminal/composer';
 import { KeyBar } from '@/features/terminal/key-bar';
-import { openTransport } from '@/features/terminal/open-transport';
 import TerminalView, { type TerminalViewHandle } from '@/features/terminal/terminal-view';
-import type { SessionStatus } from '@/features/terminal/transport';
-import { useTerminalSession } from '@/features/terminal/use-terminal-session';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { useTheme } from '@/hooks/use-theme';
 
-export default function TerminalScreen() {
+export default function SessionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { connections, getPassword } = useConnections();
-  const connection = connections.find((candidate) => candidate.id === id);
+  const session = useSessions().find((candidate) => candidate.id === id);
 
-  if (!connection) {
+  if (!session) {
     return (
       <Screen centered>
         <ThemedText type="subtitle" role="heading">
-          Connection not found
+          Session not found
         </ThemedText>
+        <ThemedText themeColor="textSecondary">It was closed, or the app restarted.</ThemedText>
         <Link href="/">
-          <ThemedText type="linkPrimary">Back to connections</ThemedText>
+          <ThemedText type="linkPrimary">Back home</ThemedText>
         </Link>
       </Screen>
     );
   }
 
-  return <TerminalSessionScreen connection={connection} password={getPassword(connection.id)} />;
+  return <TerminalSession session={session} />;
 }
 
 // Terminal output is untrusted: only ever open web links from it.
@@ -55,29 +55,43 @@ function openLink(url: string) {
   else void openBrowserAsync(url);
 }
 
-function TerminalSessionScreen({
-  connection,
-  password,
-}: {
-  connection: Connection;
-  password: string | null;
-}) {
+function TerminalSession({ session }: { session: SessionSnapshot }) {
   const scheme = useColorScheme() === 'dark' ? 'dark' : 'light';
   const { fontSize } = usePreferences();
   const headerHeight = useHeaderHeight();
+  const manager = useSessionManager();
+  const router = useRouter();
   const viewRef = useRef<TerminalViewHandle>(null);
-  const session = useTerminalSession(viewRef, (listener) =>
-    openTransport(connection, password, listener)
-  );
+  const view = useSessionView(viewRef, session.id);
+
+  function closeSession() {
+    manager.close(session.id);
+    if (router.canGoBack()) router.back();
+    else router.replace('/');
+  }
 
   return (
     <Screen edges={['left', 'right', 'bottom']} style={styles.screen}>
       <Stack.Screen
         options={{
-          headerTitle: () => <SessionTitle name={connection.name} title={session.title} />,
-          headerRight: () => <StatusBadge status={session.status} />,
+          headerTitle: () => <SessionTitle name={session.name} title={session.title} />,
+          headerRight: () => (
+            <View style={styles.headerRight}>
+              <StatusBadge status={session.status} />
+              <Pressable
+                role="button"
+                aria-label="Close session"
+                onPress={closeSession}
+                style={styles.close}>
+                <ThemedText type="smallBold" themeColor="textSecondary">
+                  ✕
+                </ThemedText>
+              </Pressable>
+            </View>
+          ),
         }}
       />
+      <SessionStrip currentId={session.id} />
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -87,7 +101,7 @@ function TerminalSessionScreen({
             ref={viewRef}
             theme={TerminalColors[scheme]}
             fontSize={fontSize}
-            {...session.viewCallbacks}
+            {...view.viewCallbacks}
             onOpenLink={openLink}
             dom={{
               style: styles.flex,
@@ -102,20 +116,21 @@ function TerminalSessionScreen({
               <ThemedText type="small" role="alert">
                 {session.status.message}
               </ThemedText>
-              <Button title="Reconnect" onPress={session.reconnect} />
+              <Button title="Reconnect" onPress={() => manager.reconnect(session.id)} />
             </ThemedView>
           ) : null}
         </View>
         <KeyBar
-          modifiers={session.modifiers}
-          onToggleModifier={session.toggleModifier}
-          onKey={session.pressKey}
-          onText={session.type}
+          modifiers={view.modifiers}
+          onToggleModifier={view.toggleModifier}
+          onKey={view.pressKey}
+          onText={view.type}
         />
         <Composer
-          modifiers={session.modifiers}
-          onSubmit={session.submit}
-          onModifiedKey={session.type}
+          modifiers={view.modifiers}
+          secure={session.inputMode === 'secret'}
+          onSubmit={view.submit}
+          onModifiedKey={view.type}
         />
       </KeyboardAvoidingView>
     </Screen>
@@ -123,7 +138,7 @@ function TerminalSessionScreen({
 }
 
 // Room for the back button and the status badge; the header only budgets for icons.
-const HEADER_SIDES_WIDTH = 210;
+const HEADER_SIDES_WIDTH = 240;
 
 function SessionTitle({ name, title }: { name: string; title: string | null }) {
   const { width } = useWindowDimensions();
@@ -142,34 +157,11 @@ function SessionTitle({ name, title }: { name: string; title: string | null }) {
   );
 }
 
-const STATUS_LABELS: Record<SessionStatus['state'], string> = {
-  connecting: 'Connecting',
-  connected: 'Connected',
-  closed: 'Disconnected',
-};
-
-function StatusBadge({ status }: { status: SessionStatus }) {
-  const theme = useTheme();
-  const color =
-    status.state === 'connected'
-      ? theme.success
-      : status.state === 'closed'
-        ? theme.danger
-        : theme.textSecondary;
-
-  return (
-    <View style={styles.badge} aria-label={`Status: ${STATUS_LABELS[status.state]}`}>
-      <View style={[styles.dot, { backgroundColor: color }]} />
-      <ThemedText type="small" themeColor="textSecondary">
-        {STATUS_LABELS[status.state]}
-      </ThemedText>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   screen: { padding: 0, gap: 0, maxWidth: '100%' },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  close: { padding: Spacing.two },
   banner: {
     position: 'absolute',
     left: Spacing.three,
@@ -179,11 +171,4 @@ const styles = StyleSheet.create({
     padding: Spacing.three,
     borderRadius: Spacing.three,
   },
-  badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.one,
-    paddingHorizontal: Spacing.three,
-  },
-  dot: { width: 8, height: 8, borderRadius: 4 },
 });

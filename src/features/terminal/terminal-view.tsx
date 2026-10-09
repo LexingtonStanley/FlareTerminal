@@ -33,6 +33,8 @@ export type TerminalViewHandle = {
    * or an agent's prompt box receives it as one block instead of typed keystrokes.
    */
   paste(text: string): void;
+  /** Clears the screen and scrollback before another session's screen is drawn. */
+  reset(): void;
 };
 
 export type TerminalViewProps = {
@@ -102,6 +104,9 @@ export default function TerminalView({
       },
       paste(text: string) {
         terminalRef.current?.paste(text);
+      },
+      reset() {
+        terminalRef.current?.reset();
       },
     }),
     []

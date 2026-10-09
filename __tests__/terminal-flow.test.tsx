@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { screen } from 'expo-router/testing-library';
 
 import type { Connection } from '@/features/connections/connections';
+import { posted } from '@/test-utils/fake-notify';
 import { FAKE_SIZE } from '@/test-utils/fake-terminal-view';
 import { transports } from '@/test-utils/fake-transport';
 import { clearMemoryStorage, secrets, writeJson } from '@/test-utils/memory-storage';
@@ -16,6 +17,7 @@ jest.mock('@/features/terminal/terminal-view', () =>
 jest.mock('@/features/terminal/open-transport', () =>
   jest.requireActual('@/test-utils/fake-transport')
 );
+jest.mock('@/features/notifications/notify', () => jest.requireActual('@/test-utils/fake-notify'));
 
 const DEVBOX: Connection = {
   id: 'devbox',
@@ -44,6 +46,7 @@ async function openDevbox() {
 beforeEach(() => {
   clearMemoryStorage();
   transports.splice(0);
+  posted.splice(0);
 });
 
 describe('connections', () => {
@@ -203,21 +206,89 @@ describe('terminal', () => {
     expect(screen.queryByText('stale')).not.toBeOnTheScreen();
   });
 
-  it('closes the connection when leaving the screen', async () => {
+  it('keeps the session running after leaving, and resumes it with its screen', async () => {
     const { transport } = await openDevbox();
+    await act(() => transport.output('$ make test\r\n'));
+    expect(await screen.findByText('$ make test')).toBeOnTheScreen();
 
     // Jest renders the native stack header, which has no back button to press.
     await act(() => router.back());
+    await act(() => transport.output('42 passed\r\n'));
+
+    expect(transport.closed).toBe(false);
+    await userEvent.setup().press(await screen.findByRole('button', { name: 'Resume Devbox' }));
+
+    // The session's own copy of the screen is replayed into the new view.
+    expect(await screen.findByText(/make test[\s\S]*42 passed/)).toBeOnTheScreen();
+    expect(transports).toHaveLength(1);
+  });
+
+  it('closes a session from its screen', async () => {
+    const { transport } = await openDevbox();
+
+    await userEvent.setup().press(screen.getByRole('button', { name: 'Close session' }));
 
     expect(await screen.findByRole('button', { name: 'Open Devbox' })).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: 'Resume Devbox' })).not.toBeOnTheScreen();
     expect(transport.closed).toBe(true);
   });
 
-  it('explains a missing connection', async () => {
-    await renderApp('/terminal/nope');
+  it('flags a background session that asks for attention', async () => {
+    const { transport } = await openDevbox();
+    await act(() => router.back());
 
-    expect(await screen.findByRole('heading', { name: 'Connection not found' })).toBeOnTheScreen();
+    await act(() => transport.output('\x1b]9;Claude needs your permission\x07'));
+
+    // Home shows it on the session's row; the banner is for other screens.
+    expect(await screen.findByText('Claude needs your permission')).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: /^Go to Devbox/ })).not.toBeOnTheScreen();
+    // Foreground: no system notification.
+    expect(posted).toEqual([]);
+
+    await userEvent.setup().press(screen.getByRole('button', { name: 'Resume Devbox' }));
+    expect(await screen.findByRole('heading', { name: 'Devbox' })).toBeOnTheScreen();
+    expect(screen.queryByText('Claude needs your permission')).not.toBeOnTheScreen();
+  });
+
+  it('explains a session that no longer exists', async () => {
+    await renderApp('/session/nope');
+
+    expect(await screen.findByRole('heading', { name: 'Session not found' })).toBeOnTheScreen();
     expect(transports).toHaveLength(0);
+  });
+});
+
+describe('shortcuts', () => {
+  it('saves a Claude-in-tmux shortcut and runs it with one tap', async () => {
+    saved(DEVBOX);
+    const user = userEvent.setup();
+    await renderApp('/');
+
+    await user.press(await screen.findByRole('button', { name: 'New shortcut' }));
+    await user.press(await screen.findByRole('button', { name: 'Use Claude in tmux' }));
+    await user.type(screen.getByLabelText('Folder'), '~/code/flare');
+    expect(screen.getByText("cd ~/'code/flare' && tmux new -A -s claude claude")).toBeOnTheScreen();
+    await user.press(screen.getByRole('button', { name: 'Save' }));
+
+    await user.press(await screen.findByRole('button', { name: 'Run Claude' }));
+    const transport = transports[0];
+    await act(() => transport.status({ state: 'connected' }));
+
+    expect(transport.connection).toEqual(DEVBOX);
+    expect(transport.written).toEqual(["cd ~/'code/flare' && tmux new -A -s claude claude\r"]);
+    expect(await screen.findByRole('heading', { name: 'Claude' })).toBeOnTheScreen();
+  });
+
+  it('needs a name, a connection and a command', async () => {
+    saved(DEVBOX, { ...DEVBOX, id: 'other', name: 'Other' });
+    const user = userEvent.setup();
+    await renderApp('/shortcuts/new');
+
+    await user.press(await screen.findByRole('button', { name: 'Save' }));
+
+    expect(screen.getByText('Enter a name')).toBeOnTheScreen();
+    expect(screen.getByText('Choose a connection')).toBeOnTheScreen();
+    expect(screen.getByText('Enter a command, or pick one above')).toBeOnTheScreen();
   });
 });
 

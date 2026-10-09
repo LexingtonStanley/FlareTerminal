@@ -23,6 +23,7 @@ export default function FakeTerminalView({ ref, fontSize, onReady, onInput }: Te
     focus: () => {},
     pressKey: (key) => onInput(sequenceForKey(key)),
     paste: (text: string) => onInput(text),
+    reset: () => setOutput(''),
   }));
 
   useEffect(() => {

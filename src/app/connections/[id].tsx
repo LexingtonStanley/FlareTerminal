@@ -6,11 +6,13 @@ import { Screen } from '@/components/ui/screen';
 import { ConnectionForm } from '@/features/connections/connection-form';
 import { toInput } from '@/features/connections/connections';
 import { useConnections } from '@/features/connections/connections-provider';
+import { useShortcuts } from '@/features/shortcuts/shortcuts-provider';
 import { knownHosts } from '@/features/ssh/known-hosts';
 
 export default function EditConnectionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { connections, save, remove, getPassword } = useConnections();
+  const { removeForConnection } = useShortcuts();
   const router = useRouter();
   const [, setForgotten] = useState(0);
   // Opened from a deep link there is nothing to go back to.
@@ -43,6 +45,7 @@ export default function EditConnectionScreen() {
       }}
       onDelete={() => {
         remove(connection.id);
+        removeForConnection(connection.id);
         leave();
       }}
       hostKey={

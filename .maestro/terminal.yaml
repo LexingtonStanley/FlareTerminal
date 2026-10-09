@@ -1,30 +1,28 @@
 # Device smoke test, run on EAS by .eas/workflows/e2e.yml (or locally: maestro test .maestro).
 # appId must match expo.ios.bundleIdentifier / expo.android.package (production variant).
 #
-# The web tests can't see the native WebView that hosts xterm.js. Connecting starts only
-# after that WebView has loaded and measured the terminal, so reaching "Couldn't connect"
-# proves the terminal renders on the device.
+# The web tests can't see the native WebView that hosts xterm.js, or the native TCP
+# socket SSH uses. A session connects only after that WebView has loaded and measured
+# the terminal, so reaching "Couldn't reach" proves the terminal renders and the socket
+# module loads on the device.
 appId: com.lexingtonstanley.flareterminal
 ---
 - launchApp:
     clearState: true
-- assertVisible: 'Connect to a computer running ttyd'
+- assertVisible: 'Connect to your computer over SSH'
 - tapOn: 'New connection'
 - tapOn:
     id: 'connection-save'
-- assertVisible: 'Enter a name'
+- assertVisible: 'Enter your username on that computer'
 - tapOn:
-    id: 'connection-name'
-- inputText: 'Nowhere'
-- tapOn:
-    id: 'connection-address'
-- inputText: '127.0.0.1:9'
+    id: 'connection-host'
+- inputText: 'nobody@127.0.0.1:9'
 - hideKeyboard
 - tapOn:
     id: 'connection-save'
-- tapOn: 'Nowhere'
+- tapOn: 'nobody@127.0.0.1:9'
 - extendedWaitUntil:
-    visible: "Couldn't connect to ws://127.0.0.1:9/ws"
-    timeout: 20000
+    visible: "Couldn't reach 127.0.0.1:9.*"
+    timeout: 30000
 - assertVisible: 'esc'
 - assertVisible: 'Reconnect'

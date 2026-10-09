@@ -141,15 +141,14 @@ describe('SshTransport', () => {
   });
 
   it('explains when nothing is listening', async () => {
-    const server = await startTestSshServer();
-    const port = server.port;
-    await stopTestSshServers();
-    const { screen, status } = open(port);
+    // Port 1 (tcpmux) is closed on any machine running tests. A port freed by another
+    // test could be taken by a parallel Jest worker before the connection attempt.
+    const { screen, status } = open(1);
 
     await waitFor(() => status() === 'closed');
     expect(screen.statuses.at(-1)).toEqual({
       state: 'closed',
-      message: expect.stringMatching(new RegExp(`^Couldn't reach 127\\.0\\.0\\.1:${port}\\.`)),
+      message: expect.stringMatching(/^Couldn't reach 127\.0\.0\.1:1\./),
     });
   });
 });

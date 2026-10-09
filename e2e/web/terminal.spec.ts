@@ -76,7 +76,8 @@ test('connects, sizes the remote terminal and runs a command', async ({ page }) 
   expect(session.handshake.AuthToken).toBe('');
   expect(session.handshake.columns).toBeGreaterThan(20);
   expect(session.handshake.rows).toBeGreaterThan(5);
-  await expect(page.getByText(FAKE_TITLE)).toBeVisible();
+  // The home screen underneath lists the title too; check the session header's.
+  await expect(page.getByText(FAKE_TITLE).filter({ visible: true })).toBeVisible();
   await expect(screen).toContainText('$');
 
   await page.getByLabel('Command').fill('echo hello from flare');
@@ -127,6 +128,54 @@ test('reports a finished session and reconnects', async ({ page }) => {
   await expect(page.getByRole('alert')).toBeHidden();
 });
 
+test('runs a shortcut: connects and types its command', async ({ page }) => {
+  const ttyd = await fakeTtyd(page);
+  await addConnection(page, 'Devbox', FAKE_TTYD_ADDRESS);
+  await page.getByRole('button', { name: 'New shortcut' }).click();
+  await page.getByRole('button', { name: 'Use Claude in zellij' }).click();
+  await page.getByLabel('Folder').fill('~/code/flare');
+  await expect(
+    page.getByText("cd ~/'code/flare' && zellij attach -c claude -- claude")
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Save' }).click();
+
+  await page.getByRole('button', { name: 'Run Claude' }).click();
+  const session = await ttyd.session(0);
+
+  await expect
+    .poll(() => session.inputs)
+    .toEqual(["cd ~/'code/flare' && zellij attach -c claude -- claude\r"]);
+  await expect(page.locator('.xterm-rows')).toContainText('fake-shell: cd: command not found');
+});
+
+test('keeps sessions running in the background and flags them', async ({ page }) => {
+  const { ttyd, session: first, screen } = await openTerminal(page);
+  await page.getByLabel('Command').fill('echo first session');
+  await page.getByLabel('Command').press('Enter');
+  await expect(screen).toContainText('first session');
+
+  // A second session to the same computer, opened from home.
+  await page.getByRole('link', { name: 'Home, back' }).click();
+  await page.getByRole('button', { name: 'Open Devbox' }).click();
+  const second = await ttyd.session(1);
+  await expect(page.getByRole('tablist', { name: 'Open sessions' })).toBeVisible();
+  await expect(page.getByRole('tab')).toHaveCount(2);
+
+  // The first session asks for attention while the second is on screen.
+  first.output('\x1b]9;Claude needs your permission\x07');
+  const banner = page.getByRole('button', { name: 'Go to Devbox: Claude needs your permission' });
+  await expect(banner).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Devbox, needs attention' })).toBeVisible();
+
+  // Switching back replays its screen, output included.
+  await banner.click();
+  await expect(page.locator('.xterm-rows').filter({ visible: true })).toContainText(
+    'first session'
+  );
+  await expect(banner).toBeHidden();
+  expect(second.inputs).toEqual([]);
+});
+
 test('resizes the remote terminal when the screen changes size', async ({ page }) => {
   const { session } = await openTerminal(page);
   const { columns } = session.handshake;
@@ -161,16 +210,36 @@ for (const colorScheme of ['light', 'dark'] as const) {
   test.describe(`${colorScheme} mode`, () => {
     test.use({ colorScheme });
 
-    test('renders the connections list and terminal', async ({ page }, testInfo) => {
+    test('renders home, a shortcut and the session switcher', async ({ page }, testInfo) => {
+      const shot = (name: string) =>
+        page.screenshot({ path: testInfo.outputPath(`${name}-${colorScheme}.png`) });
+      const ttyd = await fakeTtyd(page);
       await addConnection(page, 'Devbox', FAKE_TTYD_ADDRESS);
-      await page.screenshot({ path: testInfo.outputPath(`connections-${colorScheme}.png`) });
+      await page.getByRole('button', { name: 'New shortcut' }).click();
+      await page.getByRole('button', { name: 'Use Claude in tmux' }).click();
+      await shot('shortcut-form');
+      await page.getByRole('button', { name: 'Save' }).click();
 
-      const { session, screen } = await openTerminal(page, { saved: true });
-      session.output(
+      await page.getByRole('button', { name: 'Run Claude' }).click();
+      const agent = await ttyd.session(0);
+      agent.output(
         '\x1b[1;32m~/flare\x1b[0m on \x1b[35mmain\x1b[0m \x1b[2m(3 files changed)\x1b[0m\r\n$ '
       );
-      await expect(screen).toContainText('3 files changed');
-      await page.screenshot({ path: testInfo.outputPath(`terminal-${colorScheme}.png`) });
+      await page.getByRole('link', { name: 'Home, back' }).click();
+      await page.getByRole('button', { name: 'Open Devbox' }).click();
+      await ttyd.session(1);
+      await page.getByRole('link', { name: 'Home, back' }).click();
+      agent.output('\x1b]9;Claude needs your permission to run tests\x07');
+      await expect(
+        page.getByText('Claude needs your permission to run tests').first()
+      ).toBeVisible();
+      await shot('home');
+
+      await page.getByRole('button', { name: 'Resume Claude' }).click();
+      await expect(page.locator('.xterm-rows').filter({ visible: true })).toContainText(
+        '3 files changed'
+      );
+      await shot('terminal');
     });
   });
 }
