@@ -40,6 +40,10 @@ const ICONS = {
   inbox: { ios: 'tray.fill', android: 'inbox', web: 'inbox' },
   share: { ios: 'square.and.arrow.up', android: 'share', web: 'share' },
   paste: { ios: 'doc.on.clipboard', android: 'content_paste', web: 'content_paste' },
+  preview: { ios: 'safari', android: 'preview', web: 'preview' },
+  back: { ios: 'chevron.backward', android: 'arrow_back', web: 'arrow_back' },
+  forward: { ios: 'chevron.forward', android: 'arrow_forward', web: 'arrow_forward' },
+  external: { ios: 'arrow.up.forward.square', android: 'open_in_new', web: 'open_in_new' },
 } satisfies Record<string, SymbolViewProps['name']>;
 
 export type IconName = keyof typeof ICONS;

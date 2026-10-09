@@ -130,6 +130,10 @@ export default function RootLayout() {
                           name="session/[id]"
                           options={{ headerShown: true, title: '' }}
                         />
+                        <Stack.Screen
+                          name="session/[id]/preview"
+                          options={{ headerShown: true, title: 'Preview' }}
+                        />
                       </Stack>
                       <AttentionBanner />
                       <AccessGuard />

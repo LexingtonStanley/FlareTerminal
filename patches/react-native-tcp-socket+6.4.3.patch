@@ -1,0 +1,60 @@
+diff --git a/node_modules/react-native-tcp-socket/android/src/main/java/com/asterinet/react/tcpsocket/TcpSocket.java b/node_modules/react-native-tcp-socket/android/src/main/java/com/asterinet/react/tcpsocket/TcpSocket.java
+index 12ad7eb..59b588a 100644
+--- a/node_modules/react-native-tcp-socket/android/src/main/java/com/asterinet/react/tcpsocket/TcpSocket.java
++++ b/node_modules/react-native-tcp-socket/android/src/main/java/com/asterinet/react/tcpsocket/TcpSocket.java
+@@ -1,5 +1,10 @@
+ package com.asterinet.react.tcpsocket;
+ 
++import java.util.concurrent.ExecutorService;
++import java.util.concurrent.LinkedBlockingQueue;
++import java.util.concurrent.ThreadPoolExecutor;
++import java.util.concurrent.TimeUnit;
++
+ public class TcpSocket {
+     private final int id;
+ 
+@@ -10,4 +15,16 @@ public class TcpSocket {
+     public int getId() {
+         return id;
+     }
++
++    /**
++     * Like Executors.newSingleThreadExecutor(): one thread, tasks in order. Its thread ends
++     * once idle, so a closed socket's executors don't keep threads alive (nothing shuts them
++     * down, and the module never forgets accepted sockets).
++     */
++    static ExecutorService newIdleSingleThreadExecutor() {
++        ThreadPoolExecutor executor = new ThreadPoolExecutor(1, 1, 10L, TimeUnit.SECONDS,
++                new LinkedBlockingQueue<Runnable>());
++        executor.allowCoreThreadTimeOut(true);
++        return executor;
++    }
+ }
+diff --git a/node_modules/react-native-tcp-socket/android/src/main/java/com/asterinet/react/tcpsocket/TcpSocketClient.java b/node_modules/react-native-tcp-socket/android/src/main/java/com/asterinet/react/tcpsocket/TcpSocketClient.java
+index 7511570..813cf03 100644
+--- a/node_modules/react-native-tcp-socket/android/src/main/java/com/asterinet/react/tcpsocket/TcpSocketClient.java
++++ b/node_modules/react-native-tcp-socket/android/src/main/java/com/asterinet/react/tcpsocket/TcpSocketClient.java
+@@ -29,8 +29,8 @@ class TcpSocketClient extends TcpSocket {
+ 
+     TcpSocketClient(TcpEventListener receiverListener, Integer id, Socket socket) {
+         super(id);
+-        listenExecutor = Executors.newSingleThreadExecutor();
+-        writeExecutor = Executors.newSingleThreadExecutor();
++        listenExecutor = newIdleSingleThreadExecutor();
++        writeExecutor = newIdleSingleThreadExecutor();
+         this.socket = socket;
+         this.receiverListener = receiverListener;
+     }
+diff --git a/node_modules/react-native-tcp-socket/android/src/main/java/com/asterinet/react/tcpsocket/TcpSocketServer.java b/node_modules/react-native-tcp-socket/android/src/main/java/com/asterinet/react/tcpsocket/TcpSocketServer.java
+index 2f13fdf..6d80f19 100644
+--- a/node_modules/react-native-tcp-socket/android/src/main/java/com/asterinet/react/tcpsocket/TcpSocketServer.java
++++ b/node_modules/react-native-tcp-socket/android/src/main/java/com/asterinet/react/tcpsocket/TcpSocketServer.java
+@@ -26,7 +26,7 @@ public final class TcpSocketServer extends TcpSocket {
+     public TcpSocketServer(final Context context, final ConcurrentHashMap<Integer, TcpSocket> socketClients, final TcpEventListener receiverListener, final Integer id,
+                            final ReadableMap options) throws IOException, GeneralSecurityException {
+         super(id);
+-        listenExecutor = Executors.newSingleThreadExecutor();
++        listenExecutor = newIdleSingleThreadExecutor();
+         // Get data from options
+         int port = options.getInt("port");
+         String address = options.getString("host");
