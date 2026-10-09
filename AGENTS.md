@@ -118,7 +118,8 @@ Traps already hit in this exact stack:
 src/app/                 Routes only. Every file here is a screen; never put tests or helpers here.
   _layout.tsx            Providers (preferences, connections, groups, shortcuts, sessions,
                          lock), stack, attention banner, access guard, root ErrorBoundary
-  (tabs)/                Tab navigator: index (Home: sessions, shortcuts, connections), settings
+  (tabs)/                Tab navigator: index (Home: sessions, shortcuts, connections), inbox
+                         (every session by what it needs), settings
   connections/           new.tsx, [id].tsx (edit): the connection form
   shortcuts/             new.tsx, [id].tsx (edit): the shortcut form
   groups/                new.tsx, [id].tsx (edit): the group form
@@ -134,7 +135,8 @@ src/features/terminal/   terminal-view ('use dom' xterm.js), transport.ts (inter
                          cursor-tap.ts (a tap on the edited line as arrow keys)
 src/features/ssh/        SSH-2 client (client.ts), packets and ciphers, host and user keys,
                          known hosts, the app's key, socket.ts (TCP; socket.web.ts refuses)
-src/features/sessions/   SessionManager (every open session, headless xterm), alerts, provider,
+src/features/sessions/   SessionManager (every open session, headless xterm), alerts, inbox.ts
+                         (screen preview, needs you/working/idle), provider,
                          useSessionView, session strip, status, attention banner
 src/features/keyboard/   Accessory bar and coding keyboard: layout, gestures, touch tracking,
                          modifiers, haptics (docs/keyboard.md explains the design)

@@ -3,10 +3,12 @@ import { SymbolView } from 'expo-symbols';
 import { StyleSheet } from 'react-native';
 
 import { sans } from '@/constants/theme';
+import { useSessions } from '@/features/sessions/sessions-provider';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function TabsLayout() {
   const theme = useTheme();
+  const waiting = useSessions().filter((session) => session.attention).length;
 
   return (
     <Tabs
@@ -32,6 +34,28 @@ export default function TabsLayout() {
           tabBarIcon: ({ color, size }) => (
             <SymbolView
               name={{ ios: 'terminal.fill', android: 'terminal', web: 'terminal' }}
+              tintColor={color}
+              size={size}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="inbox"
+        options={{
+          title: 'Inbox',
+          // The count of agents waiting for the person, in the accent kept for them.
+          tabBarBadge: waiting || undefined,
+          tabBarBadgeStyle: {
+            backgroundColor: theme.attention,
+            color: theme.onPrimary,
+            ...sans(600),
+            fontSize: 11,
+          },
+          tabBarAccessibilityLabel: waiting ? `Inbox, ${waiting} need you` : 'Inbox',
+          tabBarIcon: ({ color, size }) => (
+            <SymbolView
+              name={{ ios: 'tray.fill', android: 'inbox', web: 'inbox' }}
               tintColor={color}
               size={size}
             />

@@ -37,6 +37,7 @@ const ICONS = {
   lock: { ios: 'lock.fill', android: 'lock', web: 'lock' },
   biometrics: { ios: 'faceid', android: 'fingerprint', web: 'fingerprint' },
   folder: { ios: 'folder.fill', android: 'folder', web: 'folder' },
+  inbox: { ios: 'tray.fill', android: 'inbox', web: 'inbox' },
 } satisfies Record<string, SymbolViewProps['name']>;
 
 export type IconName = keyof typeof ICONS;
