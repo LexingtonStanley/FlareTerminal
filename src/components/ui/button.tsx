@@ -7,6 +7,8 @@ import { Icon, type IconName } from './icon';
 
 type ButtonProps = {
   title: string;
+  /** The accessible name, when the title alone is ambiguous (one "Approve" per row). */
+  label?: string;
   onPress: () => void;
   /**
    * - primary: the screen's main action, in the accent. One per screen.
@@ -42,6 +44,7 @@ const VARIANTS: Record<
 
 export function Button({
   title,
+  label,
   onPress,
   variant = 'primary',
   icon,
@@ -59,7 +62,7 @@ export function Button({
     <Pressable
       role="button"
       // Keeps the accessible name while the spinner replaces the label.
-      aria-label={title}
+      aria-label={label ?? title}
       aria-disabled={isDisabled}
       aria-busy={loading}
       disabled={isDisabled}

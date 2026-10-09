@@ -74,7 +74,12 @@ describe('inboxGroup', () => {
   const connected = { status: { state: 'connected' } as const, reconnecting: false, prompt: null };
 
   it('puts an unseen alert first, whatever the screen does', () => {
-    const attention = { title: 'Claude', body: 'Approve?', at: now - 1000 };
+    const attention = {
+      title: 'Claude',
+      body: 'Approve?',
+      at: now - 1000,
+      kind: 'message' as const,
+    };
     expect(inboxGroup({ ...connected, attention }, { preview: null, changedAt: now }, now)).toBe(
       'needs-you'
     );
@@ -84,7 +89,23 @@ describe('inboxGroup', () => {
     const prompt = { question: 'Proceed?', options: [], at: now - 60_000 };
     const session = { ...connected, attention: null, prompt };
     expect(inboxGroup(session, { preview: null, changedAt: now }, now)).toBe('needs-you');
-    expect(waitingFor(session)).toEqual({ message: 'Proceed?', since: now - 60_000 });
+    expect(waitingFor(session)).toEqual({
+      message: 'Proceed?',
+      since: now - 60_000,
+      kind: 'question',
+    });
+    // Answered from the app: it no longer waits, though it's still on screen for a moment.
+    expect(waitingFor({ ...session, prompt: { ...prompt, answered: true } })).toBeNull();
+  });
+
+  it('lists an agent that stopped by itself as finished until it is seen', () => {
+    const attention = {
+      title: 'Claude finished',
+      body: 'Done',
+      at: now,
+      kind: 'finished' as const,
+    };
+    expect(inboxGroup({ ...connected, attention }, null, now)).toBe('finished');
   });
 
   it('is working while the screen changes, idle once it settles', () => {

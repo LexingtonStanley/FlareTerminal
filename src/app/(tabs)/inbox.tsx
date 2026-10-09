@@ -3,6 +3,7 @@ import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
+import { Button } from '@/components/ui/button';
 import { Card, Divider, Section } from '@/components/ui/card';
 import { Icon } from '@/components/ui/icon';
 import { Screen } from '@/components/ui/screen';
@@ -15,6 +16,7 @@ import {
   type InboxGroup,
   type SessionActivity,
 } from '@/features/sessions/inbox';
+import { answersFor } from '@/features/sessions/prompts';
 import type { SessionSnapshot } from '@/features/sessions/session-manager';
 import { STATUS_LABELS, StatusDot } from '@/features/sessions/session-status';
 import { useSessionManager, useSessions } from '@/features/sessions/sessions-provider';
@@ -23,6 +25,7 @@ import { useTheme } from '@/hooks/use-theme';
 
 const GROUPS: { group: InboxGroup; title: string }[] = [
   { group: 'needs-you', title: 'Needs you' },
+  { group: 'finished', title: 'Finished' },
   { group: 'working', title: 'Working' },
   { group: 'idle', title: 'Idle' },
 ];
@@ -31,7 +34,7 @@ type Look = { now: number; activity: Map<string, SessionActivity | null> };
 
 /**
  * Every open session on every host, sorted by what it needs from the person: an agent
- * waiting on them, one at work, or a quiet one. Read from each session's own screen, so
+ * waiting on them, one that finished, one at work, or a quiet one. Read from each session's own screen, so
  * nothing is installed on the hosts.
  */
 export default function InboxScreen() {
@@ -62,13 +65,15 @@ export default function InboxScreen() {
   const groupOf = (session: SessionSnapshot) => inboxGroup(session, activityOf(session.id), now);
   const count = (group: InboxGroup) => sessions.filter((s) => groupOf(s) === group).length;
   const needsYou = count('needs-you');
+  const finished = count('finished');
   const working = count('working');
 
   /** When the session last did something that matters for its group. */
   const since = (session: SessionSnapshot, group: InboxGroup) => {
-    if (group === 'needs-you') {
+    if (group === 'needs-you' || group === 'finished') {
       const waited = formatSince(now - waitingFor(session)!.since);
-      return waited === 'now' ? 'just now' : `waiting ${waited}`;
+      if (waited === 'now') return 'just now';
+      return group === 'finished' ? `finished ${waited} ago` : `waiting ${waited}`;
     }
     if (group === 'working') return 'active';
     if (session.reconnecting) return 'reconnecting';
@@ -82,71 +87,108 @@ export default function InboxScreen() {
     const host = connection && connection.name !== session.name ? connection.name : null;
     // A protected session's screen stays out of lists.
     const locked = scopeOf(session.connectionId) !== null;
-    const preview = locked ? null : activityOf(session.id)?.preview;
-    const message =
-      group === 'needs-you'
-        ? locked
-          ? 'Needs your attention'
-          : waitingFor(session)!.message
-        : null;
+    const waiting = group === 'needs-you' || group === 'finished';
+    const message = waiting
+      ? locked
+        ? group === 'finished'
+          ? 'Finished'
+          : 'Needs your attention'
+        : waitingFor(session)!.message
+      : null;
+    // A question is shown as the message; the screen's last line would be one of its options.
+    const shown = locked || group === 'needs-you' ? null : activityOf(session.id)?.preview;
+    // A finished agent's message is its last line: no need to show it twice.
+    const preview = shown === message ? null : shown;
     const when = since(session, group);
+    // Approve and Deny for a yes/no question, except behind a protected connection's lock.
+    const { prompt } = session;
+    const answerable = !locked && prompt && !prompt.answered && answersFor(prompt) ? prompt : null;
+    const answer = (choice: 'approve' | 'deny') => {
+      if (answerable) manager.answer(session.id, answerable.at, choice);
+    };
     return (
-      <View style={styles.row}>
-        {group === 'needs-you' ? (
-          <View style={[styles.flare, { backgroundColor: theme.attention }]} />
-        ) : null}
-        <Pressable
-          role="button"
-          aria-label={[`Open ${session.name}`, host, message, preview, when]
-            .filter(Boolean)
-            .join(', ')}
-          onPress={() => router.push({ pathname: '/session/[id]', params: { id: session.id } })}
-          style={({ pressed }) => [
-            styles.rowMain,
-            pressed && { backgroundColor: theme.backgroundSelected },
-          ]}>
-          <View style={styles.rowLead}>
-            <StatusDot status={session.status} />
-          </View>
-          <View style={styles.rowText}>
-            <View style={styles.inline}>
-              <ThemedText type="headline" numberOfLines={1} style={styles.shrink}>
-                {session.name}
-              </ThemedText>
-              {locked ? <Icon name="lock" size={13} /> : null}
-              <View style={styles.grow} />
-              <ThemedText
-                type="caption"
-                themeColor={group === 'needs-you' ? 'attention' : 'textSecondary'}>
-                {when}
-              </ThemedText>
+      <View>
+        <View style={styles.row}>
+          {group === 'needs-you' ? (
+            <View style={[styles.flare, { backgroundColor: theme.attention }]} />
+          ) : null}
+          <Pressable
+            role="button"
+            aria-label={[`Open ${session.name}`, host, message, preview, when]
+              .filter(Boolean)
+              .join(', ')}
+            onPress={() => router.push({ pathname: '/session/[id]', params: { id: session.id } })}
+            style={({ pressed }) => [
+              styles.rowMain,
+              pressed && { backgroundColor: theme.backgroundSelected },
+            ]}>
+            <View style={styles.rowLead}>
+              <StatusDot status={session.status} />
             </View>
-            {host ? (
-              <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
-                {host}
-              </ThemedText>
-            ) : null}
-            {message ? (
+            <View style={styles.rowText}>
               <View style={styles.inline}>
-                <Icon name="bell" size={14} color="attention" />
+                <ThemedText type="headline" numberOfLines={1} style={styles.shrink}>
+                  {session.name}
+                </ThemedText>
+                {locked ? <Icon name="lock" size={13} /> : null}
+                <View style={styles.grow} />
                 <ThemedText
-                  type="small"
-                  themeColor="attention"
-                  numberOfLines={2}
-                  style={styles.shrink}>
-                  {message}
+                  type="caption"
+                  themeColor={group === 'needs-you' ? 'attention' : 'textSecondary'}>
+                  {when}
                 </ThemedText>
               </View>
-            ) : null}
-            {preview ? (
-              <View style={[styles.preview, { backgroundColor: theme.backgroundSelected }]}>
-                <ThemedText type="code" themeColor="textSecondary" numberOfLines={1}>
-                  {preview}
+              {host ? (
+                <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+                  {host}
                 </ThemedText>
-              </View>
-            ) : null}
+              ) : null}
+              {message ? (
+                <View style={styles.inline}>
+                  {group === 'finished' ? (
+                    <Icon name="check" size={14} color="success" />
+                  ) : (
+                    <Icon name="bell" size={14} color="attention" />
+                  )}
+                  <ThemedText
+                    type="small"
+                    themeColor={group === 'finished' ? 'text' : 'attention'}
+                    numberOfLines={2}
+                    style={styles.shrink}>
+                    {message}
+                  </ThemedText>
+                </View>
+              ) : null}
+              {preview ? (
+                <View style={[styles.preview, { backgroundColor: theme.backgroundSelected }]}>
+                  <ThemedText type="code" themeColor="textSecondary" numberOfLines={1}>
+                    {preview}
+                  </ThemedText>
+                </View>
+              ) : null}
+            </View>
+          </Pressable>
+        </View>
+        {answerable ? (
+          <View style={styles.answers}>
+            <Button
+              title="Approve"
+              label={`Approve: ${answerable.question}`}
+              icon="check"
+              variant="secondary"
+              size="small"
+              onPress={() => answer('approve')}
+            />
+            <Button
+              title="Deny"
+              label={`Deny: ${answerable.question}`}
+              icon="close"
+              variant="secondary"
+              size="small"
+              onPress={() => answer('deny')}
+            />
           </View>
-        </Pressable>
+        ) : null}
       </View>
     );
   };
@@ -162,8 +204,9 @@ export default function InboxScreen() {
             ? 'Agents that need you show up here'
             : [
                 needsYou ? `${needsYou} ${needsYou === 1 ? 'needs' : 'need'} you` : null,
+                finished ? `${finished} finished` : null,
                 working ? `${working} working` : null,
-                !needsYou && !working ? 'Nothing needs you' : null,
+                !needsYou && !finished && !working ? 'Nothing needs you' : null,
               ]
                 .filter(Boolean)
                 .join(' · ')}
@@ -184,7 +227,7 @@ export default function InboxScreen() {
           const members = sessions
             .filter((session) => groupOf(session) === group)
             .sort((a, b) =>
-              group === 'needs-you'
+              group === 'needs-you' || group === 'finished'
                 ? waitingFor(a)!.since - waitingFor(b)!.since
                 : (activityOf(b.id)?.changedAt ?? 0) - (activityOf(a.id)?.changedAt ?? 0)
             );
@@ -227,6 +270,14 @@ const styles = StyleSheet.create({
   inline: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one },
   shrink: { flexShrink: 1 },
   grow: { flex: 1 },
+  answers: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+    // Under the row's text, past the status light.
+    paddingLeft: Spacing.three + 16 + Spacing.three - 4,
+    paddingRight: Spacing.three,
+    paddingBottom: Spacing.three - 4,
+  },
   preview: {
     marginTop: Spacing.half,
     paddingHorizontal: Spacing.two,

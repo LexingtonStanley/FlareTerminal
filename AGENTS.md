@@ -136,15 +136,17 @@ src/features/terminal/   terminal-view ('use dom' xterm.js), transport.ts (inter
 src/features/ssh/        SSH-2 client (client.ts), packets and ciphers, host and user keys,
                          known hosts, the app's key, socket.ts (TCP; socket.web.ts refuses)
 src/features/sessions/   SessionManager (every open session, headless xterm), alerts, inbox.ts
-                         (screen preview, needs you/working/idle), prompts.ts (questions read
-                         off the screen: agent approval menus, [y/N]), provider,
+                         (screen preview, needs you/finished/working/idle), prompts.ts
+                         (read off the screen: approval menus, [y/N], an agent's working
+                         line, the keys for Approve/Deny), provider,
                          useSessionView, session strip, status, attention banner
 src/features/keyboard/   Accessory bar and coding keyboard: layout, gestures, touch tracking,
                          modifiers, haptics (docs/keyboard.md explains the design)
 src/features/shortcuts/  Shortcut type and groups, agent-command.ts (the command for an agent:
                          Claude Code/Codex/Hermes/pi in tmux/zellij), shell quoting, provider,
                          form, Home tile
-src/features/notifications/ Local notifications for agent alerts (no-op on web)
+src/features/notifications/ Local notifications for agent alerts, with Approve/Deny actions (no-op
+                         on web)
 src/features/connections/ Connection type (SSH or ttyd), validation, ConnectionsProvider, form
 src/features/groups/     Connection groups: type, provider, Home's group tabs, form
 src/features/vault/      App lock and encrypted vault (vault.ts), LockProvider (lock screen),

@@ -9,6 +9,7 @@ import type {
 } from '@/features/terminal/transport';
 
 import {
+  FINISH_SETTLE_MS,
   RECONNECT_DELAYS_MS,
   SessionManager,
   type Attention,
@@ -346,7 +347,7 @@ describe('SessionManager', () => {
         question: 'Do you want to proceed?',
         options: [
           { label: 'Yes', input: '1' },
-          { label: 'No (esc)', input: '2' },
+          { label: 'No', input: '\x1b' },
         ],
       });
       expect(session(id).attention?.body).toBe('Do you want to proceed?');
@@ -395,6 +396,126 @@ describe('SessionManager', () => {
       expect(session(id).prompt?.question).toBe('Do you want to proceed?');
       expect(session(id).attention).toBeNull();
       expect(alerts).toHaveLength(0);
+    });
+
+    it('sends the question with the agent’s own message, in one notification', async () => {
+      const { manager, transports, view, alerts } = setup();
+      const id = manager.start({ connectionId: 'box', name: 'Claude', command: null });
+      const sink = view();
+      manager.attach(id, sink, SIZE);
+      manager.detach(id, sink);
+
+      transports[0].output(`\x1b]9;Claude needs your permission to use Bash\x07${MENU}`);
+      await parsed(manager, id);
+
+      expect(alerts).toHaveLength(1);
+      expect(alerts[0].attention.body).toBe('Claude needs your permission to use Bash');
+      expect(alerts[0].session.prompt?.question).toBe('Do you want to proceed?');
+    });
+  });
+
+  describe('answers', () => {
+    const MENU = 'Do you want to proceed?\r\n\u276f 1. Yes\r\n  2. No (esc)\r\n';
+
+    async function asked() {
+      const context = setup();
+      const { manager, transports, view, session } = context;
+      const id = manager.start({ connectionId: 'box', name: 'Claude', command: null });
+      const sink = view();
+      manager.attach(id, sink, SIZE);
+      manager.detach(id, sink);
+      transports[0].status({ state: 'connected' });
+      transports[0].output(MENU);
+      await parsed(manager, id);
+      return { ...context, id, at: session(id).prompt!.at };
+    }
+
+    it('types the answer into the question it was meant for, once', async () => {
+      const { manager, transports, session, id, at } = await asked();
+
+      expect(manager.answer(id, at, 'deny')).toBe('sent');
+      expect(transports[0].written).toEqual(['\x1b']);
+      expect(session(id).attention).toBeNull();
+      expect(session(id).prompt?.answered).toBe(true);
+
+      expect(manager.answer(id, at, 'approve')).toBe('gone');
+      expect(transports[0].written).toEqual(['\x1b']);
+    });
+
+    it('never types into a screen that moved on', async () => {
+      const { manager, transports, id, at } = await asked();
+      transports[0].output('\x1b[2J\x1b[H$ ');
+      await parsed(manager, id);
+
+      expect(manager.answer(id, at, 'approve')).toBe('gone');
+      expect(manager.answer('nope', at, 'approve')).toBe('gone');
+      expect(transports[0].written).toEqual([]);
+    });
+
+    it('says when the session is disconnected', async () => {
+      const { manager, transports, id, at } = await asked();
+      transports[0].status({ state: 'closed', message: 'gone' });
+
+      expect(manager.answer(id, at, 'approve')).toBe('disconnected');
+    });
+  });
+
+  describe('agents that finish', () => {
+    const SPINNER = (s: number) =>
+      `\x1b[2J\x1b[H\u273b Pondering\u2026 (${s}s \u00b7 esc to interrupt)\r\n`;
+
+    async function working() {
+      const context = setup();
+      const { manager, transports, view } = context;
+      const id = manager.start({ connectionId: 'box', name: 'Claude', command: null });
+      const sink = view();
+      manager.attach(id, sink, SIZE);
+      manager.detach(id, sink);
+      transports[0].output(SPINNER(1));
+      await parsed(manager, id);
+      return { ...context, id };
+    }
+
+    it('says so once the working line has stayed gone', async () => {
+      const { manager, transports, timers, alerts, session, id } = await working();
+      expect(timers.filter((timer) => timer.ms === FINISH_SETTLE_MS)).toHaveLength(0);
+
+      transports[0].output('\x1b[2J\x1b[H\u23fa All 41 tests pass.\r\n');
+      await parsed(manager, id);
+      const settle = timers.find((timer) => timer.ms === FINISH_SETTLE_MS)!;
+      expect(alerts).toHaveLength(0);
+
+      settle.run();
+      expect(session(id).attention).toMatchObject({
+        kind: 'finished',
+        title: 'Claude finished',
+        body: 'All 41 tests pass.',
+      });
+      expect(alerts).toHaveLength(1);
+    });
+
+    it('ignores a working line that comes back (a redraw between steps)', async () => {
+      const { manager, transports, timers, alerts, session, id } = await working();
+
+      transports[0].output('\x1b[2J\x1b[H');
+      await parsed(manager, id);
+      transports[0].output(SPINNER(2));
+      await parsed(manager, id);
+
+      const settle = timers.find((timer) => timer.ms === FINISH_SETTLE_MS)!;
+      expect(settle.cancelled).toBe(true);
+      expect(session(id).attention).toBeNull();
+      expect(alerts).toHaveLength(0);
+    });
+
+    it('asks rather than finishes when a question replaces the working line', async () => {
+      const { manager, transports, timers, session, id } = await working();
+
+      transports[0].output('\x1b[2J\x1b[HDo you want to proceed?\r\n\u276f 1. Yes\r\n  2. No\r\n');
+      await parsed(manager, id);
+
+      expect(session(id).attention?.kind).toBe('question');
+      expect(timers.some((timer) => timer.ms === FINISH_SETTLE_MS && !timer.cancelled)).toBe(false);
     });
   });
 });

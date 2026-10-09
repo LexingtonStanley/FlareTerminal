@@ -1,4 +1,4 @@
-import { detectPrompt, samePrompt } from './prompts';
+import { answersFor, detectPrompt, samePrompt } from './prompts';
 
 const screen = (text: string) => text.split('\n');
 
@@ -27,7 +27,7 @@ describe('detectPrompt', () => {
       options: [
         { label: 'Yes', input: '1' },
         { label: "Yes, and don't ask again for npm test commands in ~/app", input: '2' },
-        { label: 'No, and tell Claude what to do differently (esc)', input: '3' },
+        { label: 'No, and tell Claude what to do differently', input: '\x1b' },
       ],
     });
   });
@@ -47,7 +47,7 @@ Would you like to run the following command?
     );
 
     expect(prompt?.question).toBe('Would you like to run the following command?');
-    expect(prompt?.options.map(({ input }) => input)).toEqual(['y', 'a', '3']);
+    expect(prompt?.options.map(({ input }) => input)).toEqual(['y', 'a', '\x1b']);
     expect(prompt?.options[0].label).toBe('Yes, proceed');
   });
 
@@ -121,5 +121,52 @@ Which approach do you prefer?
     const prompt = detectPrompt(['Proceed? [y/N]'])!;
     expect(samePrompt(prompt, detectPrompt(['$ x', 'Proceed? [y/N]'])!)).toBe(true);
     expect(samePrompt(prompt, detectPrompt(['Delete? [y/N]'])!)).toBe(false);
+  });
+});
+
+describe('answersFor', () => {
+  const menu = (lines: string[]) => detectPrompt(['Do you want to proceed?', ...lines])!;
+
+  it('approves with the first yes and denies with the first no', () => {
+    expect(
+      answersFor(
+        menu(['❯ 1. Yes', '  2. Yes, and don’t ask again', '  3. No, and tell Claude (esc)'])
+      )
+    ).toEqual({ approve: '1', deny: '\x1b' });
+    expect(answersFor(detectPrompt(['Continue? [Y/n]'])!)).toEqual({
+      approve: 'y\r',
+      deny: 'n\r',
+    });
+  });
+
+  it('leaves choices that aren’t yes or no to the person', () => {
+    expect(answersFor(menu(['❯ 1. Use Postgres', '  2. Use SQLite']))).toBeNull();
+    expect(answersFor(menu(['❯ 1. Yes', '  2. Show me the diff first']))).toBeNull();
+  });
+});
+
+describe('detectPrompt on a narrow screen', () => {
+  it('joins options the agent wrapped over two lines', () => {
+    const prompt = detectPrompt(
+      screen(`
+Do you want to make this edit
+to parser.ts?
+❯ 1. Yes
+  2. Yes, allow all edits during
+     this session (shift+tab)
+  3. No, and tell Claude what to
+     do differently (esc)`)
+    );
+
+    expect(prompt).toEqual({
+      question: 'to parser.ts?',
+      options: [
+        { label: 'Yes', input: '1' },
+        { label: 'Yes, allow all edits during this session (shift+tab)', input: '2' },
+        // Lines after the last option can't be told from a footer, so its label is cut
+        // short; its number still chooses it.
+        { label: 'No, and tell Claude what to', input: '3' },
+      ],
+    });
   });
 });

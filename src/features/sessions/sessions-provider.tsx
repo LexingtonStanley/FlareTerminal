@@ -12,11 +12,13 @@ import { useConnections } from '@/features/connections/connections-provider';
 import {
   ensureNotificationPermission,
   postAgentNotification,
+  useNotificationAnswers,
 } from '@/features/notifications/notify';
 import { openTransport } from '@/features/terminal/open-transport';
 import { useProtection } from '@/features/vault/use-protection';
 
 import { keepSessionsAlive } from './background';
+import { answersFor } from './prompts';
 import { SessionManager, type SessionTarget } from './session-manager';
 
 const SessionsContext = createContext<SessionManager | null>(null);
@@ -46,13 +48,36 @@ export function SessionsProvider({ children }: PropsWithChildren) {
     manager.setAttentionHandler((session, attention, appActive) => {
       // In the foreground the in-app banner shows it instead.
       if (appActive) return;
-      // A protected session's message stays behind its lock, off the lock screen too.
+      // A protected session's message stays behind its lock, off the lock screen too, and
+      // it can't be answered from there.
       if (scopeOf(session.connectionId)) {
         postAgentNotification(session.id, session.name, 'Needs your attention');
-      } else {
-        postAgentNotification(session.id, attention.title, attention.body);
+        return;
       }
+      const { prompt } = session;
+      const answerable = prompt && !prompt.answered && answersFor(prompt) ? prompt.at : undefined;
+      postAgentNotification(session.id, attention.title, attention.body, answerable);
     });
+  });
+
+  // Approve or Deny on a notification types the answer, if the question is still on screen.
+  useNotificationAnswers((sessionId, questionAt, answer) => {
+    const session = manager.getSnapshot().find(({ id }) => id === sessionId);
+    if (!session || scopeOf(session.connectionId)) return;
+    const result = manager.answer(sessionId, questionAt, answer);
+    if (result === 'disconnected') {
+      postAgentNotification(
+        sessionId,
+        session.name,
+        'Not sent: disconnected. Open Flare to reconnect.'
+      );
+    } else if (result === 'gone') {
+      postAgentNotification(
+        sessionId,
+        session.name,
+        'Not sent: that question is no longer on screen.'
+      );
+    }
   });
 
   useEffect(() => {

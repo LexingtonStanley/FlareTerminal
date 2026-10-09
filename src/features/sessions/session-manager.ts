@@ -10,8 +10,15 @@ import type {
 } from '@/features/terminal/transport';
 
 import { parseOsc777, parseOsc9, parseOsc99, type AgentAlert } from './alerts';
-import { contentLines, type SessionActivity } from './inbox';
-import { detectPrompt, samePrompt, type DetectedPrompt } from './prompts';
+import { contentLines, lastMeaningfulLine, type SessionActivity } from './inbox';
+import {
+  answersFor,
+  detectPrompt,
+  isWorking,
+  samePrompt,
+  type DetectedPrompt,
+  type PromptAnswer,
+} from './prompts';
 
 /**
  * Open terminal sessions, kept alive while the person looks elsewhere (another session,
@@ -28,10 +35,23 @@ export type SessionTarget = {
   command: string | null;
 };
 
-export type Attention = { title: string; body: string; at: number };
+/**
+ * Why a session wants the person: a message (the bell, a notification escape code), a
+ * question on its screen, or an agent that stopped working without asking anything.
+ */
+export type AttentionKind = 'message' | 'question' | 'finished';
+
+export type Attention = { title: string; body: string; at: number; kind: AttentionKind };
 
 /** A question on the session's screen, waiting for an answer (see prompts.ts). */
-export type AgentPrompt = DetectedPrompt & { at: number };
+export type AgentPrompt = DetectedPrompt & {
+  at: number;
+  /** Answered from the app; it stays until the screen moves on, but can't be answered twice. */
+  answered?: boolean;
+};
+
+/** What became of an answer sent from a notification or the inbox. */
+export type AnswerResult = 'sent' | 'gone' | 'disconnected';
 
 export type SessionSnapshot = SessionTarget & {
   id: string;
@@ -74,6 +94,11 @@ const REPLAY_SCROLLBACK = 2000;
 /** Bells come in bursts (tab completion); notify at most this often per session. */
 const ALERT_INTERVAL_MS = 15_000;
 /**
+ * An agent's working line (its spinner) must stay gone this long before it counts as
+ * finished, so a redraw between two steps doesn't.
+ */
+export const FINISH_SETTLE_MS = 2_000;
+/**
  * When a session that was connected loses its connection, it reconnects after each of these
  * delays in turn (its command, e.g. `tmux new -A`, reattaches). After that it waits for the
  * person, or for the app to come back on screen, when it tries again.
@@ -97,6 +122,11 @@ class Session {
   private changedAt: number;
   private writes = 0;
   private closed = false;
+  /** An agent's working line was on screen at the last look. */
+  private working = false;
+  private cancelFinish: (() => void) | null = null;
+  /** An alert to notify once the burst of output that raised it has been read. */
+  private notifyPending = false;
   snapshot: SessionSnapshot;
 
   constructor(
@@ -122,7 +152,9 @@ class Session {
       allowProposedApi: true,
     });
     this.headless.loadAddon(this.serializer);
-    this.headless.onBell(() => this.alert({ title: null, body: 'Needs your attention' }, true));
+    this.headless.onBell(() =>
+      this.alert({ title: null, body: 'Needs your attention' }, 'message', { bell: true })
+    );
     this.headless.onTitleChange((title) => this.update({ title }));
     const handlers: [number, (data: string) => AgentAlert | null][] = [
       [9, parseOsc9],
@@ -132,7 +164,7 @@ class Session {
     for (const [ident, parse] of handlers) {
       this.headless.parser.registerOscHandler(ident, (data) => {
         const alert = parse(data);
-        if (alert) this.alert(alert);
+        if (alert) this.alert(alert, 'message');
         return true;
       });
     }
@@ -143,19 +175,30 @@ class Session {
     this.manager.changed();
   }
 
-  private alert({ title, body }: AgentAlert, bell = false, now = this.manager.now()) {
+  private alert(
+    { title, body }: AgentAlert,
+    kind: AttentionKind,
+    { bell = false, now = this.manager.now() } = {}
+  ) {
     const watching = this.manager.isWatching(this.snapshot.id);
     if (watching) return;
     const recent = now - this.lastAlertAt < ALERT_INTERVAL_MS;
     // Agents can ring the bell with a message (Claude Code's iterm2_with_bell): the bell
     // adds nothing to the message, and the message is worth a notification of its own.
     if (bell && recent && this.snapshot.attention) return;
-    const attention = { title: title ?? this.snapshot.name, body, at: now };
+    const attention = { title: title ?? this.snapshot.name, body, at: now, kind };
     this.update({ attention });
     if (recent && (bell || !this.lastAlertWasBell)) return;
     this.lastAlertAt = now;
     this.lastAlertWasBell = bell;
-    this.manager.attention(this.snapshot, attention);
+    // Sent once the screen has been read, so it can carry a question drawn in the same burst.
+    this.notifyPending = true;
+  }
+
+  private flushNotification() {
+    if (!this.notifyPending) return;
+    this.notifyPending = false;
+    if (this.snapshot.attention) this.manager.attention(this.snapshot, this.snapshot.attention);
   }
 
   private output(text: string) {
@@ -163,7 +206,9 @@ class Session {
     // Look for a prompt once the screen has settled: after the last write of a burst.
     const write = ++this.writes;
     this.headless.write(text, () => {
-      if (write === this.writes) this.checkPrompt();
+      if (write !== this.writes) return;
+      this.checkScreen();
+      this.flushNotification();
     });
     if (this.view) this.view.write(text);
     else this.replayBuffer?.push(text);
@@ -207,14 +252,45 @@ class Session {
     return { preview: content.at(-1) ?? null, changedAt: this.changedAt };
   }
 
-  /** The rows on screen now, top to bottom. */
+  /**
+   * The lines on screen now, top to bottom. A line the terminal wrapped because the screen
+   * is narrow comes back whole.
+   */
   private screenLines(): string[] {
     const buffer = this.headless.buffer.active;
     const lines: string[] = [];
     for (let y = buffer.baseY; y < buffer.baseY + this.headless.rows; y++) {
-      lines.push(buffer.getLine(y)?.translateToString(true) ?? '');
+      const line = buffer.getLine(y);
+      const text = line?.translateToString(true) ?? '';
+      if (line?.isWrapped && lines.length) lines[lines.length - 1] += text;
+      else lines.push(text);
     }
     return lines;
+  }
+
+  /** Reads the screen after a burst of output: questions, and agents starting or stopping. */
+  private checkScreen() {
+    if (this.closed) return;
+    const lines = this.screenLines();
+    this.checkPrompt(lines);
+    if (this.snapshot.prompt) {
+      // Asking, not finished: the question is the alert.
+      this.working = false;
+      this.stopFinishTimer();
+    } else if (isWorking(lines)) {
+      this.working = true;
+      this.stopFinishTimer();
+    } else if (this.working && !this.cancelFinish) {
+      this.cancelFinish = this.manager.delay(() => {
+        this.cancelFinish = null;
+        this.finish();
+      }, FINISH_SETTLE_MS);
+    }
+  }
+
+  private stopFinishTimer() {
+    this.cancelFinish?.();
+    this.cancelFinish = null;
   }
 
   /**
@@ -222,9 +298,8 @@ class Session {
    * alert, for agents and programs that don't ring the bell. When it leaves the screen
    * (answered here or elsewhere) the alert it raised goes too.
    */
-  private checkPrompt() {
-    if (this.closed) return;
-    const detected = detectPrompt(this.screenLines());
+  private checkPrompt(lines: string[]) {
+    const detected = detectPrompt(lines);
     const current = this.snapshot.prompt;
     if (!detected) {
       if (!current) return;
@@ -235,12 +310,46 @@ class Session {
     if (current && samePrompt(current, detected)) return;
     const prompt = { ...detected, at: this.manager.now() };
     this.update({ prompt });
-    // A message the agent sent itself says more than the question ("needs your permission
-    // to use Bash"), so it stays; a bare bell says less.
-    if (!this.snapshot.attention || this.lastAlertWasBell) {
+    const { attention } = this.snapshot;
+    if (!attention || this.lastAlertWasBell || attention.kind === 'finished') {
       // At the prompt's time, so the alert can be matched to it when the prompt goes.
-      this.alert({ title: null, body: prompt.question }, false, prompt.at);
+      this.alert({ title: null, body: prompt.question }, 'question', { now: prompt.at });
+    } else if (!this.manager.isWatching(this.snapshot.id)) {
+      // A message the agent sent itself ("needs your permission to use Bash") says more than
+      // the question, so it stays; its notification is sent again to carry the answers.
+      this.notifyPending = true;
     }
+  }
+
+  /**
+   * The agent's working line has stayed gone without a question in its place: it stopped
+   * by itself. Says so, with the last line it wrote.
+   */
+  private finish() {
+    if (this.closed) return;
+    const lines = this.screenLines();
+    if (isWorking(lines) || this.snapshot.prompt) return;
+    this.working = false;
+    this.alert(
+      { title: `${this.snapshot.name} finished`, body: lastMeaningfulLine(lines) ?? 'Done' },
+      'finished'
+    );
+    this.flushNotification();
+  }
+
+  /**
+   * Answers the question on screen, if it's still the one the person saw (`at`): never
+   * types into whatever replaced it.
+   */
+  answer(at: number, choice: PromptAnswer): AnswerResult {
+    const { prompt, status } = this.snapshot;
+    const answers = prompt && !prompt.answered && prompt.at === at ? answersFor(prompt) : null;
+    if (!prompt || !answers) return 'gone';
+    if (!this.transport || status.state !== 'connected') return 'disconnected';
+    this.transport.write(answers[choice]);
+    const raised = this.snapshot.attention?.at === prompt.at;
+    this.update({ prompt: { ...prompt, answered: true }, ...(raised ? { attention: null } : {}) });
+    return 'sent';
   }
 
   detach(view: ViewSink) {
@@ -332,6 +441,7 @@ class Session {
 
   close() {
     this.closed = true;
+    this.stopFinishTimer();
     this.cancelRetry?.();
     this.cancelRetry = null;
     this.transport?.close();
@@ -409,6 +519,11 @@ export class SessionManager {
 
   resize(id: string, size: TerminalSize) {
     this.sessions.get(id)?.resize(size);
+  }
+
+  /** Answers a session's question (see Session.answer); 'gone' for a closed session. */
+  answer(id: string, at: number, choice: PromptAnswer): AnswerResult {
+    return this.sessions.get(id)?.answer(at, choice) ?? 'gone';
   }
 
   reconnect(id: string) {

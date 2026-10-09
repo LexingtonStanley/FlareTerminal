@@ -10,6 +10,10 @@ import { Platform } from 'react-native';
  */
 
 const CHANNEL_ID = 'agents';
+/** Notifications for a yes/no question carry Approve and Deny (no ':' or '-' allowed). */
+const QUESTION_CATEGORY = 'agentQuestion';
+
+export type NotificationAnswer = 'approve' | 'deny';
 
 let configured = false;
 
@@ -24,6 +28,20 @@ function configure() {
       shouldSetBadge: false,
     }),
   });
+  // Answered without opening the app. iOS asks for the phone's unlock first, so a locked
+  // phone can't approve anything; Android follows the phone's lock-screen settings.
+  void Notifications.setNotificationCategoryAsync(QUESTION_CATEGORY, [
+    {
+      identifier: 'approve',
+      buttonTitle: 'Approve',
+      options: { opensAppToForeground: false, isAuthenticationRequired: true },
+    },
+    {
+      identifier: 'deny',
+      buttonTitle: 'Deny',
+      options: { opensAppToForeground: false, isAuthenticationRequired: true, isDestructive: true },
+    },
+  ]);
   if (Platform.OS === 'android') {
     void Notifications.setNotificationChannelAsync(CHANNEL_ID, {
       name: 'Agent alerts',
@@ -45,12 +63,28 @@ export async function ensureNotificationPermission(): Promise<boolean> {
   }
 }
 
-export function postAgentNotification(sessionId: string, title: string, body: string) {
+const identifierOf = (sessionId: string) => `agent-${sessionId}`;
+
+/**
+ * Posts (or replaces) a session's notification. With `questionAt`, the time of a yes/no
+ * question on its screen, it carries Approve and Deny.
+ */
+export function postAgentNotification(
+  sessionId: string,
+  title: string,
+  body: string,
+  questionAt?: number
+) {
   configure();
   void Notifications.scheduleNotificationAsync({
     // One notification per session: a newer alert replaces the older one.
-    identifier: `agent-${sessionId}`,
-    content: { title, body, data: { sessionId } },
+    identifier: identifierOf(sessionId),
+    content: {
+      title,
+      body,
+      data: { sessionId, questionAt: questionAt ?? null },
+      ...(questionAt === undefined ? {} : { categoryIdentifier: QUESTION_CATEGORY }),
+    },
     trigger: Platform.OS === 'android' ? { channelId: CHANNEL_ID } : null,
   });
 }
@@ -59,9 +93,27 @@ export function postAgentNotification(sessionId: string, title: string, body: st
 export function useNotificationOpens(onOpen: (sessionId: string) => void) {
   useEffect(() => {
     const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
+      if (response.actionIdentifier !== Notifications.DEFAULT_ACTION_IDENTIFIER) return;
       const sessionId = response.notification.request.content.data?.sessionId;
       if (typeof sessionId === 'string') onOpen(sessionId);
     });
     return () => subscription.remove();
   }, [onOpen]);
+}
+
+/** Calls `onAnswer` when the person taps Approve or Deny, and clears that notification. */
+export function useNotificationAnswers(
+  onAnswer: (sessionId: string, questionAt: number, answer: NotificationAnswer) => void
+) {
+  useEffect(() => {
+    const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
+      const answer = response.actionIdentifier;
+      if (answer !== 'approve' && answer !== 'deny') return;
+      const { sessionId, questionAt } = response.notification.request.content.data ?? {};
+      if (typeof sessionId !== 'string' || typeof questionAt !== 'number') return;
+      void Notifications.dismissNotificationAsync(identifierOf(sessionId));
+      onAnswer(sessionId, questionAt, answer);
+    });
+    return () => subscription.remove();
+  }, [onAnswer]);
 }
