@@ -9,8 +9,12 @@ export type TerminalSize = { cols: number; rows: number };
 export type SessionStatus =
   | { state: 'connecting' }
   | { state: 'connected' }
-  /** `message` explains why, for example the process exited or the host refused. */
-  | { state: 'closed'; message: string };
+  /**
+   * `message` explains why, for example the process exited or the host refused. `retry`
+   * marks a network problem (the connection dropped, the host couldn't be reached) rather
+   * than the session ending or being refused: worth reconnecting by itself.
+   */
+  | { state: 'closed'; message: string; retry?: boolean };
 
 export type TransportListener = {
   /** Decoded terminal output, ready for the view. */

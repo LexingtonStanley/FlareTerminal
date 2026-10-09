@@ -1,30 +1,59 @@
-import { ActivityIndicator, Pressable, StyleSheet, Text } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Spacing } from '@/constants/theme';
+import { Radius, sans, Spacing, type ThemeColor } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+
+import { Icon, type IconName } from './icon';
 
 type ButtonProps = {
   title: string;
   onPress: () => void;
-  variant?: 'primary' | 'secondary';
+  /**
+   * - primary: the screen's main action, in the accent. One per screen.
+   * - secondary: other actions, on a card surface.
+   * - danger: destructive actions (deleting), quiet until pressed.
+   * - ghost: low-emphasis actions beside others, no surface.
+   */
+  variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
+  /** A leading icon. */
+  icon?: IconName;
+  /** Compact height, for buttons inside cards and rows. */
+  size?: 'regular' | 'small';
   /** Shows a spinner and blocks presses. */
   loading?: boolean;
   disabled?: boolean;
   testID?: string;
 };
 
+const VARIANTS: Record<
+  NonNullable<ButtonProps['variant']>,
+  { background: ThemeColor | null; pressed: ThemeColor; text: ThemeColor; border: boolean }
+> = {
+  primary: { background: 'primary', pressed: 'primary', text: 'onPrimary', border: false },
+  secondary: {
+    background: 'backgroundElement',
+    pressed: 'backgroundSelected',
+    text: 'text',
+    border: true,
+  },
+  danger: { background: null, pressed: 'backgroundSelected', text: 'danger', border: true },
+  ghost: { background: null, pressed: 'backgroundSelected', text: 'primary', border: false },
+};
+
 export function Button({
   title,
   onPress,
   variant = 'primary',
+  icon,
+  size = 'regular',
   loading = false,
   disabled = false,
   testID,
 }: ButtonProps) {
   const theme = useTheme();
-  const isPrimary = variant === 'primary';
+  const look = VARIANTS[variant];
   const isDisabled = disabled || loading;
-  const textColor = isPrimary ? theme.onPrimary : theme.text;
+  const textColor = theme[look.text];
 
   return (
     <Pressable
@@ -38,14 +67,30 @@ export function Button({
       testID={testID}
       style={({ pressed }) => [
         styles.base,
-        { backgroundColor: isPrimary ? theme.primary : theme.backgroundElement },
+        size === 'small' && styles.small,
+        {
+          backgroundColor: pressed
+            ? theme[look.pressed]
+            : look.background
+              ? theme[look.background]
+              : 'transparent',
+          borderColor: look.border ? theme.border : 'transparent',
+        },
         pressed && styles.pressed,
+        pressed && variant === 'primary' && styles.pressedPrimary,
         isDisabled && styles.disabled,
       ]}>
       {loading ? (
         <ActivityIndicator color={textColor} />
       ) : (
-        <Text style={[styles.label, { color: textColor }]}>{title}</Text>
+        <View style={styles.content}>
+          {icon ? <Icon name={icon} size={size === 'small' ? 16 : 18} color={look.text} /> : null}
+          <Text
+            numberOfLines={1}
+            style={[styles.label, size === 'small' && styles.labelSmall, { color: textColor }]}>
+            {title}
+          </Text>
+        </View>
       )}
     </Pressable>
   );
@@ -53,13 +98,18 @@ export function Button({
 
 const styles = StyleSheet.create({
   base: {
-    minHeight: 48,
+    minHeight: 50,
     paddingHorizontal: Spacing.four,
-    borderRadius: Spacing.three,
+    borderRadius: Radius.medium,
+    borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  label: { fontSize: 16, fontWeight: 600 },
-  pressed: { opacity: 0.8 },
-  disabled: { opacity: 0.5 },
+  small: { minHeight: 38, paddingHorizontal: Spacing.three, borderRadius: Radius.small + 2 },
+  content: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  label: { ...sans(600), fontSize: 16, letterSpacing: -0.1 },
+  labelSmall: { fontSize: 14 },
+  pressed: { transform: [{ scale: 0.985 }] },
+  pressedPrimary: { opacity: 0.86 },
+  disabled: { opacity: 0.45 },
 });

@@ -3,9 +3,19 @@
 Flare Terminal's own keys for driving shells, tmux, vim and agent CLIs from a phone. There
 are two modes, both inside the app:
 
-- **Mode A, the accessory bar**: one row above the phone's keyboard with what it lacks.
-- **Mode B, the coding keyboard**: a full keyboard that replaces the phone's while in the
-  terminal. No autocorrect, no IME, every key reaches the terminal as typed.
+- **Mode B, the coding keyboard**, which a session opens with: a full keyboard in place of
+  the phone's. No autocorrect, no IME, every key reaches the terminal as typed.
+- **Mode A, writing**: a flick up on the hide key swaps it for a text field with the phone's
+  own keyboard, for prose (autocorrect, swiping, dictation), and the accessory bar above it:
+  one row with what the phone's keyboard lacks. Enter sends the text as a paste; the keyboard
+  key goes back.
+
+A tap on the hide key puts the keyboard away, to see the whole terminal, without opening the
+phone's. A tap on the terminal, or the keyboard button in its corner, brings it back.
+
+The terminal itself never asks for the phone's keyboard (`inputmode="none"`): it keeps focus
+for its cursor and for hardware keyboards, and a tap on the line being edited moves the
+cursor there (arrow keys, so it works in any shell or agent prompt).
 
 The bar is the top row of the coding keyboard, so Esc, Ctrl and the arrows never move. Try
 both at `/keyboard-preview` (in the app, or `npm start` then `w`).
@@ -36,15 +46,16 @@ Every key is at least 40 points wide on a 375-point phone (iPhone SE/mini and up
 ## Mode B: the coding keyboard
 
 ```
- esc  tab  ctrl  alt  [ ◀ ▲▼ ▶ ]  |  /  🌐        ← the bar, with 🌐 back to the phone's keyboard
+ esc  tab  ctrl  alt  [ ◀ ▲▼ ▶ ]  |  /  ⌄        ← the bar; ⌄ hides, flick up for writing (Mode A)
   1    2    3    4    5    6    7    8    9    0   ← flick up (digits)
   q    w    e    r    t    y    u    i    o    p
     @    #    $    _    &    =    +    (    )
     a    s    d    f    g    h    j    k    l
          *    "    '    :    ;    !    ?
-  ⇧     z    x    c    v    b    n    m     ⌫     ← ⌫ flick left: delete word (^W)
-  fn    _              ,   ^J
- 123    -    [   space    ]  .    ⏎             ← slide on space: arrows · ⏎ flick up: newline
+  ⇧     z    x    c    v    b    n    m     ⌫     ← ⌫ flick left: delete word (^W), right: del
+  fn    _                    #   ^J
+ 123    -  home [ space ] end ( . )  ⏎          ← slide on space: arrows · ⏎ flick up: newline
+                                ,               ← . flicks: # up, , down, ( ) left and right
 ```
 
 **Symbols** (`123`): every symbol a shell needs in one tap or one flick. Digits carry their
@@ -151,8 +162,9 @@ All logic is pure and tested; components only route touches and draw.
 Ctrl and Alt state belongs to the terminal session (the composer and typing straight into
 the terminal use it too); the keyboards show it and change it through
 `onModifiersChange`. The session applies armed modifiers to the next input and calls
-`afterInput`. In Mode B the terminal view gets `systemKeyboard={false}`, which keeps it
-focused (cursor, hardware keyboards) but asks for no on-screen keyboard (`inputmode="none"`).
+`afterInput`. The terminal view keeps focus (cursor, hardware keyboards) but never asks for
+an on-screen keyboard (`inputmode="none"`); taps on the edited line become arrow keys
+(`src/features/terminal/cursor-tap.ts`).
 
 ## Needs a device
 
@@ -174,5 +186,5 @@ back-swipe at the left edge cancelling a touch on Esc; timing constants on a rea
   keys, landscape layout.
 - Slide from `123` onto a symbol and release to type it and come straight back (iOS does
   this), and slide to the neighbouring key to correct a mis-tap.
-- Swipe typing for prose prompts (for now: the globe key, then the phone's keyboard or the
-  composer with dictation).
+- Swipe typing for prose prompts without leaving the coding keyboard (for now: a flick up on
+  the hide key, then the phone's keyboard in the text field, with dictation).

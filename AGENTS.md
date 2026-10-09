@@ -48,7 +48,7 @@ Traps already hit in this exact stack:
   async calls back to the app, and the component can't share React state with the app. Push
   streaming data in through the imperative handle (`useDOMImperativeHandle`), never through
   changing props, and batch it: each call is an `injectJavaScript`. Settings that rarely change
-  (theme, font size, `systemKeyboard`) are props. Its methods aren't callable until
+  (theme, font size) are props. Its methods aren't callable until
   the view has called `onReady`. Expo types handle methods as `(...args: JSONValue[])`; the view
   wraps that once (`useTypedDOMImperativeHandle`) so callers keep precise types.
 - **ttyd** ignores input unless started with `-W`, needs the `Authorization: Basic` header on
@@ -71,6 +71,26 @@ Traps already hit in this exact stack:
 - **noble** (`@noble/*`) ships ES modules only; `jest.config.js` transforms it.
 - **Coding agents' git worktrees** (`.claude/worktrees/`) hold a second copy of the app; Jest,
   Metro, ESLint, Prettier and `tsc` all ignore them. Keep it that way.
+- **React Native's globals are thinner than Jest's.** Jest runs on Node, but on Android and iOS
+  `process` is only `{ env }` and `navigator` only `{ product: 'ReactNative' }`. A library that
+  sniffs its environment when it loads can pass every test and still close the app on launch
+  (xterm.js did: `headless-terminal.ts` works around it). Every module loads at startup, so
+  `__tests__/native-globals.test.ts` loads every route with React Native's globals; a new
+  native-only library may need a stub there.
+- **Over-the-air updates match builds by fingerprint** (`runtimeVersion.policy: fingerprint`):
+  the native project (from `node_modules`), app config and `package.json` scripts. Publish
+  preview updates with `APP_VARIANT=preview` (`npm run update:preview`) or they never reach
+  preview builds, and check `APP_VARIANT=preview npx expo-updates runtimeversion:resolve
+--platform android` before and after a change you mean to ship over the air. A build from a
+  machine whose `node_modules` is stale fails EAS's "Configure expo-updates" phase (runtime
+  version mismatch): `npm install` first, as `npm run build:preview` does.
+- **The keyboard covers inputs on Android**: apps draw edge-to-edge, so the window no longer
+  shrinks for the keyboard, and React Native's `KeyboardAvoidingView` (with Expo's suggested
+  `behavior={undefined}` on Android) does nothing. Forms use `<Screen scroll>`, which is a
+  `KeyboardAwareScrollView` from react-native-keyboard-controller (it keeps the focused field
+  in view); fixed layouts use that library's `KeyboardAvoidingView` with `behavior="padding"`.
+  Every nested ScrollView needs `keyboardShouldPersistTaps="handled"` too, or the first tap
+  with the keyboard open only closes it.
 - **Hermes** has `TextEncoder`, and Expo installs a streaming `TextDecoder`, `URL` and
   `URLSearchParams` on native, so use the standard APIs.
 - **`EXPO_PUBLIC_*`** variables are only inlined when written exactly as
@@ -88,36 +108,48 @@ Traps already hit in this exact stack:
 | `npm start`                                   | Dev server (`w` opens web; native needs a development build)                        |
 | `npx expo install <pkg>`                      | Add a dependency at the SDK-compatible version. Never use plain `npm install <pkg>` |
 | `npm run doctor`                              | `expo-doctor`: dependency and config problems                                       |
+| `npm run build:preview`                       | `npm install`, then an Android preview build on EAS                                 |
+| `npm run update:preview -- --message "…"`     | Over-the-air update for preview builds (sets `APP_VARIANT=preview`)                 |
 | `npm run rename -- --name "X" --id com.x.app` | Give a new app its own name and IDs                                                 |
 
 ## Layout
 
 ```
 src/app/                 Routes only. Every file here is a screen; never put tests or helpers here.
-  _layout.tsx            Providers (preferences, connections, shortcuts, sessions), stack,
-                         attention banner, root ErrorBoundary
+  _layout.tsx            Providers (preferences, connections, groups, shortcuts, sessions,
+                         lock), stack, attention banner, access guard, root ErrorBoundary
   (tabs)/                Tab navigator: index (Home: sessions, shortcuts, connections), settings
   connections/           new.tsx, [id].tsx (edit): the connection form
   shortcuts/             new.tsx, [id].tsx (edit): the shortcut form
-  session/[id].tsx       A session: session strip, view, keyboard (bar + composer, or coding)
+  groups/                new.tsx, [id].tsx (edit): the group form
+  security.tsx           App lock: set up, change or turn off the PIN/password, biometrics
+  session/[id].tsx       A session: session strip, view, coding keyboard (or, for writing,
+                         the key bar and composer with the phone's keyboard)
   keyboard-preview.tsx   Both keyboards against a pretend shell, no host needed
   +not-found.tsx
 src/components/ui/       Screen, Button, TextField primitives: build screens from these
 src/components/          ThemedText, ThemedView, ExternalLink
 src/features/terminal/   terminal-view ('use dom' xterm.js), transport.ts (interface), ttyd.ts,
-                         ssh-transport.ts, open-transport.ts, keys.ts (bytes for keys), composer
+                         ssh-transport.ts, open-transport.ts, keys.ts (bytes for keys), composer,
+                         cursor-tap.ts (a tap on the edited line as arrow keys)
 src/features/ssh/        SSH-2 client (client.ts), packets and ciphers, host and user keys,
                          known hosts, the app's key, socket.ts (TCP; socket.web.ts refuses)
 src/features/sessions/   SessionManager (every open session, headless xterm), alerts, provider,
                          useSessionView, session strip, status, attention banner
 src/features/keyboard/   Accessory bar and coding keyboard: layout, gestures, touch tracking,
                          modifiers, haptics (docs/keyboard.md explains the design)
-src/features/shortcuts/  Shortcut type, presets (Claude in tmux/zellij), provider, form
+src/features/shortcuts/  Shortcut type and groups, agent-command.ts (the command for an agent:
+                         Claude Code/Codex/Hermes/pi in tmux/zellij), shell quoting, provider,
+                         form, Home tile
 src/features/notifications/ Local notifications for agent alerts (no-op on web)
 src/features/connections/ Connection type (SSH or ttyd), validation, ConnectionsProvider, form
-src/features/settings/   PreferencesProvider (font size, keyboard)
+src/features/groups/     Connection groups: type, provider, Home's group tabs, form
+src/features/vault/      App lock and encrypted vault (vault.ts), LockProvider (lock screen),
+                         UnlockPanel, AccessGuard (protected connections/groups, keep-alive)
+src/features/settings/   PreferencesProvider (font size)
 src/features/<name>/     Feature logic and its colocated *.test.ts(x)
-src/lib/                 storage.ts (JSON in localStorage / SQLite), secrets.ts (Keychain/Keystore)
+src/lib/                 storage.ts (JSON in localStorage / SQLite), secrets.ts (Keychain/Keystore),
+                         vault-key.ts (seals secrets while an app lock is set)
 src/test-utils/          Jest helpers: renderApp, memory-storage, fake-terminal-view, fake-transport,
                          fake-notify, ssh-server (a real SSH server from ssh2)
 __tests__/               Router-level Jest tests (render the real src/app tree)
@@ -135,6 +167,9 @@ app.json / app.config.ts Identity / build variants (APP_VARIANT = development | 
 - **Screens**: wrap content in `<Screen>`; use `ThemedText`, `ThemedView` and `useTheme()`
   colors, never hard-coded colors. Every screen must work in light and dark mode and at phone
   width on web.
+- **Design**: `docs/design.md` has the direction and the tokens (colour, type, space) and when
+  to use each. One ember accent per screen; Geist Mono only for what a computer reads. Fonts
+  are per-weight families, so style text with `sans(600)` / `mono()`, never `fontWeight`.
 - **Navigation**: routes are typed, so a bad `href` or `router.push()` fails typecheck.
 - **No accounts**: the hosts a person connects to do the authentication. The template's
   Supabase auth was removed; RapidAppToolkit has it if a backend (for example syncing
@@ -145,13 +180,23 @@ app.json / app.config.ts Identity / build variants (APP_VARIANT = development | 
   output per frame, modifiers). A new way to reach a host (mosh, a relay) is a new transport
   behind the same interface, chosen in `open-transport.ts`. Keep byte-level logic pure and
   unit-tested (`keys.ts`, the ttyd framing, the SSH packets).
+- **Background**: a transport marks a closed status `retry` when the network failed (not when
+  the session ended or was refused); `SessionManager` then reconnects on a backoff, and again
+  when the app returns to the screen. On Android, `sessions/background.android.ts` runs a
+  foreground service (react-native-background-actions, declared as `specialUse` by
+  `plugins/with-background-sessions.js`) while sessions are live; `background.ts` is the
+  no-op for iOS and the web.
 - **SSH is security code.** Never weaken host-key checking (a changed key refuses to connect),
   add algorithms without a reason, or log secrets. `client.test.ts` runs against a real SSH
   server (`ssh2`); a change to the protocol also gets a manual run against OpenSSH.
 - **Terminal output is untrusted.** Only open `http(s)` links from it, never evaluate it, and
   don't enable xterm.js features that write to the clipboard or file system without a prompt.
 - **Data on the device**: small JSON through `src/lib/storage.ts`; passwords and keys only
-  through `src/lib/secrets.ts` (no-op on web, where `secretsSupported` is false).
+  through `src/lib/secrets.ts` (no-op on web, where `secretsSupported` is false). While an app
+  lock is set, `secrets.ts` seals every value with the vault key (`docs/security.md`); never
+  read the Keychain/Keystore around it.
+- **The vault is security code**, like SSH: don't log secrets or keys, don't keep the PIN, and
+  don't weaken the scrypt cost or the back-off on wrong guesses without a reason.
 - **Config and secrets**: local values go in `.env.local` (see `.env.example`); cloud builds
   use `eas env:set`. `EXPO_PUBLIC_*` values ship inside the app, so never put a secret key there.
 - **Tests**: a behaviour change comes with a test.
@@ -165,7 +210,7 @@ app.json / app.config.ts Identity / build variants (APP_VARIANT = development | 
   - `testID` is only for Maestro flows (`.maestro/`).
 - **Limits of the web check**: it can't catch native-only behaviour (the WebView hosting the
   terminal, TCP sockets, soft keyboards and IMEs, `inputmode="none"`, Keychain/Keystore,
-  cleartext networking, notifications, haptics, multi-touch). Cover
+  cleartext networking, notifications, the foreground service, haptics, multi-touch). Cover
   those with a Maestro flow and say in your summary that they need a device run.
 - **Checking against a real ttyd**: download a release binary from
   https://github.com/tsl0922/ttyd/releases, run `ttyd -W -i lo -p 7690 bash`, serve the web

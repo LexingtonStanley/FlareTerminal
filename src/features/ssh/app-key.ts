@@ -8,19 +8,19 @@ import { generateUserKey, userKeyFromSeed, type UserKey } from './user-key';
  * that lists it in ~/.ssh/authorized_keys skip the password.
  */
 
-const SECRET_NAME = 'ssh.app-key.ed25519';
+export const APP_KEY_SECRET = 'ssh.app-key.ed25519';
 
 export function loadAppKey(): UserKey | null {
-  const seed = getSecret(SECRET_NAME);
+  const seed = getSecret(APP_KEY_SECRET);
   return seed ? userKeyFromSeed(fromBase64(seed)) : null;
 }
 
 export function createAppKey(): UserKey {
   const key = generateUserKey();
-  setSecret(SECRET_NAME, toBase64(key.seed));
+  setSecret(APP_KEY_SECRET, toBase64(key.seed));
   return key;
 }
 
 export function deleteAppKey(): void {
-  setSecret(SECRET_NAME, null);
+  setSecret(APP_KEY_SECRET, null);
 }

@@ -14,6 +14,8 @@ export const DIRECTIONS: readonly Direction[] = ['up', 'down', 'left', 'right'];
 
 export type LayerId = 'letters' | 'symbols' | 'nav';
 
+export type KeyboardTarget = 'coding' | 'system' | 'hidden';
+
 export type KeyAction =
   /** Characters to type. `shifted` replaces them while Shift is on (letters). */
   | { type: 'text'; text: string; shifted?: string }
@@ -24,8 +26,8 @@ export type KeyAction =
   /** A long press on a modifier key. */
   | { type: 'lock'; modifier: ModifierName | 'shift' }
   | { type: 'layer'; layer: LayerId }
-  /** Switch between the coding keyboard and the phone's own keyboard. */
-  | { type: 'switch'; to: 'coding' | 'system' };
+  /** Show the coding keyboard, the phone's own keyboard (in a text field), or neither. */
+  | { type: 'switch'; to: KeyboardTarget };
 
 /** A second output on a key, sent by flicking towards `direction` (or, for up, a long press). */
 export type Secondary = {
@@ -47,7 +49,7 @@ export type KeyBehavior = 'press' | 'repeat' | 'modifier' | 'arrows' | 'space';
 
 export type KeyTone = 'char' | 'function' | 'accent';
 
-export type KeyIcon = 'keyboard' | 'globe' | 'backspace' | 'return' | 'shift';
+export type KeyIcon = 'keyboard' | 'hide' | 'backspace' | 'return' | 'shift';
 
 export type KeyDef = {
   /** Unique within a keyboard (control row plus a layer). */
@@ -221,6 +223,8 @@ const ALT = key(
 const ARROWS = key('arrows', '', 'Arrow keys', null, { behavior: 'arrows', units: 2 });
 
 // The symbols phone keyboards bury two layers deep, five per key.
+// The letters layer's punctuation key: . with # above, , below and parentheses either side.
+const PERIOD = flickKey('.', { up: '#', down: ',', left: '(', right: ')' });
 const PIPE = flickKey('|', { up: '~', down: '`', left: '<', right: '>' });
 const SLASH = flickKey('/', { up: '\\', down: '-', left: '[', right: ']' });
 
@@ -234,13 +238,19 @@ const OPEN_KEYBOARD = key(
   }
 );
 
-const SYSTEM_KEYBOARD = key(
+// Hides the keyboard to see the whole terminal; a tap on the terminal brings it back.
+// Flick up for the phone's keyboard, in a text field: prose with autocorrect, swiping and
+// dictation.
+const HIDE_KEYBOARD = key(
   'switch',
   '',
-  'System keyboard',
-  { type: 'switch', to: 'system' },
+  'Hide keyboard',
+  { type: 'switch', to: 'hidden' },
   {
-    icon: 'globe',
+    icon: 'hide',
+    flicks: {
+      up: { action: { type: 'switch', to: 'system' }, label: 'abc', name: 'Phone keyboard' },
+    },
   }
 );
 
@@ -269,13 +279,14 @@ const SHIFT = key(
   }
 );
 
-// Swipe left to delete a word (Ctrl-W), as on Gboard.
+// Swipe left to delete a word (Ctrl-W), as on Gboard; swipe right to delete forwards.
 const BACKSPACE = key('backspace', '', 'Backspace', special('backspace'), {
   behavior: 'repeat',
   icon: 'backspace',
   units: 1.5,
   flicks: {
     left: { action: text('\x17'), label: '^W', name: 'Delete word', hidden: true },
+    right: { action: special('delete'), label: 'del', name: 'Delete' },
   },
 });
 
@@ -302,8 +313,8 @@ const TO_SYMBOLS = {
   },
 } satisfies KeyDef;
 
-function nav(id: SpecialKey, label: string, name: string, repeat = false): KeyDef {
-  return key(id, label, name, special(id), { units: 2, behavior: repeat ? 'repeat' : 'press' });
+function nav(id: SpecialKey, label: string, name: string, repeat = false, units = 2): KeyDef {
+  return key(id, label, name, special(id), { units, behavior: repeat ? 'repeat' : 'press' });
 }
 
 // The arrows stand out from the keys around them, like the character keys do.
@@ -328,7 +339,16 @@ const LAYERS: Record<LayerId, Row[]> = {
       inset: 0,
     },
     {
-      keys: [TO_SYMBOLS, char('-', { up: '_' }), space(4.5), char('.', { up: ',' }), ENTER],
+      // Home and End either side of space, where the cursor goes.
+      keys: [
+        TO_SYMBOLS,
+        char('-', { up: '_' }),
+        nav('home', 'home', 'Home', false, 1),
+        space(2.5),
+        nav('end', 'end', 'End', false, 1),
+        PERIOD,
+        ENTER,
+      ],
       height: KEY_ROW_HEIGHT,
       inset: 0,
     },
@@ -417,7 +437,7 @@ const LAYERS: Record<LayerId, Row[]> = {
 
 /** Mode B: the control row above the current layer. */
 export function keyboardRows(layer: LayerId): Row[] {
-  return [controlRow(SYSTEM_KEYBOARD), ...LAYERS[layer]];
+  return [controlRow(HIDE_KEYBOARD), ...LAYERS[layer]];
 }
 
 /** The key's label for the current Shift state (Q instead of q). */

@@ -5,6 +5,7 @@ import {
   migrateConnection,
   parseSshTarget,
   toConnection,
+  toInput,
   validateConnection,
   type ConnectionInput,
 } from './connections';
@@ -76,7 +77,35 @@ describe('toConnection', () => {
       host: 'lexbox',
       port: 2222,
       username: 'lexde',
+      groupId: null,
+      protected: false,
+      keepAlive: true,
     });
+  });
+
+  it('keeps the group, protection and keep-alive, and reads them back for editing', () => {
+    const connection = toConnection(
+      ssh({ host: 'lexbox', username: 'lexde', groupId: 'g1', protected: true, keepAlive: false }),
+      'c1'
+    );
+    expect(connection).toMatchObject({ groupId: 'g1', protected: true, keepAlive: false });
+    expect(toInput(connection, null)).toMatchObject({
+      groupId: 'g1',
+      protected: true,
+      keepAlive: false,
+    });
+  });
+
+  it('treats connections saved before groups as ungrouped, unprotected and kept alive', () => {
+    const old = {
+      id: 'c1',
+      kind: 'ssh',
+      name: 'Box',
+      host: 'box',
+      port: 22,
+      username: 'a',
+    } as const;
+    expect(toInput(old, null)).toMatchObject({ groupId: '', protected: false, keepAlive: true });
   });
 
   it('prefers the Username field and keeps a given name', () => {

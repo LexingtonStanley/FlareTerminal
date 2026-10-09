@@ -82,10 +82,15 @@ export class SshTransport implements TerminalTransport {
     this.listener.onData(text);
   }
 
-  private finish(message: string) {
+  private finish(message: string, retry = false) {
     if (this.finished || this.closedByUs) return;
     this.finished = true;
-    this.listener.onStatus({ state: 'closed', message: this.closeMessage ?? message });
+    const closeMessage = this.closeMessage;
+    this.listener.onStatus(
+      closeMessage
+        ? { state: 'closed', message: closeMessage }
+        : { state: 'closed', message, ...(retry && { retry }) }
+    );
   }
 
   private async run() {
@@ -103,7 +108,7 @@ export class SshTransport implements TerminalTransport {
           this.client ? this.client.socketClosed(error) : (earlyClose = { error }),
       });
     } catch (error) {
-      this.finish(`Couldn't reach ${host}:${port}. ${(error as Error).message}`);
+      this.finish(`Couldn't reach ${host}:${port}. ${(error as Error).message}`, true);
       return;
     }
     if (this.closedByUs) {
@@ -121,7 +126,8 @@ export class SshTransport implements TerminalTransport {
       verifyHostKey: (check) => this.verifyHostKey(check),
       prompt: (request) => this.prompt(request),
       onBanner: (text) => this.print(text.replace(/\r?\n/g, '\r\n')),
-      onClose: (reason) => this.finish(reason.message),
+      // Unclean: the socket dropped or the host stopped answering keepalives.
+      onClose: (reason) => this.finish(reason.message, !reason.clean),
     });
     this.client = client;
     early.forEach((bytes) => client.receive(bytes));

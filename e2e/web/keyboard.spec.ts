@@ -132,9 +132,10 @@ test('the coding keyboard types a command and replaces the phone keyboard', asyn
     .poll(() => sent(page))
     .toEqual(['l', 's', '␠', '-', 'l', 'a', '⏎', 'G', 'g', '2', '@']);
 
-  await key(page, 'System keyboard').click();
+  await swipe(page, key(page, 'Hide keyboard'), 0, -30);
   await expect(page.getByRole('toolbar', { name: 'Terminal keys' })).toBeVisible();
-  await expect(textarea).not.toHaveAttribute('inputmode', 'none');
+  // The phone's keyboard belongs to a text field; the terminal never asks for it.
+  await expect(textarea).toHaveAttribute('inputmode', 'none');
 });
 
 test('the coding keyboard reaches symbols, navigation keys and repeats', async ({ page }) => {

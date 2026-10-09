@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
-import { Fonts, Spacing } from '@/constants/theme';
+import { Icon } from '@/components/ui/icon';
+import { Radius, sans, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 import type { Modifiers } from './keys';
@@ -17,9 +18,9 @@ type ComposerProps = {
 };
 
 /**
- * A native text field for writing a command or an agent prompt before sending it.
- * Phone keyboards, autocorrect and dictation work here even where typing straight
- * into the terminal doesn't (Android IMEs hold back xterm.js input until Enter).
+ * A native text field for writing an agent prompt (or a command) with the phone's own
+ * keyboard: autocorrect, swiping and dictation, which can't work in a terminal. It opens
+ * focused, and Enter or the send button pastes the text and presses Enter.
  */
 export function Composer({ modifiers, secure = false, onSubmit, onModifiedKey }: ComposerProps) {
   const theme = useTheme();
@@ -41,25 +42,37 @@ export function Composer({ modifiers, secure = false, onSubmit, onModifiedKey }:
   }
 
   return (
-    <View style={[styles.row, { backgroundColor: theme.backgroundElement }]}>
+    // On the keyboard's tray, so the key bar and the composer read as one dock.
+    <View style={[styles.row, { backgroundColor: theme.keyboard }]}>
       <TextInput
         aria-label="Command"
+        autoFocus
         value={draft}
         onChangeText={handleChange}
         onSubmitEditing={submit}
         submitBehavior="submit"
         placeholder={
-          armed ? 'Type a key for the combination' : secure ? 'Password' : 'Command or prompt'
+          armed ? 'Type a key for the combination' : secure ? 'Password' : 'Write a prompt'
         }
         secureTextEntry={secure}
         placeholderTextColor={theme.textSecondary}
-        autoCapitalize="none"
-        autoCorrect={false}
-        spellCheck={false}
+        cursorColor={theme.primary}
+        selectionColor={theme.primary}
+        // Prose: let the phone's keyboard help. (Commands are easier on the coding keyboard.)
+        autoCapitalize={secure ? 'none' : 'sentences'}
+        autoCorrect={!secure}
+        spellCheck={!secure}
+        // Grows for long prompts; Enter still sends. (react-native-web only sends from a
+        // multiline field by blurring it, which would close the keyboard each time.)
+        multiline={!secure && Platform.OS !== 'web'}
         returnKeyType="send"
         style={[
           styles.input,
-          { color: theme.text, backgroundColor: theme.background, borderColor: theme.border },
+          {
+            color: theme.text,
+            backgroundColor: theme.background,
+            borderColor: armed ? theme.primary : theme.border,
+          },
         ]}
       />
       <Pressable
@@ -71,30 +84,40 @@ export function Composer({ modifiers, secure = false, onSubmit, onModifiedKey }:
           { backgroundColor: theme.primary },
           pressed && styles.pressed,
         ]}>
-        <Text style={[styles.sendLabel, { color: theme.onPrimary }]}>↵</Text>
+        <Icon name="send" size={20} color="onPrimary" />
       </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', gap: Spacing.two, padding: Spacing.two, alignItems: 'center' },
+  row: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+    paddingHorizontal: Spacing.two,
+    paddingTop: Spacing.one,
+    paddingBottom: Spacing.two,
+    alignItems: 'center',
+  },
   input: {
+    // Prose, so the interface face (docs/design.md keeps mono for what computers read).
+    ...sans(400),
     flex: 1,
     minHeight: 44,
-    paddingHorizontal: Spacing.three,
-    borderRadius: Spacing.two,
+    maxHeight: 132,
+    paddingHorizontal: Spacing.three - 2,
+    paddingVertical: Spacing.two,
+    borderRadius: Radius.medium,
     borderWidth: 1,
-    fontFamily: Fonts.mono,
     fontSize: 15,
+    outlineWidth: 0,
   },
   send: {
     width: 44,
     height: 44,
-    borderRadius: Spacing.two,
+    borderRadius: Radius.medium,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sendLabel: { fontSize: 20, fontWeight: 700 },
-  pressed: { opacity: 0.8 },
+  pressed: { opacity: 0.8, transform: [{ scale: 0.96 }] },
 });

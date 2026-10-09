@@ -2,9 +2,13 @@
   "expo": {
     "name": "Flare Terminal",
     "slug": "flare-terminal",
+    "owner": "lexingtonstanley",
     "version": "1.0.0",
     "runtimeVersion": {
       "policy": "fingerprint"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/2a925f89-3574-4e44-8fe4-5b7f286e8367"
     },
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -21,7 +25,7 @@
     "android": {
       "package": "com.lexingtonstanley.flareterminal",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#0B0D10",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -37,13 +41,18 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#0B0D10",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 100
         }
       ],
       "expo-sqlite",
-      "expo-secure-store",
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": "Flare Terminal uses Face ID to unlock the app and your saved passwords and keys."
+        }
+      ],
       [
         "expo-build-properties",
         {
@@ -52,11 +61,22 @@
           }
         }
       ],
-      "expo-notifications"
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/android-icon-monochrome.png"
+        }
+      ],
+      "./plugins/with-background-sessions"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "2a925f89-3574-4e44-8fe4-5b7f286e8367"
+      }
     }
   }
 }

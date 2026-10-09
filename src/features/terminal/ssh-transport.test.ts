@@ -6,6 +6,7 @@ import {
   openNodeSocket,
   startTestSshServer,
   stopTestSshServers,
+  testSockets,
   waitFor,
 } from '@/test-utils/ssh-server';
 
@@ -149,6 +150,32 @@ describe('SshTransport', () => {
     expect(screen.statuses.at(-1)).toEqual({
       state: 'closed',
       message: expect.stringMatching(/^Couldn't reach 127\.0\.0\.1:1\./),
+      retry: true,
     });
+  });
+
+  it('marks a dropped connection as worth retrying, and a finished session not', async () => {
+    const server = await startTestSshServer();
+    const dropped = open(server.port, { password: 'correct-horse' });
+    await waitFor(() => dropped.screen.text.includes('(yes/no)? '));
+    dropped.transport.write('yes\r');
+    await waitFor(() => dropped.status() === 'connected');
+
+    testSockets.at(-1)!.destroy();
+
+    await waitFor(() => dropped.status() === 'closed');
+    expect(dropped.screen.statuses.at(-1)).toEqual({
+      state: 'closed',
+      message: 'Connection lost',
+      retry: true,
+    });
+
+    const ended = open(server.port, { password: 'correct-horse', knownHosts: dropped.knownHosts });
+    await waitFor(() => ended.status() === 'connected');
+    server.shell().exit(0);
+    server.shell().end();
+    await waitFor(() => ended.status() === 'closed');
+    expect(ended.screen.statuses.at(-1)).toMatchObject({ message: 'Session ended' });
+    expect(ended.screen.statuses.at(-1)).not.toHaveProperty('retry');
   });
 });

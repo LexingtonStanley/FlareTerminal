@@ -1,23 +1,17 @@
 import { openBrowserAsync } from 'expo-web-browser';
 import { Link, Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useHeaderHeight } from 'expo-router/react-navigation';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  Keyboard,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  StyleSheet,
-  useWindowDimensions,
-  View,
-} from 'react-native';
+import { Keyboard, Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
 import { Screen } from '@/components/ui/screen';
-import { Spacing, TerminalColors } from '@/constants/theme';
+import { IconButton } from '@/components/ui/icon-button';
+import { Radius, Spacing } from '@/constants/theme';
 import { StatusBadge } from '@/features/sessions/session-status';
 import type { SessionSnapshot } from '@/features/sessions/session-manager';
 import { SessionStrip } from '@/features/sessions/session-strip';
@@ -29,12 +23,17 @@ import { CodingKeyboard } from '@/features/keyboard/coding-keyboard';
 import { toModifiers } from '@/features/keyboard/modifiers';
 import { Composer } from '@/features/terminal/composer';
 import TerminalView, { type TerminalViewHandle } from '@/features/terminal/terminal-view';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useTerminalTheme } from '@/features/settings/use-terminal-theme';
+import { useLock } from '@/features/vault/lock-provider';
+import { UnlockPanel } from '@/features/vault/unlock-panel';
+import { useProtection } from '@/features/vault/use-protection';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function SessionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const session = useSessions().find((candidate) => candidate.id === id);
+  const { settings, isAuthorized, authorize } = useLock();
+  const scope = useProtection()(session?.connectionId ?? '');
 
   if (!session) {
     return (
@@ -50,6 +49,26 @@ export default function SessionScreen() {
     );
   }
 
+  // A protected connection or group asks for the lock each time the person comes back.
+  // The session keeps running meanwhile; it just isn't shown.
+  if (scope && settings && !isAuthorized(scope)) {
+    return (
+      <Screen scroll centered edges={['left', 'right', 'bottom']}>
+        <Stack.Screen options={{ title: session.name }} />
+        <UnlockPanel
+          title={`Unlock ${session.name}`}
+          message={
+            scope.startsWith('group:')
+              ? 'Its group is protected. It stays connected while locked.'
+              : 'This connection is protected. It stays connected while locked.'
+          }
+          autoBiometrics
+          onUnlocked={() => authorize(scope)}
+        />
+      </Screen>
+    );
+  }
+
   return <TerminalSession session={session} />;
 }
 
@@ -61,7 +80,7 @@ function openLink(url: string) {
 }
 
 function TerminalSession({ session }: { session: SessionSnapshot }) {
-  const scheme = useColorScheme() === 'dark' ? 'dark' : 'light';
+  const terminalTheme = useTerminalTheme();
   const { fontSize } = usePreferences();
   const headerHeight = useHeaderHeight();
   const manager = useSessionManager();
@@ -70,8 +89,11 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
   const view = useSessionView(viewRef, session.id);
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { keyboard, setKeyboard } = usePreferences();
-  const coding = keyboard === 'coding';
+  // The coding keyboard; none, to see the whole terminal (a tap brings it back); or
+  // "writing": a text field with the phone's keyboard, for prose (autocorrect, swiping,
+  // dictation) and the key bar for the keys it lacks.
+  const [input, setInput] = useState<'keys' | 'hidden' | 'writing'>('keys');
+  const writing = input === 'writing';
   const keys = {
     modifiers: view.modifiers,
     onModifiersChange: view.setModifiers,
@@ -86,22 +108,16 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
   }
 
   return (
-    <Screen edges={coding ? ['left', 'right'] : ['left', 'right', 'bottom']} style={styles.screen}>
+    <Screen
+      edges={input === 'keys' ? ['left', 'right'] : ['left', 'right', 'bottom']}
+      style={styles.screen}>
       <Stack.Screen
         options={{
           headerTitle: () => <SessionTitle name={session.name} title={session.title} />,
           headerRight: () => (
             <View style={styles.headerRight}>
               <StatusBadge status={session.status} />
-              <Pressable
-                role="button"
-                aria-label="Close session"
-                onPress={closeSession}
-                style={styles.close}>
-                <ThemedText type="smallBold" themeColor="textSecondary">
-                  ✕
-                </ThemedText>
-              </Pressable>
+              <IconButton icon="close" label="Close session" onPress={closeSession} />
             </View>
           ),
         }}
@@ -109,16 +125,17 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
       <SessionStrip currentId={session.id} />
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        // keyboard-controller's version, so Android's edge-to-edge layout avoids it too.
+        behavior="padding"
         keyboardVerticalOffset={headerHeight}>
-        <View style={[styles.flex, { backgroundColor: TerminalColors[scheme].background }]}>
+        <View style={[styles.flex, { backgroundColor: terminalTheme.background }]}>
           <TerminalView
             ref={viewRef}
-            theme={TerminalColors[scheme]}
+            theme={terminalTheme}
             fontSize={fontSize}
             {...view.viewCallbacks}
             onOpenLink={openLink}
-            systemKeyboard={!coding}
+            onTap={() => setInput((current) => (current === 'hidden' ? 'keys' : current))}
             dom={{
               style: styles.flex,
               scrollEnabled: false,
@@ -128,32 +145,38 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
             }}
           />
           {session.status.state === 'closed' ? (
-            <ThemedView type="backgroundElement" style={styles.banner}>
+            <ThemedView
+              type="backgroundRaised"
+              style={[styles.banner, { borderColor: theme.border }]}>
               <ThemedText type="small" role="alert">
-                {session.status.message}
+                {session.reconnecting
+                  ? `${session.status.message}. Reconnecting…`
+                  : session.status.message}
               </ThemedText>
               <Button title="Reconnect" onPress={() => manager.reconnect(session.id)} />
             </ThemedView>
+          ) : input === 'hidden' ? (
+            <View style={styles.showKeyboard}>
+              <IconButton
+                icon="keyboard"
+                label="Show keyboard"
+                filled
+                onPress={() => {
+                  setInput('keys');
+                  viewRef.current?.focus();
+                }}
+              />
+            </View>
           ) : null}
         </View>
-        {coding ? (
-          // The tray colour runs under the home indicator.
-          <View style={{ paddingBottom: insets.bottom, backgroundColor: theme.keyboard }}>
-            <CodingKeyboard
-              {...keys}
-              onUseSystemKeyboard={() => {
-                setKeyboard('system');
-                viewRef.current?.focus();
-              }}
-            />
-          </View>
-        ) : (
+        {writing ? (
           <>
             <AccessoryBar
               {...keys}
               onOpenKeyboard={() => {
                 Keyboard.dismiss();
-                setKeyboard('coding');
+                setInput('keys');
+                viewRef.current?.focus();
               }}
             />
             <Composer
@@ -163,7 +186,16 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
               onModifiedKey={view.type}
             />
           </>
-        )}
+        ) : input === 'keys' ? (
+          // The tray colour runs under the home indicator.
+          <View style={{ paddingBottom: insets.bottom, backgroundColor: theme.keyboard }}>
+            <CodingKeyboard
+              {...keys}
+              onHide={() => setInput('hidden')}
+              onUseSystemKeyboard={() => setInput('writing')}
+            />
+          </View>
+        ) : null}
       </KeyboardAvoidingView>
     </Screen>
   );
@@ -177,11 +209,11 @@ function SessionTitle({ name, title }: { name: string; title: string | null }) {
 
   return (
     <View style={{ maxWidth: width - HEADER_SIDES_WIDTH }}>
-      <ThemedText type="smallBold" role="heading" numberOfLines={1}>
+      <ThemedText type="headline" role="heading" numberOfLines={1}>
         {name}
       </ThemedText>
       {title ? (
-        <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+        <ThemedText type="code" themeColor="textSecondary" numberOfLines={1} style={styles.title}>
           {title}
         </ThemedText>
       ) : null}
@@ -192,15 +224,17 @@ function SessionTitle({ name, title }: { name: string; title: string | null }) {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   screen: { padding: 0, gap: 0, maxWidth: '100%' },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
-  close: { padding: Spacing.two },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one },
+  title: { fontSize: 12, lineHeight: 16 },
+  showKeyboard: { position: 'absolute', right: Spacing.three, bottom: Spacing.three },
   banner: {
     position: 'absolute',
     left: Spacing.three,
     right: Spacing.three,
     bottom: Spacing.three,
-    gap: Spacing.two,
+    gap: Spacing.three - 4,
     padding: Spacing.three,
-    borderRadius: Spacing.three,
+    borderRadius: Radius.large,
+    borderWidth: StyleSheet.hairlineWidth,
   },
 });

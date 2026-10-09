@@ -1,64 +1,139 @@
 import Constants from 'expo-constants';
-import { StyleSheet, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Button } from '@/components/ui/button';
+import { Card, Divider, Section } from '@/components/ui/card';
+import { Icon } from '@/components/ui/icon';
+import { IconButton } from '@/components/ui/icon-button';
 import { Screen } from '@/components/ui/screen';
-import { Spacing } from '@/constants/theme';
+import { mono, Spacing } from '@/constants/theme';
 import { FONT_SIZE, usePreferences } from '@/features/settings/preferences-provider';
+import { TerminalPreview, TerminalSchemePicker } from '@/features/settings/terminal-scheme-picker';
+import { useTerminalTheme } from '@/features/settings/use-terminal-theme';
 import { AppKeyCard } from '@/features/ssh/app-key-card';
+import { useLock } from '@/features/vault/lock-provider';
+import { useTheme } from '@/hooks/use-theme';
 
 export default function SettingsScreen() {
-  const { fontSize, setFontSize } = usePreferences();
+  const { fontSize, setFontSize, terminalScheme, setTerminalScheme } = usePreferences();
+  const terminalTheme = useTerminalTheme();
+  const theme = useTheme();
   const { version, extra } = Constants.expoConfig ?? {};
+  const { settings: lock } = useLock();
+  const router = useRouter();
 
   return (
-    <Screen scroll>
-      <ThemedText type="subtitle" role="heading">
+    <Screen scroll style={styles.screen}>
+      <ThemedText type="subtitle" role="heading" style={styles.title}>
         Settings
       </ThemedText>
 
-      <ThemedView type="backgroundElement" style={styles.card}>
-        <ThemedText type="smallBold">Terminal font size</ThemedText>
-        <View style={styles.stepper}>
-          <View style={styles.step}>
-            <Button
-              title="Smaller"
-              variant="secondary"
-              onPress={() => setFontSize(fontSize - 1)}
-              disabled={fontSize <= FONT_SIZE.min}
-            />
+      <Section title="Terminal">
+        <Card flush>
+          <View style={styles.row}>
+            <View style={styles.grow}>
+              <ThemedText type="smallBold">Font size</ThemedText>
+              <ThemedText type="caption" themeColor="textSecondary">
+                Points, for every session
+              </ThemedText>
+            </View>
+            <View style={[styles.stepper, { borderColor: theme.border }]}>
+              <IconButton
+                icon="minus"
+                label="Smaller"
+                color="text"
+                onPress={() => setFontSize(fontSize - 1)}
+                disabled={fontSize <= FONT_SIZE.min}
+              />
+              <ThemedText aria-label="Font size" style={styles.value}>
+                {fontSize}
+              </ThemedText>
+              <IconButton
+                icon="add"
+                label="Larger"
+                color="text"
+                onPress={() => setFontSize(fontSize + 1)}
+                disabled={fontSize >= FONT_SIZE.max}
+              />
+            </View>
           </View>
-          <ThemedText aria-label="Font size" style={styles.value}>
-            {fontSize}
-          </ThemedText>
-          <View style={styles.step}>
-            <Button
-              title="Larger"
-              variant="secondary"
-              onPress={() => setFontSize(fontSize + 1)}
-              disabled={fontSize >= FONT_SIZE.max}
-            />
+          <Divider inset={Spacing.three} />
+          <View style={styles.block}>
+            <ThemedText type="smallBold">Colours</ThemedText>
+            <TerminalPreview colors={terminalTheme} fontSize={fontSize} />
+            <TerminalSchemePicker value={terminalScheme} onChange={setTerminalScheme} />
+            <ThemedText type="caption" themeColor="textSecondary">
+              Each scheme has a light and a dark version that follows your phone&apos;s appearance.
+            </ThemedText>
           </View>
-        </View>
-      </ThemedView>
+        </Card>
+      </Section>
 
-      <AppKeyCard />
+      <Section title="Security">
+        <Card flush>
+          <Pressable
+            role="button"
+            aria-label="App lock"
+            onPress={() => router.push('/security')}
+            style={({ pressed }) => [
+              styles.row,
+              pressed && { backgroundColor: theme.backgroundSelected },
+            ]}>
+            <Icon name="lock" size={18} color={lock ? 'primary' : 'textSecondary'} />
+            <View style={styles.grow}>
+              <ThemedText type="smallBold">App lock</ThemedText>
+              <ThemedText type="caption" themeColor="textSecondary">
+                {lock
+                  ? `${lock.kind === 'pin' ? 'PIN' : 'Password'}${lock.biometrics ? ' and biometrics' : ''} · vault encrypted`
+                  : 'Off · protect the app, passwords and keys'}
+              </ThemedText>
+            </View>
+            <Icon name="chevron" size={16} />
+          </Pressable>
+        </Card>
+      </Section>
 
-      <ThemedView type="backgroundElement" style={styles.card}>
-        <ThemedText type="smallBold">App</ThemedText>
-        <ThemedText themeColor="textSecondary">
-          Version {version} ({extra?.variant ?? 'production'})
-        </ThemedText>
-      </ThemedView>
+      <Section title="SSH key">
+        <AppKeyCard />
+      </Section>
+
+      <Section title="About">
+        <Card>
+          <View style={styles.aboutRow}>
+            <ThemedText type="smallBold" style={styles.grow}>
+              Flare Terminal
+            </ThemedText>
+            <ThemedText type="code" themeColor="textSecondary">
+              {version} · {extra?.variant ?? 'production'}
+            </ThemedText>
+          </View>
+        </Card>
+      </Section>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { gap: Spacing.two, padding: Spacing.three, borderRadius: Spacing.three },
-  stepper: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
-  step: { flex: 1 },
-  value: { minWidth: 32, textAlign: 'center' },
+  screen: { gap: Spacing.four + 4 },
+  title: { paddingTop: Spacing.two },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+    paddingVertical: Spacing.three - 4,
+    paddingLeft: Spacing.three,
+    paddingRight: Spacing.three - 4,
+  },
+  grow: { flex: 1, gap: Spacing.half },
+  stepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: Spacing.half,
+  },
+  value: { ...mono(500), minWidth: 32, textAlign: 'center', fontSize: 16 },
+  block: { gap: Spacing.three - 4, padding: Spacing.three },
+  aboutRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
 });

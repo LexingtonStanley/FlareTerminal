@@ -7,7 +7,8 @@ import type { TerminalViewProps } from '@/features/terminal/terminal-view';
 /**
  * Stands in for the xterm.js DOM component, which renders a WebView on native. Shows
  * everything written to it as text (label "Terminal output"), reports a fixed size,
- * and turns pressKey/paste into onInput the way xterm does (without bracketed paste).
+ * turns pressKey/paste into onInput the way xterm does (without bracketed paste), and
+ * reports a press on it as a tap.
  *
  *   jest.mock('@/features/terminal/terminal-view', () =>
  *     jest.requireActual('@/test-utils/fake-terminal-view')
@@ -15,7 +16,13 @@ import type { TerminalViewProps } from '@/features/terminal/terminal-view';
  */
 export const FAKE_SIZE = { cols: 80, rows: 24 };
 
-export default function FakeTerminalView({ ref, fontSize, onReady, onInput }: TerminalViewProps) {
+export default function FakeTerminalView({
+  ref,
+  fontSize,
+  onReady,
+  onInput,
+  onTap,
+}: TerminalViewProps) {
   const [output, setOutput] = useState('');
 
   useImperativeHandle(ref, () => ({
@@ -33,7 +40,7 @@ export default function FakeTerminalView({ ref, fontSize, onReady, onInput }: Te
   }, []);
 
   return (
-    <Text aria-label="Terminal output" style={{ fontSize }}>
+    <Text aria-label="Terminal output" style={{ fontSize }} onPress={onTap}>
       {output}
     </Text>
   );

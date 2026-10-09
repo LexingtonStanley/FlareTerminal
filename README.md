@@ -11,21 +11,25 @@ web build), started from the RapidAppToolkit template.
   Keystore. Host keys are checked on every connect (trust on first use, with the fingerprint).
 - **Sessions that keep running.** Open several at once and switch from the strip at the top
   of a session or from Home. Leaving a session doesn't close it, and coming back replays its
-  screen exactly.
-- **Shortcuts.** One tap connects and runs a command, e.g. Claude in tmux
-  (`tmux new -A -s claude claude`) or zellij (`zellij attach -c claude -- claude`), optionally
-  in a folder. Presets for Claude, `claude --continue` and plain tmux.
+  screen exactly. On Android they stay connected while you use other apps, and a dropped
+  connection reconnects by itself.
+- **Shortcuts.** One tap connects and runs a command. An agent shortcut takes a folder, a
+  name, the agent (Claude Code, Codex, Hermes or pi), a tmux or zellij session and whether to
+  skip permission prompts, and writes the command, which stays yours to edit. Any other
+  command works too (presets for tmux, zellij, `git pull`, `df -h`, htop). Home shows them in
+  groups such as Agents and Maintenance.
 - **Agent alerts.** When an agent rings the bell or sends a terminal notification (OSC 9, 777
   or 99), the app flags the session, shows a banner on other screens, and posts a phone
   notification while the app is in the background.
-- **A coding keyboard.** A bar above the phone's keyboard with Esc, Tab/Shift+Tab, sticky
-  Ctrl and Alt, an arrows joystick and the symbols phones bury; or a full in-app keyboard that
-  replaces the phone's (no autocorrect, every key reaches the terminal). See
-  [docs/keyboard.md](docs/keyboard.md).
-- **Composer**: a native text field for typing or dictating a prompt, sent as a bracketed
-  paste then Enter.
+- **A coding keyboard** in place of the phone's: no autocorrect, every key reaches the
+  terminal. Esc, Tab/Shift+Tab, sticky Ctrl and Alt, an arrows joystick, Home/End and the
+  symbols phones bury, all fixed in place. Tap the line you're editing to move the cursor
+  there. See [docs/keyboard.md](docs/keyboard.md).
+- **Writing with the phone's keyboard**: the globe key opens a text field for prompts, with
+  autocorrect, swiping and dictation, sent as a paste then Enter, and the coding keys above.
 - [xterm.js](https://xtermjs.org) rendering (colours, full-screen apps, resize, Unicode,
-  links), light and dark mode, adjustable font size.
+  links), light and dark mode, adjustable font size, and colour schemes (Flare, Tokyo Night,
+  Catppuccin, Solarized, Gruvbox), each following the phone's light or dark mode.
 
 ## Put it on your phone
 
@@ -33,9 +37,8 @@ The app needs a build of its own (SSH uses a native TCP socket, so Expo Go can't
 With a free [Expo](https://expo.dev/signup) account, from this folder on your laptop:
 
 ```bash
-npm install
 npx eas-cli@latest login
-npx eas-cli@latest build --profile preview --platform android   # an APK to install
+npm run build:preview   # npm install, then an APK built on EAS
 ```
 
 EAS builds in the cloud and gives a link and QR code to install it. For an iPhone, Apple only
@@ -45,6 +48,23 @@ allows installs on registered devices with an
 
 For development, `--profile development` makes a development build that loads your code from
 `npm start` instead.
+
+**Updating it.** A change that touches only the app's code reaches installed preview builds over
+the air in about a minute, without a new build:
+
+```bash
+npm run update:preview -- --message "What changed"
+```
+
+Then close and reopen the app (twice if needed). A build only accepts updates whose runtime
+version (a fingerprint of the native project and app config) matches its own; the script sets
+`APP_VARIANT=preview` so it does. New native libraries, plugins, app config or `package.json`
+scripts change the fingerprint and need a new build.
+
+**After pulling changes, run `npm install` before building or updating** (`build:preview` does
+it for you). The fingerprint comes from your `node_modules`, and EAS stops a build ("Configure
+expo-updates" fails with a runtime version mismatch) when it differs from the one EAS computes
+after a clean install.
 
 ## Connect to your computer
 
@@ -71,9 +91,30 @@ The computer needs an SSH server, which most already have:
 **Sign in with a key (optional).** Settings → SSH key creates an Ed25519 key that never leaves
 the phone, and shows the one command to run on each computer to accept it.
 
-**Keep agents running.** Phones suspend apps soon after they leave the screen, which ends SSH
-connections. Run agents inside tmux or zellij (the shortcut presets do) and they keep going;
-reconnect and you're back where you were.
+**In the background.** On Android, while a session is open the app runs as a foreground service
+(the "1 session connected" notification), so sessions stay connected and agent alerts keep
+coming while you use other apps. Android needs notification permission to show it, which the
+app asks for with the first session. iOS suspends apps soon after they leave the screen, so
+there sessions drop and reconnect when you come back.
+
+**Keep agents running.** If a connection drops (a network change, the phone out of signal),
+the app reconnects by itself, and a shortcut's command runs again: run agents inside tmux or
+zellij (agent shortcuts do) and that reattaches you to the same agent, still running.
+
+**Agent shortcuts.** The session is named after the agent, so a second tap attaches instead of
+starting another. Janus, Claude Code in `~/agents/janus`, skipping permission prompts:
+
+```bash
+# tmux
+cd ~/agents/janus && tmux new -A -s Janus claude --dangerously-skip-permissions
+# zellij: a layout that runs the agent (flare- prefixed, beside your own), then attach or start
+mkdir -p ~/.config/zellij/layouts && echo 'layout { pane command="claude" { args "--dangerously-skip-permissions"; }; }' > ~/.config/zellij/layouts/flare-janus.kdl && cd ~/agents/janus && if zellij ls -s 2>/dev/null | grep -qx Janus; then zellij attach Janus; else zellij -s Janus -n flare-janus; fi
+```
+
+The skip flags are Claude Code's `--dangerously-skip-permissions`, Codex's
+`--dangerously-bypass-approvals-and-sandbox` and Hermes's `--yolo`; pi never asks. Commands use
+bash/zsh syntax. Edit one by hand and it's kept as you wrote it, until you choose "Use the
+generated command".
 
 **Alerts from Claude Code.** Out of the box, Claude Code only sends alerts to the terminals it
 recognises (iTerm2, Ghostty, Kitty), and it can't tell what's on the other end of SSH. Tell it
@@ -85,8 +126,8 @@ once, on the computer, in `~/.claude/settings.json` (or `/config` → Local noti
 
 That sends a message (OSC 9) and rings the bell. Inside tmux the message needs
 `set -g allow-passthrough on` in `~/.tmux.conf`; without it tmux passes only the bell, and the
-alert says "Needs your attention". Phone notifications arrive while the app is open or recently
-left; once the system suspends it, they wait until you reopen it.
+alert says "Needs your attention". On iOS, phone notifications arrive only while the app is open
+or recently left.
 
 ### ttyd (and the web build)
 
@@ -112,8 +153,9 @@ npm run check      # typecheck, lint, format, Jest, Playwright on the web build
 npm start          # press w for web; native needs a development build
 ```
 
-`AGENTS.md` has the conventions and the traps this stack has already hit. Try the keyboard
-without a host at `/keyboard-preview`.
+`AGENTS.md` has the conventions and the traps this stack has already hit, and
+`docs/design.md` the look (tokens, type, when to use the accent). Try the keyboard without a
+host at `/keyboard-preview`.
 
 ## How it works
 
@@ -121,7 +163,7 @@ without a host at `/keyboard-preview`.
  phone                                                          computer
 ┌───────────────────────────────────────────────────┐          ┌───────────────┐
 │ session/[id]: TerminalView ('use dom' xterm.js),  │          │ sshd          │
-│   keyboard (bar or coding), composer              │          │  └ tmux       │
+│   coding keyboard, or key bar + text field        │          │  └ tmux       │
 │      ▲ write, batched per frame    │ input        │          │    └ claude,  │
 │ SessionManager: every open session, each with a   │   SSH    │      shells   │
 │   headless xterm (screen, alerts) and a transport │◄────────►│               │
@@ -154,6 +196,8 @@ without a host at `/keyboard-preview`.
 | [Expo](https://github.com/expo/expo) (DOM components, SecureStore, notifications, haptics)               | MIT     | App, WebView host, Keychain, alerts     |
 | [ssh2](https://github.com/mscdex/ssh2)                                                                   | MIT     | Test SSH server (development only)      |
 | [ttyd](https://github.com/tsl0922/ttyd)                                                                  | MIT     | Optional, on your computer; not shipped |
+| [Geist and Geist Mono](https://github.com/vercel/geist-font) (`assets/fonts`, with its licence)          | OFL 1.1 | The app's typefaces                     |
+| Colour schemes: Tokyo Night (Apache-2.0), Catppuccin, Solarized, Gruvbox                                 | MIT     | Terminal colours to choose in Settings  |
 
 Projects that were evaluated and not used: Whip (an Expo, xterm.js and SSH terminal, but
 AGPL), `@fressh/react-native-terminal` (MIT; a native SSH and terminal renderer, no web),
@@ -174,8 +218,6 @@ Thumb-Key, Unexpected Keyboard and Termux's extra keys.
   sockets, the soft keyboard and IMEs, Keychain/Keystore, notifications, haptics) needs a
   device run: `.maestro/terminal.yaml` covers the basics on EAS
   (`npx eas-cli@latest workflow:run .eas/workflows/e2e.yml`).
-- Typing straight into the terminal with the phone's keyboard may wait for Enter on some
-  Android keyboards (xterm.js issue #5108); use the coding keyboard or the composer there.
 - SSH agent forwarding, X11 and SFTP aren't supported.
 
 ## Commands

@@ -30,7 +30,11 @@ async function renderKeyboard(kind: 'bar' | 'keyboard') {
     return kind === 'bar' ? (
       <AccessoryBar {...props} onOpenKeyboard={() => switches.push('coding')} />
     ) : (
-      <CodingKeyboard {...props} onUseSystemKeyboard={() => switches.push('system')} />
+      <CodingKeyboard
+        {...props}
+        onHide={() => switches.push('hidden')}
+        onUseSystemKeyboard={() => switches.push('system')}
+      />
     );
   }
 
@@ -200,11 +204,47 @@ describe('CodingKeyboard', () => {
     expect(sent).toEqual([{ key: 'left' }, { key: 'left' }, { key: 'left' }]);
   });
 
-  it('goes back to the system keyboard', async () => {
+  it('has Home and End beside space, and Delete a flick right on backspace', async () => {
+    const { surface, sent } = await renderKeyboard('keyboard');
+
+    await swipe(surface, rowsFor('letters'), 'Home');
+    await swipe(surface, rowsFor('letters'), 'End');
+    await swipe(surface, rowsFor('letters'), 'Backspace', { dx: 30 });
+    await swipe(surface, rowsFor('letters'), 'Backspace');
+
+    expect(sent).toEqual([
+      { key: 'home' },
+      { key: 'end' },
+      { key: 'delete' },
+      { key: 'backspace' },
+    ]);
+  });
+
+  it('flicks the period key for # , and parentheses', async () => {
+    const { surface, sent } = await renderKeyboard('keyboard');
+    const rows = rowsFor('letters');
+
+    await swipe(surface, rows, 'Period');
+    await swipe(surface, rows, 'Period', { dy: -30 });
+    await swipe(surface, rows, 'Period', { dy: 30 });
+    await swipe(surface, rows, 'Period', { dx: -30 });
+    await swipe(surface, rows, 'Period', { dx: 30 });
+
+    expect(sent).toEqual([
+      { text: '.' },
+      { text: '#' },
+      { text: ',' },
+      { text: '(' },
+      { text: ')' },
+    ]);
+  });
+
+  it('hides, or flicks up for the phone keyboard', async () => {
     const { surface, switches } = await renderKeyboard('keyboard');
 
-    await swipe(surface, rowsFor('letters'), 'System keyboard');
+    await swipe(surface, rowsFor('letters'), 'Hide keyboard');
+    await swipe(surface, rowsFor('letters'), 'Hide keyboard', { dy: -30 });
 
-    expect(switches).toEqual(['system']);
+    expect(switches).toEqual(['hidden', 'system']);
   });
 });

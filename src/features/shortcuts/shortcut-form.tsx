@@ -1,60 +1,148 @@
-import { useState } from 'react';
-import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { useState, type ReactNode } from 'react';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { Button } from '@/components/ui/button';
+import { Callout } from '@/components/ui/card';
+import { Icon } from '@/components/ui/icon';
 import { Screen } from '@/components/ui/screen';
+import { SegmentedControl } from '@/components/ui/segmented-control';
 import { TextField } from '@/components/ui/text-field';
-import { Spacing } from '@/constants/theme';
+import { Radius, sans, Spacing } from '@/constants/theme';
 import { connectionLabel, type Connection } from '@/features/connections/connections';
 import { useTheme } from '@/hooks/use-theme';
 
 import {
-  EMPTY_SHORTCUT_INPUT,
+  HARNESSES,
+  SESSIONS,
+  type AgentHarness,
+  type AgentSession,
+  type AgentSetup,
+} from './agent-command';
+import {
+  AGENTS_GROUP,
+  DEFAULT_AGENT,
+  generatedCommand,
+  sameGroup,
   SHORTCUT_PRESETS,
   startupCommand,
   validateShortcut,
+  withGeneratedCommand,
+  type ShortcutAgent,
   type ShortcutErrors,
   type ShortcutInput,
 } from './shortcuts';
 
+type Kind = 'agent' | 'command';
+
+const KIND_OPTIONS: { value: Kind; label: string }[] = [
+  { value: 'agent', label: 'Agent' },
+  { value: 'command', label: 'Command' },
+];
+
+const HARNESS_OPTIONS = (Object.keys(HARNESSES) as AgentHarness[]).map((value) => ({
+  value,
+  label: HARNESSES[value].label,
+}));
+
+const SESSION_OPTIONS = (Object.keys(SESSIONS) as AgentSession[]).map((value) => ({
+  value,
+  label: SESSIONS[value].label,
+}));
+
 type ShortcutFormProps = {
   connections: Connection[];
-  initial?: ShortcutInput;
+  /** Groups to offer under the group field: those in use, then suggestions. */
+  groups: string[];
+  initial: ShortcutInput;
   onSubmit(input: ShortcutInput): void;
   onDelete?(): void;
 };
 
+/**
+ * A shortcut is an agent (folder, name, which agent, which session, the command made from
+ * them, editable) or any command. The fields of the kind not shown are kept, so switching
+ * back and forth loses nothing.
+ */
 export function ShortcutForm({
   connections,
-  initial = EMPTY_SHORTCUT_INPUT,
+  groups,
+  initial,
   onSubmit,
   onDelete,
 }: ShortcutFormProps) {
-  const theme = useTheme();
   const [values, setValues] = useState<ShortcutInput>(() => ({
     ...initial,
     // One connection: nothing to choose.
     connectionId: initial.connectionId || (connections.length === 1 ? connections[0].id : ''),
   }));
+  // The other kind's setup and command, while it isn't shown.
+  const [hidden, setHidden] = useState<{ agent: ShortcutAgent; command: string }>(() => ({
+    agent: initial.agent ?? DEFAULT_AGENT,
+    command: '',
+  }));
   const [errors, setErrors] = useState<ShortcutErrors>({});
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const { agent } = values;
 
-  const set = (changes: Partial<ShortcutInput>) =>
-    setValues((current) => ({ ...current, ...changes }));
-  const field = (name: 'name' | 'command' | 'directory') => ({
+  /** Changes fields; an agent's command follows unless it was edited by hand. */
+  const update = (changes: Partial<ShortcutInput>) =>
+    setValues((current) => withGeneratedCommand({ ...current, ...changes }));
+  const updateAgent = (changes: Partial<AgentSetup>) =>
+    setValues((current) =>
+      current.agent
+        ? withGeneratedCommand({ ...current, agent: { ...current.agent, ...changes } })
+        : current
+    );
+  const field = (name: 'name' | 'directory' | 'group') => ({
     value: values[name],
-    onChangeText: (text: string) => set({ [name]: text }),
+    onChangeText: (text: string) => update({ [name]: text }),
     error: errors[name],
   });
+
+  function editCommand(command: string) {
+    setValues((current) =>
+      current.agent
+        ? {
+            ...current,
+            command,
+            // Typed back to what the setup makes, it follows the setup again.
+            agent: { ...current.agent, commandEdited: command !== generatedCommand(current) },
+          }
+        : { ...current, command }
+    );
+  }
+
+  function resetCommand() {
+    setValues((current) =>
+      current.agent
+        ? withGeneratedCommand({ ...current, agent: { ...current.agent, commandEdited: false } })
+        : current
+    );
+  }
+
+  function switchKind(kind: Kind) {
+    if ((kind === 'agent') === !!values.agent) return;
+    setErrors({});
+    setHidden({ agent: values.agent ?? hidden.agent, command: values.command });
+    if (values.agent) {
+      setValues({
+        ...values,
+        agent: null,
+        command: hidden.command,
+        group: sameGroup(values.group, AGENTS_GROUP) ? '' : values.group,
+      });
+    } else {
+      setValues(
+        withGeneratedCommand({
+          ...values,
+          agent: hidden.agent,
+          command: hidden.command,
+          group: values.group.trim() ? values.group : AGENTS_GROUP,
+        })
+      );
+    }
+  }
 
   function submit() {
     const next = validateShortcut(values);
@@ -63,123 +151,526 @@ export function ShortcutForm({
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <Screen scroll edges={['left', 'right', 'bottom']}>
-        <View style={styles.group}>
-          <ThemedText type="smallBold">Start from</ThemedText>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={styles.chips}>
+    <Screen scroll edges={['left', 'right', 'bottom']} style={styles.screen}>
+      <SegmentedControl
+        label="Shortcut type"
+        options={KIND_OPTIONS}
+        value={agent ? 'agent' : 'command'}
+        onChange={switchKind}
+      />
+
+      {agent ? (
+        <>
+          <TextField
+            label="Folder"
+            placeholder="~/agents/janus"
+            hint="Where the agent works (optional)"
+            autoCapitalize="none"
+            autoCorrect={false}
+            monospace
+            {...field('directory')}
+          />
+          <TextField
+            label="Name"
+            placeholder="Janus"
+            hint={
+              agent.session === 'none'
+                ? undefined
+                : `Also the name of its ${SESSIONS[agent.session].label} session`
+            }
+            autoCorrect={false}
+            {...field('name')}
+          />
+          <Labelled label="Coding agent">
+            <HarnessPicker value={agent.harness} onChange={(harness) => updateAgent({ harness })} />
+          </Labelled>
+          <Labelled
+            label="Session"
+            hint={
+              agent.session === 'none'
+                ? 'Without one, the agent stops when the connection drops.'
+                : 'tmux and zellij keep the agent running when the phone disconnects; the next tap reattaches.'
+            }>
+            <SegmentedControl
+              label="Session"
+              options={SESSION_OPTIONS}
+              value={agent.session}
+              onChange={(session) => updateAgent({ session })}
+            />
+          </Labelled>
+          <PermissionsToggle
+            harness={agent.harness}
+            value={agent.skipPermissions}
+            onChange={(skipPermissions) => updateAgent({ skipPermissions })}
+          />
+        </>
+      ) : (
+        <>
+          <Labelled label="Start from">
+            <ScrollView
+              horizontal
+              keyboardShouldPersistTaps="handled"
+              showsHorizontalScrollIndicator={false}
+              style={styles.bleed}
+              contentContainerStyle={styles.chips}>
               {SHORTCUT_PRESETS.map((preset) => (
-                <Pressable
+                <Chip
                   key={preset.label}
                   role="button"
-                  aria-label={`Use ${preset.label}`}
-                  onPress={() => set({ command: preset.command, name: values.name || preset.name })}
-                  style={({ pressed }) => [
-                    styles.chip,
-                    {
-                      backgroundColor:
-                        values.command === preset.command
-                          ? theme.backgroundSelected
-                          : theme.backgroundElement,
-                    },
-                    pressed && styles.pressed,
-                  ]}>
-                  <ThemedText type="small">{preset.label}</ThemedText>
-                </Pressable>
+                  label={preset.label}
+                  accessibleName={`Use ${preset.label}`}
+                  selected={values.command === preset.command}
+                  onPress={() =>
+                    update({ command: preset.command, name: values.name || preset.name })
+                  }
+                />
               ))}
-            </View>
-          </ScrollView>
-        </View>
+            </ScrollView>
+          </Labelled>
+          <TextField label="Name" placeholder="Disk space" {...field('name')} />
+        </>
+      )}
 
-        <TextField label="Name" placeholder="Claude" {...field('name')} />
+      <ConnectionPicker
+        connections={connections}
+        value={values.connectionId}
+        error={errors.connectionId}
+        onChange={(connectionId) => update({ connectionId })}
+      />
 
-        <View style={styles.group}>
-          <ThemedText type="smallBold">Connection</ThemedText>
-          <View role="radiogroup" aria-label="Connection" style={styles.group}>
-            {connections.map((connection) => {
-              const selected = values.connectionId === connection.id;
-              return (
-                <Pressable
-                  key={connection.id}
-                  role="radio"
-                  aria-checked={selected}
-                  aria-label={connection.name}
-                  onPress={() => set({ connectionId: connection.id })}
-                  style={[
-                    styles.option,
-                    {
-                      backgroundColor: theme.backgroundElement,
-                      borderColor: selected ? theme.primary : theme.backgroundElement,
-                    },
-                  ]}>
-                  <ThemedText type="smallBold">{connection.name}</ThemedText>
-                  <ThemedText type="small" themeColor="textSecondary">
-                    {connectionLabel(connection)}
-                  </ThemedText>
-                </Pressable>
-              );
-            })}
+      {agent ? null : (
+        <>
+          <TextField
+            label="Command"
+            placeholder="df -h"
+            autoCapitalize="none"
+            autoCorrect={false}
+            monospace
+            value={values.command}
+            onChangeText={editCommand}
+            error={errors.command}
+          />
+          <TextField
+            label="Folder"
+            placeholder="Optional, e.g. ~/code/my-app"
+            autoCapitalize="none"
+            autoCorrect={false}
+            monospace
+            {...field('directory')}
+          />
+        </>
+      )}
+
+      <View style={styles.group}>
+        <TextField
+          label="Group"
+          placeholder="Optional: a heading on Home"
+          autoCorrect={false}
+          {...field('group')}
+        />
+        <ScrollView
+          horizontal
+          keyboardShouldPersistTaps="handled"
+          showsHorizontalScrollIndicator={false}
+          style={styles.bleed}
+          contentContainerStyle={styles.chips}>
+          <View role="radiogroup" aria-label="Groups" style={styles.row}>
+            {groups.map((group) => (
+              <Chip
+                key={group}
+                role="radio"
+                label={group}
+                selected={sameGroup(values.group, group)}
+                onPress={() => update({ group })}
+              />
+            ))}
           </View>
-          {errors.connectionId ? (
-            <ThemedText type="small" style={{ color: theme.danger }}>
-              {errors.connectionId}
-            </ThemedText>
+        </ScrollView>
+      </View>
+
+      {agent ? (
+        <View style={styles.group}>
+          <TextField
+            label="Command"
+            multiline
+            submitBehavior="blurAndSubmit"
+            returnKeyType="done"
+            autoCapitalize="none"
+            autoCorrect={false}
+            spellCheck={false}
+            monospace
+            value={values.command}
+            onChangeText={editCommand}
+            error={errors.command}
+            hint={
+              agent.commandEdited
+                ? 'Edited by hand, so the choices above no longer change it.'
+                : 'Made from the choices above, and yours to edit. Typed into your shell on connect (bash or zsh syntax).'
+            }
+          />
+          {agent.commandEdited ? (
+            <View style={styles.start}>
+              <Button
+                title="Use the generated command"
+                icon="reconnect"
+                variant="secondary"
+                size="small"
+                onPress={resetCommand}
+              />
+            </View>
           ) : null}
         </View>
+      ) : values.command.trim() ? (
+        <Labelled label="Runs">
+          <CommandPreview command={startupCommand(values)} />
+        </Labelled>
+      ) : null}
 
-        <TextField
-          label="Command"
-          placeholder="tmux new -A -s claude claude"
-          autoCapitalize="none"
-          autoCorrect={false}
-          {...field('command')}
-        />
-        <TextField
-          label="Folder"
-          placeholder="Optional, e.g. ~/code/my-app"
-          autoCapitalize="none"
-          autoCorrect={false}
-          {...field('directory')}
-        />
-
-        {values.command.trim() ? (
-          <ThemedView type="backgroundElement" style={styles.preview}>
-            <ThemedText type="small" themeColor="textSecondary">
-              Runs:
-            </ThemedText>
-            <ThemedText type="code" selectable>
-              {startupCommand(values)}
-            </ThemedText>
-          </ThemedView>
-        ) : null}
-
+      <View style={styles.actions}>
         <Button title="Save" onPress={submit} />
         {onDelete ? (
           <Button
             title={confirmingDelete ? 'Tap again to delete' : 'Delete shortcut'}
-            variant="secondary"
+            variant="danger"
             onPress={() => (confirmingDelete ? onDelete() : setConfirmingDelete(true))}
           />
         ) : null}
-      </Screen>
-    </KeyboardAvoidingView>
+      </View>
+    </Screen>
+  );
+}
+
+/** A field's label over something that isn't a text field, with an optional note under it. */
+function Labelled({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: ReactNode;
+}) {
+  return (
+    <View style={styles.group}>
+      <ThemedText type="eyebrow" themeColor="textSecondary">
+        {label}
+      </ThemedText>
+      {children}
+      {hint ? (
+        <ThemedText type="caption" themeColor="textSecondary">
+          {hint}
+        </ThemedText>
+      ) : null}
+    </View>
+  );
+}
+
+type ChipProps = {
+  label: string;
+  /** Defaults to the label. */
+  accessibleName?: string;
+  role: 'radio' | 'button';
+  selected: boolean;
+  onPress(): void;
+};
+
+function Chip({ label, accessibleName, role, selected, onPress }: ChipProps) {
+  const theme = useTheme();
+  return (
+    <Pressable
+      role={role}
+      aria-checked={role === 'radio' ? selected : undefined}
+      aria-label={accessibleName ?? label}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.chip,
+        {
+          backgroundColor: selected
+            ? theme.primaryMuted
+            : pressed
+              ? theme.backgroundSelected
+              : theme.backgroundElement,
+          borderColor: selected ? theme.primary : theme.border,
+        },
+      ]}>
+      <ThemedText type="small" themeColor={selected ? 'primary' : 'text'} style={styles.chipText}>
+        {label}
+      </ThemedText>
+    </Pressable>
+  );
+}
+
+/** The coding agents, two by two, each with the program it runs. */
+function HarnessPicker({
+  value,
+  onChange,
+}: {
+  value: AgentHarness;
+  onChange(harness: AgentHarness): void;
+}) {
+  const theme = useTheme();
+  return (
+    <View role="radiogroup" aria-label="Coding agent" style={styles.wrap}>
+      {HARNESS_OPTIONS.map((option) => {
+        const selected = option.value === value;
+        return (
+          <Pressable
+            key={option.value}
+            role="radio"
+            aria-checked={selected}
+            aria-label={option.label}
+            onPress={() => onChange(option.value)}
+            style={({ pressed }) => [
+              styles.harness,
+              {
+                backgroundColor: pressed ? theme.backgroundSelected : theme.backgroundElement,
+                borderColor: selected ? theme.primary : theme.border,
+              },
+            ]}>
+            <ThemedText type="smallBold" numberOfLines={1}>
+              {option.label}
+            </ThemedText>
+            <ThemedText type="code" themeColor="textSecondary" numberOfLines={1}>
+              {HARNESSES[option.value].program}
+            </ThemedText>
+            {selected ? (
+              <View style={[styles.check, { backgroundColor: theme.primary }]}>
+                <Icon name="check" size={12} color="onPrimary" weight="bold" />
+              </View>
+            ) : null}
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/** The harness's flag for running without permission prompts, as a switch. */
+function PermissionsToggle({
+  harness,
+  value,
+  onChange,
+}: {
+  harness: AgentHarness;
+  value: boolean;
+  onChange(value: boolean): void;
+}) {
+  const theme = useTheme();
+  const { label, skipFlag } = HARNESSES[harness];
+  if (!skipFlag) {
+    return <Callout>{`${label} doesn’t ask for permission, so there’s nothing to skip.`}</Callout>;
+  }
+
+  return (
+    <Pressable
+      role="switch"
+      aria-checked={value}
+      aria-label="Skip permission prompts"
+      onPress={() => onChange(!value)}
+      style={({ pressed }) => [
+        styles.box,
+        styles.toggle,
+        {
+          backgroundColor: pressed ? theme.backgroundSelected : theme.backgroundElement,
+          borderColor: theme.border,
+        },
+      ]}>
+      <View style={styles.toggleText}>
+        <ThemedText type="smallBold">Skip permission prompts</ThemedText>
+        <ThemedText type="code" themeColor="textSecondary">
+          {skipFlag}
+        </ThemedText>
+      </View>
+      <View
+        style={[
+          styles.track,
+          {
+            backgroundColor: value ? theme.primary : theme.backgroundSelected,
+            borderColor: value ? theme.primary : theme.textSecondary,
+          },
+        ]}>
+        <View
+          style={[
+            value ? styles.thumbOn : styles.thumbOff,
+            { backgroundColor: value ? theme.onPrimary : theme.textSecondary },
+          ]}
+        />
+      </View>
+    </Pressable>
+  );
+}
+
+function ConnectionPicker({
+  connections,
+  value,
+  error,
+  onChange,
+}: {
+  connections: Connection[];
+  value: string;
+  error?: string;
+  onChange(id: string): void;
+}) {
+  const theme = useTheme();
+  return (
+    <View style={styles.group}>
+      <ThemedText type="eyebrow" themeColor="textSecondary">
+        Connection
+      </ThemedText>
+      <View
+        role="radiogroup"
+        aria-label="Connection"
+        style={[
+          styles.box,
+          {
+            backgroundColor: theme.backgroundElement,
+            borderColor: error ? theme.danger : theme.border,
+          },
+        ]}>
+        {connections.map((connection, index) => {
+          const selected = value === connection.id;
+          return (
+            <Pressable
+              key={connection.id}
+              role="radio"
+              aria-checked={selected}
+              aria-label={connection.name}
+              onPress={() => onChange(connection.id)}
+              style={({ pressed }) => [
+                styles.option,
+                index > 0 && [styles.optionDivider, { borderTopColor: theme.border }],
+                pressed && { backgroundColor: theme.backgroundSelected },
+              ]}>
+              <View
+                style={[
+                  styles.radio,
+                  { borderColor: selected ? theme.primary : theme.textSecondary },
+                ]}>
+                {selected ? (
+                  <View style={[styles.radioDot, { backgroundColor: theme.primary }]} />
+                ) : null}
+              </View>
+              <View style={styles.optionText}>
+                <ThemedText type="smallBold">{connection.name}</ThemedText>
+                <ThemedText type="code" themeColor="textSecondary" numberOfLines={1}>
+                  {connectionLabel(connection)}
+                </ThemedText>
+              </View>
+            </Pressable>
+          );
+        })}
+      </View>
+      {error ? (
+        <View style={styles.message}>
+          <Icon name="error" size={15} color="danger" />
+          <ThemedText type="small" themeColor="danger">
+            {error}
+          </ThemedText>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function CommandPreview({ command }: { command: string }) {
+  const theme = useTheme();
+  return (
+    <View
+      style={[
+        styles.preview,
+        { backgroundColor: theme.backgroundSelected, borderColor: theme.border },
+      ]}>
+      <ThemedText type="code" themeColor="primary">
+        $
+      </ThemedText>
+      <ThemedText type="code" selectable style={styles.previewCommand}>
+        {command}
+      </ThemedText>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  group: { gap: Spacing.two },
-  chips: { flexDirection: 'row', gap: Spacing.two },
-  chip: { paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, borderRadius: 999 },
-  option: {
-    gap: Spacing.half,
-    padding: Spacing.three,
-    borderRadius: Spacing.three,
-    borderWidth: 2,
+  screen: { gap: Spacing.three + 4 },
+  group: { gap: Spacing.two - 2 },
+  start: { alignSelf: 'flex-start' },
+  // The chips scroll to the screen's edges.
+  bleed: { marginHorizontal: -Spacing.four, flexGrow: 0 },
+  chips: { flexDirection: 'row', gap: Spacing.two, paddingHorizontal: Spacing.four },
+  row: { flexDirection: 'row', gap: Spacing.two },
+  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
+  chip: {
+    minHeight: 40,
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.three - 2,
+    borderRadius: Radius.pill,
+    borderWidth: 1,
   },
-  preview: { gap: Spacing.one, padding: Spacing.three, borderRadius: Spacing.three },
-  pressed: { opacity: 0.7 },
+  chipText: sans(500),
+  harness: {
+    flexBasis: '40%',
+    flexGrow: 1,
+    gap: Spacing.half,
+    paddingHorizontal: Spacing.three - 4,
+    paddingVertical: Spacing.two + 2,
+    borderRadius: Radius.medium,
+    borderWidth: 1.5,
+  },
+  check: {
+    position: 'absolute',
+    top: Spacing.two,
+    right: Spacing.two,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  box: { borderRadius: Radius.medium, borderWidth: 1, overflow: 'hidden' },
+  toggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three - 4,
+    paddingHorizontal: Spacing.three - 2,
+    paddingVertical: Spacing.three - 4,
+  },
+  toggleText: { flex: 1, gap: Spacing.half },
+  track: {
+    width: 46,
+    height: 28,
+    borderRadius: Radius.pill,
+    borderWidth: 1.5,
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  thumbOn: { width: 20, height: 20, borderRadius: 10, alignSelf: 'flex-end' },
+  thumbOff: { width: 14, height: 14, borderRadius: 7, marginLeft: 3 },
+  option: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three - 4,
+    paddingHorizontal: Spacing.three - 2,
+    paddingVertical: Spacing.three - 4,
+  },
+  optionDivider: { borderTopWidth: StyleSheet.hairlineWidth },
+  optionText: { flex: 1, gap: Spacing.half },
+  radio: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radioDot: { width: 10, height: 10, borderRadius: 5 },
+  message: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one + 2 },
+  preview: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+    padding: Spacing.three - 2,
+    borderRadius: Radius.medium,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  previewCommand: { flex: 1 },
+  actions: { gap: Spacing.two + 2, marginTop: Spacing.two },
 });

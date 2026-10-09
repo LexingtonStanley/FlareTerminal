@@ -1,12 +1,16 @@
 import type { PropsWithChildren } from 'react';
-import { ScrollView, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
 
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 type ScreenProps = PropsWithChildren<{
-  /** Wrap content in a ScrollView. Use for anything that can outgrow the screen. */
+  /**
+   * Wrap content in a ScrollView that keeps the focused field above the keyboard. Use for
+   * anything that can outgrow the screen, and for every form.
+   */
   scroll?: boolean;
   /** Center content vertically and horizontally. */
   centered?: boolean;
@@ -31,15 +35,22 @@ export function Screen({
   return (
     <SafeAreaView edges={edges} style={[styles.root, { backgroundColor: theme.background }]}>
       {scroll ? (
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        // Taps go through while the keyboard is open (a chip, Save) instead of only closing it.
+        <KeyboardAwareScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          bottomOffset={KEYBOARD_GAP}>
           {content}
-        </ScrollView>
+        </KeyboardAwareScrollView>
       ) : (
         content
       )}
     </SafeAreaView>
   );
 }
+
+/** Room left between the focused field and the keyboard. */
+const KEYBOARD_GAP = Spacing.five;
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
