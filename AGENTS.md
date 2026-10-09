@@ -71,6 +71,17 @@ Traps already hit in this exact stack:
 - **noble** (`@noble/*`) ships ES modules only; `jest.config.js` transforms it.
 - **Coding agents' git worktrees** (`.claude/worktrees/`) hold a second copy of the app; Jest,
   Metro, ESLint, Prettier and `tsc` all ignore them. Keep it that way.
+- **React Native's globals are thinner than Jest's.** Jest runs on Node, but on Android and iOS
+  `process` is only `{ env }` and `navigator` only `{ product: 'ReactNative' }`. A library that
+  sniffs its environment when it loads can pass every test and still close the app on launch
+  (xterm.js did: `headless-terminal.ts` works around it). Every module loads at startup, so
+  `__tests__/native-globals.test.ts` loads every route with React Native's globals; a new
+  native-only library may need a stub there.
+- **Over-the-air updates match builds by fingerprint** (`runtimeVersion.policy: fingerprint`):
+  the native project, app config and `package.json` scripts. Publish preview updates with
+  `APP_VARIANT=preview` or they never reach preview builds, and check
+  `APP_VARIANT=preview npx expo-updates runtimeversion:resolve --platform android` before and
+  after a change you mean to ship over the air.
 - **Hermes** has `TextEncoder`, and Expo installs a streaming `TextDecoder`, `URL` and
   `URLSearchParams` on native, so use the standard APIs.
 - **`EXPO_PUBLIC_*`** variables are only inlined when written exactly as

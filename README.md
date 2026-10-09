@@ -46,6 +46,18 @@ allows installs on registered devices with an
 For development, `--profile development` makes a development build that loads your code from
 `npm start` instead.
 
+**Updating it.** A change that touches only the app's code reaches installed preview builds over
+the air in about a minute, without a new build:
+
+```bash
+APP_VARIANT=preview npx eas-cli@latest update --channel preview --environment preview --message "What changed"
+```
+
+Then close and reopen the app (twice if needed). Keep `APP_VARIANT=preview`: a build only
+accepts updates whose runtime version (a fingerprint of the native project and app config)
+matches its own, and the preview app config differs. New native libraries, plugins, app config
+or `package.json` scripts change the fingerprint and need a new build.
+
 ## Connect to your computer
 
 1. **New connection**, then type it the way you would after `ssh`: `lexde@lexbox`

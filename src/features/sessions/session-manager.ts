@@ -1,5 +1,5 @@
 import { SerializeAddon } from '@xterm/addon-serialize';
-import { Terminal } from '@xterm/headless';
+import { Terminal, type HeadlessTerminal } from './headless-terminal';
 
 import type {
   InputMode,
@@ -64,7 +64,7 @@ const REPLAY_SCROLLBACK = 2000;
 const ALERT_INTERVAL_MS = 15_000;
 
 class Session {
-  readonly headless: Terminal;
+  readonly headless: HeadlessTerminal;
   private readonly serializer = new SerializeAddon();
   private transport: TerminalTransport | null = null;
   private view: ViewSink | null = null;
@@ -300,7 +300,7 @@ export class SessionManager {
   }
 
   /** The headless copy of a session's screen (tests, previews). */
-  screen(id: string): Terminal | null {
+  screen(id: string): HeadlessTerminal | null {
     return this.sessions.get(id)?.headless ?? null;
   }
 
