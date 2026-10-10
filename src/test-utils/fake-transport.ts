@@ -1,5 +1,6 @@
 import type { Connection } from '@/features/connections/connections';
 import type {
+  InputMode,
   SessionStatus,
   TerminalSize,
   TerminalTransport,
@@ -88,6 +89,10 @@ export class FakeTransport implements TerminalTransport {
   }
   title(title: string) {
     this.listener.onTitle(title);
+  }
+  /** The host asks for a password ('secret'), or stops asking ('normal'). */
+  inputMode(mode: InputMode) {
+    this.listener.onInputMode?.(mode);
   }
 }
 

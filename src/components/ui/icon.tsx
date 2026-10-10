@@ -48,6 +48,8 @@ const ICONS = {
   expand: { ios: 'chevron.down', android: 'expand_more', web: 'expand_more' },
   collapse: { ios: 'chevron.up', android: 'expand_less', web: 'expand_less' },
   up: { ios: 'arrow.up', android: 'arrow_upward', web: 'arrow_upward' },
+  prompt: { ios: 'bookmark.fill', android: 'bookmark', web: 'bookmark' },
+  savePrompt: { ios: 'bookmark', android: 'bookmark_add', web: 'bookmark_add' },
 } satisfies Record<string, SymbolViewProps['name']>;
 
 export type IconName = keyof typeof ICONS;

@@ -10,6 +10,7 @@ import { Screen } from '@/components/ui/screen';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { ToggleRow } from '@/components/ui/toggle-row';
 import { Spacing } from '@/constants/theme';
+import { PromptsCard } from '@/features/prompts/prompts-card';
 import {
   FONT_SIZE,
   usePreferences,
@@ -114,6 +115,10 @@ export default function SettingsScreen() {
             onChange={setHostHealth}
           />
         </Card>
+      </Section>
+
+      <Section title="Prompts">
+        <PromptsCard />
       </Section>
 
       <Section title="Security">

@@ -14,6 +14,7 @@ import { connectionLabel } from '@/features/connections/connections';
 import { useConnections } from '@/features/connections/connections-provider';
 import { ALL_GROUPS, GroupTabs } from '@/features/groups/group-tabs';
 import { useGroups } from '@/features/groups/groups-provider';
+import { agentIn } from '@/features/prompts/prompts';
 import { waitingFor } from '@/features/sessions/inbox';
 import type { SessionTarget } from '@/features/sessions/session-manager';
 import { STATUS_LABELS, StatusDot } from '@/features/sessions/session-status';
@@ -65,6 +66,7 @@ export default function HomeScreen() {
       connectionId: shortcut.connectionId,
       name: shortcut.name,
       command: startupCommand(shortcut),
+      agent: shortcut.agent?.harness ?? agentIn(shortcut.command),
     });
 
   const tile = (shortcut: Shortcut) => (
