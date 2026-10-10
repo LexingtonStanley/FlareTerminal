@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { screen } from 'expo-router/testing-library';
 
 import type { Connection } from '@/features/connections/connections';
+import { resetNetwork, setNetwork } from '@/test-utils/fake-network';
 import { posted } from '@/test-utils/fake-notify';
 import { FAKE_SIZE } from '@/test-utils/fake-terminal-view';
 import { transports } from '@/test-utils/fake-transport';
@@ -58,6 +59,7 @@ beforeEach(() => {
   clearMemoryStorage();
   transports.splice(0);
   posted.splice(0);
+  resetNetwork();
 });
 
 describe('connections', () => {
@@ -265,6 +267,31 @@ describe('terminal', () => {
     await waitFor(() => expect(transports).toHaveLength(2), { timeout: 3000 });
     await act(() => transports[1].status({ state: 'connected' }));
     expect(screen.queryByRole('alert')).not.toBeOnTheScreen();
+  });
+
+  it('waits for a network to reconnect, and reconnects as soon as there is one', async () => {
+    const { transport } = await openDevbox();
+    await act(() => setNetwork('NONE'));
+
+    await act(() => transport.status({ state: 'closed', message: 'Connection lost', retry: true }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Connection lost. Reconnecting when there’s a network…'
+    );
+    expect(transports).toHaveLength(1);
+    await act(() => setNetwork('CELLULAR'));
+    expect(transports).toHaveLength(2);
+    await act(() => transports[1].status({ state: 'connected' }));
+    expect(screen.queryByRole('alert')).not.toBeOnTheScreen();
+  });
+
+  it('checks an SSH connection when the phone changes network', async () => {
+    const { transport } = await openDevbox();
+
+    await act(() => setNetwork('CELLULAR'));
+
+    expect(transport.checks).toBe(1);
+    expect(transports).toHaveLength(1);
   });
 
   it('keeps the session running after leaving, and resumes it with its screen', async () => {

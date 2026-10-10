@@ -36,6 +36,9 @@ export class FakeTransport implements TerminalTransport {
   /** Set to make tunnels fail, as a host does when nothing listens on the port. */
   refuseTunnels: Error | null = null;
   commands: FakeCommand[] = [];
+  /** Times it was asked to check the connection after a network change (SSH only). */
+  checks = 0;
+  checkAlive?: () => void;
   /** Like the real transports: SSH can forward ports and run commands, ttyd can't. */
   openTunnel?: (port: number, events: TunnelEvents) => Promise<Tunnel>;
   runCommand?: (command: string, events: TunnelEvents) => Promise<Tunnel>;
@@ -46,6 +49,7 @@ export class FakeTransport implements TerminalTransport {
     private readonly listener: TransportListener
   ) {
     if (connection.kind === 'ssh') {
+      this.checkAlive = () => this.checks++;
       this.openTunnel = async (port, events) => {
         if (this.refuseTunnels) throw this.refuseTunnels;
         const tunnel: FakeTunnel = { port, events, sent: [], closed: false };

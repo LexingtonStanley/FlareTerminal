@@ -246,6 +246,9 @@ export class SshClient {
 
   private keepaliveTimer: ReturnType<typeof setInterval> | null = null;
   private missedKeepalives = 0;
+  private signedInYet = false;
+  /** Ends the connection unless the host answers a check first (checkAlive). */
+  private checkTimer: ReturnType<typeof setTimeout> | null = null;
   private closed = false;
 
   constructor(
@@ -574,6 +577,8 @@ export class SshClient {
       case MSG.REQUEST_SUCCESS:
       case MSG.REQUEST_FAILURE:
         this.missedKeepalives = 0;
+        if (this.checkTimer) clearTimeout(this.checkTimer);
+        this.checkTimer = null;
         return;
       case MSG.CHANNEL_OPEN:
         this.refuseChannelOpen(payload);
@@ -764,9 +769,32 @@ export class SshClient {
   }
 
   private signedIn() {
+    this.signedInYet = true;
     const interval = this.options.keepaliveInterval ?? 20;
     if (interval > 0) {
       this.keepaliveTimer = setInterval(() => this.keepalive(), interval * 1000);
+    }
+  }
+
+  /**
+   * Asks the host to answer now (a keepalive, which any reply answers) and ends the
+   * connection, uncleanly, if it hasn't within `timeoutMs`. For when the phone changed
+   * network: a connection over the old one is dead, but the regular keepalives take a minute
+   * or more to notice. Only once signed in, since the request belongs to that phase.
+   */
+  checkAlive(timeoutMs: number) {
+    if (this.closed || !this.signedInYet || this.checkTimer) return;
+    this.checkTimer = setTimeout(() => {
+      this.checkTimer = null;
+      this.finish({ message: 'Connection lost (the network changed)', clean: false });
+    }, timeoutMs);
+    try {
+      this.send(
+        this.message(MSG.GLOBAL_REQUEST, (w) => w.string('keepalive@openssh.com').boolean(true))
+      );
+    } catch (error) {
+      // The socket closed under it, before saying so.
+      this.finish({ message: `Connection lost: ${(error as Error).message}`, clean: false });
     }
   }
 
@@ -1008,6 +1036,7 @@ export class SshClient {
     if (this.closed) return;
     this.closed = true;
     if (this.keepaliveTimer) clearInterval(this.keepaliveTimer);
+    if (this.checkTimer) clearTimeout(this.checkTimer);
     const error = new SshError(reason.message);
     this.waiter?.reject(error);
     this.waiter = null;

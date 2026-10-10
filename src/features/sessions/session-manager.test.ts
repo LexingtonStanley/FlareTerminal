@@ -21,6 +21,8 @@ class FakeTransport implements TerminalTransport {
   written: string[] = [];
   resizes: TerminalSize[] = [];
   closed = false;
+  /** Times it was asked to check the connection still works (SSH can). */
+  checks = 0;
   constructor(readonly listener: TransportListener) {}
   connect(size: TerminalSize) {
     this.size = size;
@@ -34,6 +36,9 @@ class FakeTransport implements TerminalTransport {
   }
   close() {
     this.closed = true;
+  }
+  checkAlive() {
+    this.checks++;
   }
   status(status: SessionStatus) {
     this.listener.onStatus(status);
@@ -181,6 +186,96 @@ describe('SessionManager', () => {
     manager.setAppActive(true);
     expect(timers).toHaveLength(0);
     expect(transports).toHaveLength(2);
+  });
+
+  describe('the phone’s network', () => {
+    const WIFI = { online: true, kind: 'WIFI' };
+    const CELLULAR = { online: true, kind: 'CELLULAR' };
+    const OFFLINE = { online: false, kind: 'NONE' };
+
+    function dropped() {
+      const env = setup();
+      const id = env.manager.start({ connectionId: 'box', name: 'Claude', command: 'claude' });
+      env.manager.attach(id, env.view(), SIZE);
+      env.transports[0].status({ state: 'connected' });
+      return { ...env, id };
+    }
+
+    it('waits for a network instead of using up its retries', () => {
+      const { manager, transports, timers, session, id } = dropped();
+      manager.setNetwork(WIFI);
+      manager.setNetwork(OFFLINE);
+
+      transports[0].status({ state: 'closed', message: 'Connection lost', retry: true });
+      expect(timers).toHaveLength(0);
+      expect(session(id)).toMatchObject({ reconnecting: true, waitingForNetwork: true });
+
+      manager.setNetwork(CELLULAR);
+      expect(transports).toHaveLength(2);
+      expect(session(id)).toMatchObject({ reconnecting: false, waitingForNetwork: false });
+      transports[1].status({ state: 'connected' });
+      expect(transports[1].written).toEqual(['claude\r']);
+    });
+
+    it('stops a scheduled retry when the network goes', () => {
+      const { manager, transports, timers, session, id } = dropped();
+      transports[0].status({ state: 'closed', message: 'Connection lost', retry: true });
+      expect(timers).toHaveLength(1);
+
+      manager.setNetwork(OFFLINE);
+
+      expect(timers[0].cancelled).toBe(true);
+      expect(session(id)).toMatchObject({ reconnecting: true, waitingForNetwork: true });
+      manager.setNetwork(WIFI);
+      expect(transports).toHaveLength(2);
+    });
+
+    it('reconnects at once on a new network, even out of retries', () => {
+      const { manager, transports, timers, id, session } = dropped();
+      manager.setNetwork(WIFI);
+      transports[0].status({ state: 'closed', message: 'Connection lost', retry: true });
+      for (const [attempt] of RECONNECT_DELAYS_MS.entries()) {
+        timers.at(-1)!.run();
+        transports[attempt + 1].status({ state: 'closed', message: 'No route', retry: true });
+      }
+      expect(session(id).reconnecting).toBe(false);
+
+      manager.setNetwork(CELLULAR);
+
+      expect(transports).toHaveLength(RECONNECT_DELAYS_MS.length + 2);
+    });
+
+    it('checks an open connection when the network changes, and only then', () => {
+      const { manager, transports } = dropped();
+      manager.setNetwork(WIFI);
+      manager.setNetwork(WIFI);
+      expect(transports[0].checks).toBe(0);
+
+      manager.setNetwork(CELLULAR);
+      expect(transports[0].checks).toBe(1);
+      expect(transports).toHaveLength(1);
+
+      // Back from no network at all.
+      manager.setNetwork(OFFLINE);
+      manager.setNetwork(CELLULAR);
+      expect(transports[0].checks).toBe(2);
+    });
+
+    it('leaves sessions that ended or never connected', () => {
+      const { manager, transports, view } = setup();
+      const ended = manager.start({ connectionId: 'box', name: 'Box', command: null });
+      manager.attach(ended, view(), SIZE);
+      transports[0].status({ state: 'connected' });
+      transports[0].status({ state: 'closed', message: 'Session ended' });
+      const unreachable = manager.start({ connectionId: 'box', name: 'Box', command: null });
+      manager.attach(unreachable, view(), SIZE);
+      transports[1].status({ state: 'closed', message: "Couldn't reach box", retry: true });
+
+      manager.setNetwork(WIFI);
+      manager.setNetwork(CELLULAR);
+
+      expect(transports).toHaveLength(2);
+    });
   });
 
   it('cancels a scheduled reconnect when the session is closed', () => {

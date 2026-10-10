@@ -58,4 +58,10 @@ export interface TerminalTransport {
    * transport can't; rejects while it isn't connected.
    */
   runCommand?(command: string, events: TunnelEvents): Promise<Tunnel>;
+  /**
+   * The phone's network changed: checks the connection still works, and closes it as a
+   * network failure (`retry`) if the host doesn't answer soon. Missing when the transport
+   * can't ask (ttyd's protocol has no ping).
+   */
+  checkAlive?(): void;
 }

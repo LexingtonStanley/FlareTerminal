@@ -80,6 +80,9 @@ Traps already hit in this exact stack:
 - **react-native-webview** has no native side in Jest: `jest/webview-stub.js` renders a View
   that keeps its props, so find it by its `aria-label` and read `source`. Jest's `fetch` is a
   stub too; load pages from node servers with `node:http`.
+- **expo-network** has no native side in Jest either: `jest/expo-network-stub.js` starts on
+  Wi-Fi, and `setNetwork()` from `src/test-utils/fake-network.ts` changes it (reset it in
+  `beforeEach`).
 - **Coding agents' git worktrees** (`.claude/worktrees/`) hold a second copy of the app; Jest,
   Metro, ESLint, Prettier and `tsc` all ignore them. Keep it that way.
 - **React Native's globals are thinner than Jest's.** Jest runs on Node, but on Android and iOS
@@ -159,8 +162,8 @@ src/features/sessions/   SessionManager (every open session, headless xterm), al
                          (read off the screen: approval menus, [y/N], an agent's working
                          line, the keys for Approve/Deny), away.ts (what arrived while the
                          person was away, and where it starts in a history), provider,
-                         useSessionView, session strip, status, attention banner, scroll
-                         hint, away chip
+                         network.ts (the phone's network, from expo-network), useSessionView,
+                         session strip, status, attention banner, scroll hint, away chip
 src/features/reading/    Reading mode: capture.ts (the script that lists tmux/zellij sessions
                          and prints one's history; which session a command opens), history.ts
                          (SGR codes or an xterm buffer as styled lines), transcript.ts (tool
@@ -189,7 +192,8 @@ src/features/<name>/     Feature logic and its colocated *.test.ts(x)
 src/lib/                 storage.ts (JSON in localStorage / SQLite), secrets.ts (Keychain/Keystore),
                          vault-key.ts (seals secrets while an app lock is set)
 src/test-utils/          Jest helpers: renderApp, memory-storage, fake-terminal-view, fake-transport,
-                         fake-notify, fake-local-server (the preview's port), node-listen (it over
+                         fake-notify, fake-network (the phone's network: none, Wi-Fi, cellular),
+                         fake-local-server (the preview's port), node-listen (it over
                          node:net), ssh-server (a real SSH server from ssh2, with forwarding and
                          exec), ssh-keys (OpenSSH key files written by ssh2, so no key is checked in)
 __tests__/               Router-level Jest tests (render the real src/app tree)
@@ -231,7 +235,10 @@ app.json / app.config.ts Identity / build variants (APP_VARIANT = development | 
   unit-tested (`keys.ts`, the ttyd framing, the SSH packets).
 - **Background**: a transport marks a closed status `retry` when the network failed (not when
   the session ended or was refused); `SessionManager` then reconnects on a backoff, and again
-  when the app returns to the screen. On Android, `sessions/background.android.ts` runs a
+  when the app returns to the screen. With no network (`sessions/network.ts`) it waits instead,
+  and reconnects as soon as there is one; when the phone changes network, a transport with
+  `checkAlive` (SSH: a keepalive that must be answered in 10 s) finds out at once whether its
+  connection survived. On Android, `sessions/background.android.ts` runs a
   foreground service (react-native-background-actions, declared as `specialUse` by
   `plugins/with-background-sessions.js`) while sessions are live; `background.ts` is the
   no-op for iOS and the web.
