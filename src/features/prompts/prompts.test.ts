@@ -19,7 +19,13 @@ const SAVED: SavedPrompt[] = [
 
 /** What the chips say. */
 const texts = (suggestions: Suggestion[]) =>
-  suggestions.map((suggestion) => (suggestion.kind === 'save' ? 'Save' : suggestion.text));
+  suggestions.map((suggestion) =>
+    suggestion.kind === 'save'
+      ? 'Save'
+      : suggestion.kind === 'outbox'
+        ? 'Send to my phone'
+        : suggestion.text
+  );
 
 describe('SLASH_COMMANDS', () => {
   it.each(Object.keys(HARNESSES) as AgentHarness[])(

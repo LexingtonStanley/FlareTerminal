@@ -1,3 +1,4 @@
+import { SEND_TO_PHONE_PROMPT } from '@/features/outbox/outbox';
 import { HARNESSES, type AgentHarness } from '@/features/shortcuts/agent-command';
 
 /**
@@ -119,7 +120,9 @@ export type Suggestion =
   | { kind: 'command'; text: string; description: string }
   | { kind: 'prompt'; id: string; text: string }
   /** Keep the draft as a saved prompt. */
-  | { kind: 'save' };
+  | { kind: 'save' }
+  /** Ask the agent to send its result to the phone (see the outbox). */
+  | { kind: 'outbox' };
 
 const startsWith = (text: string, prefix: string) =>
   text.toLowerCase().startsWith(prefix.toLowerCase()) && text !== prefix;
@@ -129,11 +132,16 @@ const startsWith = (text: string, prefix: string) =>
  * - nothing written: the agent's commands, then the saved prompts;
  * - a command being written (`/co`): the commands and saved prompts it begins;
  * - anything else: saving it (unless it's saved already), then the saved prompts it begins.
+ *
+ * With `outbox` (an SSH session that brings files over) and an agent to ask, "Send to my
+ * phone" comes after the commands, or after Save once something is written, until the draft
+ * asks for it.
  */
 export function suggest(
   draft: string,
   agent: AgentHarness | null,
-  saved: SavedPrompt[]
+  saved: SavedPrompt[],
+  outbox = false
 ): Suggestion[] {
   const commands = agent ? SLASH_COMMANDS[agent] : [];
   const command = ({ command, description }: SlashCommand): Suggestion => ({
@@ -143,7 +151,9 @@ export function suggest(
   });
   const prompt = ({ id, text }: SavedPrompt): Suggestion => ({ kind: 'prompt', id, text });
 
-  if (!draft.trim()) return [...commands.map(command), ...saved.map(prompt)];
+  const send: Suggestion[] =
+    outbox && agent && !draft.includes(SEND_TO_PHONE_PROMPT) ? [{ kind: 'outbox' }] : [];
+  if (!draft.trim()) return [...commands.map(command), ...send, ...saved.map(prompt)];
 
   const matches = saved.filter(({ text }) => startsWith(text, draft)).map(prompt);
   if (/^\/\S*$/.test(draft)) {
@@ -152,7 +162,7 @@ export function suggest(
       ...matches,
     ];
   }
-  return isSaved(draft, saved) ? matches : [{ kind: 'save' }, ...matches];
+  return isSaved(draft, saved) ? matches : [{ kind: 'save' }, ...send, ...matches];
 }
 
 export function isSaved(draft: string, saved: SavedPrompt[]): boolean {

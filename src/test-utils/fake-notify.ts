@@ -33,6 +33,30 @@ export function postAgentNotification(
   posted.push({ sessionId, title, body, ...(questionAt === undefined ? {} : { questionAt }) });
 }
 
+/** Notifications for files from agents (see postFileNotification). */
+export const postedFiles: { connectionId: string; title: string; body: string; fileId: string }[] =
+  [];
+
+let fileOpenHandler: ((fileId: string) => void) | null = null;
+
+/** Plays the person tapping a file's notification. */
+export function tapFile(notification: (typeof postedFiles)[number]) {
+  fileOpenHandler?.(notification.fileId);
+}
+
+export function postFileNotification(
+  connectionId: string,
+  title: string,
+  body: string,
+  fileId: string
+) {
+  postedFiles.push({ connectionId, title, body, fileId });
+}
+
+export function useFileNotificationOpens(onOpen: (fileId: string) => void) {
+  fileOpenHandler = onOpen;
+}
+
 export function useNotificationOpens(_onOpen: (sessionId: string) => void) {}
 
 export function useNotificationAnswers(

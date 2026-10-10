@@ -32,6 +32,10 @@ export function writeJson(key: string, value: unknown) {
   values.set(key, JSON.stringify(value));
 }
 
+export function removeJson(key: string) {
+  values.delete(key);
+}
+
 export const secretsSupported = true;
 
 export function getSecret(name: string) {

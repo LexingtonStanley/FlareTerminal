@@ -38,6 +38,8 @@ export default function SettingsScreen() {
     setAppearance,
     hostHealth,
     setHostHealth,
+    outbox,
+    setOutbox,
   } = usePreferences();
   const terminalTheme = useTerminalTheme();
   const theme = useTheme();
@@ -113,6 +115,13 @@ export default function SettingsScreen() {
             caption="Load, memory, disk and uptime above SSH sessions, read every 10 seconds"
             value={hostHealth}
             onChange={setHostHealth}
+          />
+          <Divider inset={Spacing.three} />
+          <ToggleRow
+            title="Files from agents"
+            caption="Markdown and HTML that agents save in ~/.flare/outbox/ on SSH hosts come to the phone, checked every 5 seconds"
+            value={outbox}
+            onChange={setOutbox}
           />
         </Card>
       </Section>

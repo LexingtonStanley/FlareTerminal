@@ -40,6 +40,7 @@ export function PreferencesProvider({ children }: PropsWithChildren) {
       fontSize: typeof fontSize === 'number' ? clampFontSize(fontSize) : FONT_SIZE.default,
       hostHealth: stored?.hostHealth !== false,
       promptSuggestions: stored?.promptSuggestions !== false,
+      outbox: stored?.outbox !== false,
     };
   });
 
@@ -63,6 +64,7 @@ export function PreferencesProvider({ children }: PropsWithChildren) {
     setFontSize: (size) => update({ fontSize: clampFontSize(size) }),
     setHostHealth: (hostHealth) => update({ hostHealth }),
     setPromptSuggestions: (promptSuggestions) => update({ promptSuggestions }),
+    setOutbox: (outbox) => update({ outbox }),
   };
 
   return <PreferencesContext value={value}>{children}</PreferencesContext>;

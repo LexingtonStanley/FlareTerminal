@@ -15,6 +15,15 @@ export function postAgentNotification(
   _questionAt?: number
 ) {}
 
+export function postFileNotification(
+  _connectionId: string,
+  _title: string,
+  _body: string,
+  _fileId: string
+) {}
+
+export function useFileNotificationOpens(_onOpen: (fileId: string) => void) {}
+
 export function useNotificationOpens(_onOpen: (sessionId: string) => void) {}
 
 export function useNotificationAnswers(

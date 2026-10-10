@@ -16,3 +16,7 @@ export function readJson<T>(key: string): T | null {
 export function writeJson(key: string, value: unknown): void {
   localStorage.setItem(key, JSON.stringify(value));
 }
+
+export function removeJson(key: string): void {
+  localStorage.removeItem(key);
+}

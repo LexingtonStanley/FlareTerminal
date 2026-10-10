@@ -59,6 +59,13 @@ web build), started from the RapidAppToolkit template.
   and writes its path into the prompt for the agent to read. It goes through the session's
   connection into `~/.flare/uploads/` (readable only by you; Flare never deletes it), with one
   `sh -c` command and nothing to install (`src/features/images/upload.ts`).
+- **Files from your agent.** Ask an agent to save a result as Markdown or a self-contained
+  HTML page in `~/.flare/outbox/` (the "Send to my phone" chip asks for you) and it comes to
+  the phone: a banner, or a notification while Flare is in the background, then the Inbox
+  keeps it. Markdown is drawn as a page in the app's theme, tables and task lists included.
+  HTML shows without its scripts, and loads nothing from the internet, until you turn on
+  Run scripts. While an SSH session is open, a small `sh` script beside it looks at the
+  folder every 5 seconds; nothing to install (`src/features/outbox/`). Settings turns it off.
 - [xterm.js](https://xtermjs.org) rendering (colours, full-screen apps, resize, Unicode,
   links) and adjustable font size.
 - **Ten themes**, each in light and dark: Flare, Phosphor, Tokyo Night, Catppuccin, Gruvbox,
@@ -241,6 +248,12 @@ host at `/keyboard-preview`.
   one single-quoted `sh -c` line that bash, dash, zsh and fish all pass on unchanged, checked
   against OpenSSH 9.6 with each as the login shell. (Piping the bytes after an `sh -s` script
   doesn't work: dash reads its script in blocks and swallows the start of the image.)
+- `src/features/outbox/` brings files from the host: one `sh -s` script per host lists
+  `~/.flare/outbox/` every 5 seconds with the host's clock (`outbox.ts`), and a second prints
+  a file that's new or changed once it has gone unchanged for 2 seconds
+  (`outbox-watcher.ts`). The phone keeps the newest 50 (`outbox-store.ts`). Markdown becomes
+  a page with [marked](https://marked.js.org), its HTML shown as text, and pages show in
+  react-native-webview behind a Content-Security-Policy (`page.ts`, `file-frame.tsx`).
 - `src/features/preview/` forwards a port for the dev server preview: a listener on the
   phone's 127.0.0.1 (`local-server.ts`) whose connections each open an SSH `direct-tcpip`
   channel to `localhost:<port>` on the host (`forward.ts`), shown in react-native-webview.
@@ -252,7 +265,8 @@ host at `/keyboard-preview`.
 | [xterm.js](https://github.com/xtermjs/xterm.js), headless, and its fit, serialize, Unicode 11, web-links | MIT     | Terminal rendering, session screens     |
 | [noble ciphers, curves and hashes](https://github.com/paulmillr)                                         | MIT     | SSH cryptography                        |
 | [react-native-tcp-socket](https://github.com/Rapsssito/react-native-tcp-socket)                          | MIT     | SSH connections and the preview's port  |
-| [react-native-webview](https://github.com/react-native-webview/react-native-webview)                     | MIT     | The dev server preview                  |
+| [react-native-webview](https://github.com/react-native-webview/react-native-webview)                     | MIT     | The dev server preview, agents' files   |
+| [marked](https://github.com/markedjs/marked)                                                             | MIT     | Markdown files from agents              |
 | [Expo](https://github.com/expo/expo) (DOM components, SecureStore, notifications, haptics, image picker) | MIT     | App, WebView host, Keychain, alerts     |
 | [ssh2](https://github.com/mscdex/ssh2)                                                                   | MIT     | Test SSH server (development only)      |
 | [ttyd](https://github.com/tsl0922/ttyd)                                                                  | MIT     | Optional, on your computer; not shipped |
@@ -271,8 +285,8 @@ Thumb-Key, Unexpected Keyboard and Termux's extra keys.
 
 1. Mosh-style resilience: keep a session through a network change instead of reconnecting
    (mosh, or a relay on the host).
-2. Agent features: files from the agent to the phone (an outbox of Markdown and HTML), alerts
-   that reach the phone while the app is suspended (a small relay or push from the host).
+2. Agent features: alerts that reach the phone while the app is suspended (a small relay or
+   push from the host); opening an agent's HTML file in the phone's own browser.
 3. Jump hosts, `~/.ssh/config` import, port forwarding beyond previews.
 4. Touch selection, pinch to zoom, and a WebGL renderer.
 
@@ -280,7 +294,7 @@ Thumb-Key, Unexpected Keyboard and Termux's extra keys.
 
 - The web checks prove logic, layout and the protocols. On-device behaviour (the WebView, TCP
   sockets, the soft keyboard and IMEs, Keychain/Keystore, notifications, haptics) needs a
-  device run, as does the preview (its WebView and local port): `.maestro/terminal.yaml` covers the basics on EAS
+  device run, as do the preview (its WebView and local port) and the file viewer: `.maestro/terminal.yaml` covers the basics on EAS
   (`npx eas-cli@latest workflow:run .eas/workflows/e2e.yml`).
 - SSH agent forwarding, X11 and SFTP aren't supported.
 

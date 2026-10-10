@@ -52,10 +52,14 @@ async function openSession(connection: Connection = DEVBOX) {
   return { user, transport };
 }
 
+/** The health strip's commands (the outbox's run beside them, named `sh -s flare-outbox`). */
+const healthCommands = (transport: FakeTransport) =>
+  transport.commands.filter(({ command }) => command === 'sh -s');
+
 /** The host's side of the health command, once the app has started it. */
 async function healthCommand(transport: FakeTransport) {
-  await waitFor(() => expect(transport.commands).toHaveLength(1));
-  const command = transport.commands[0];
+  await waitFor(() => expect(healthCommands(transport)).toHaveLength(1));
+  const [command] = healthCommands(transport);
   await waitFor(() => expect(command.sent).toEqual([HEALTH_SCRIPT]));
   return command;
 }
@@ -64,7 +68,6 @@ describe('host health strip', () => {
   it('shows the host’s load, memory, disk and uptime from one command', async () => {
     const { user, transport } = await openSession();
     const command = await healthCommand(transport);
-    expect(command.command).toBe('sh -s');
 
     await act(() => command.events.onData(new TextEncoder().encode(READING)));
 
@@ -107,7 +110,7 @@ describe('host health strip', () => {
     const { transport } = await openSession();
 
     expect(await screen.findByRole('button', { name: 'Close session' })).toBeOnTheScreen();
-    expect(transport.commands).toEqual([]);
+    expect(healthCommands(transport)).toEqual([]);
   });
 
   it('has a switch in Settings', async () => {
