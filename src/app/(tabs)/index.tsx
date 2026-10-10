@@ -293,7 +293,12 @@ export default function HomeScreen() {
                       <ThemedText type="code" themeColor="textSecondary" numberOfLines={1}>
                         {connection.kind === 'ttyd'
                           ? `ttyd · ${connectionLabel(connection)}`
-                          : connectionLabel(connection)}
+                          : connection.jumpId
+                            ? `${connectionLabel(connection)} · via ${
+                                allConnections.find(({ id }) => id === connection.jumpId)?.name ??
+                                'a deleted jump host'
+                              }`
+                            : connectionLabel(connection)}
                       </ThemedText>
                     </View>
                   </Pressable>

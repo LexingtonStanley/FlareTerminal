@@ -26,6 +26,8 @@ export type SshConnection = ConnectionAccess & {
   username: string;
   /** The SSH key to offer: a key's id, NO_KEY for none, absent for every key. */
   keyId?: string | null;
+  /** Another SSH connection to go through to reach it (`ssh -J`), or none. */
+  jumpId?: string | null;
 };
 
 export type TtydConnection = ConnectionAccess & {
@@ -53,6 +55,8 @@ export type ConnectionInput = {
   groupId: string;
   /** SSH: '' to offer every key, else as SshConnection.keyId. */
   keyId: string;
+  /** SSH: the connection to go through, '' for none. */
+  jumpId: string;
   protected: boolean;
   keepAlive: boolean;
 };
@@ -72,6 +76,7 @@ export const EMPTY_CONNECTION_INPUT: ConnectionInput = {
   password: '',
   groupId: '',
   keyId: '',
+  jumpId: '',
   protected: false,
   keepAlive: true,
 };
@@ -153,6 +158,7 @@ export function toConnection(input: ConnectionInput, id: string): Connection {
       name: '',
       ...fields,
       keyId: input.keyId || null,
+      jumpId: input.jumpId || null,
       ...access,
     };
     return { ...connection, name: input.name.trim() || connectionLabel(connection) };
@@ -166,6 +172,46 @@ export function toConnection(input: ConnectionInput, id: string): Connection {
     username: input.username.trim(),
     ...access,
   };
+}
+
+/**
+ * The connections to go through to reach `connection`, like `ssh -J`: the first is reached
+ * directly, each next one from the one before. An error instead when one of them was deleted,
+ * isn't SSH, or they go round in a circle: the session can't connect then.
+ */
+export function jumpHosts(
+  connection: Connection,
+  connections: Connection[]
+): { hops: SshConnection[] } | { error: string } {
+  const hops: SshConnection[] = [];
+  let current = connection;
+  while (current.kind === 'ssh' && current.jumpId) {
+    const jumpId = current.jumpId;
+    const jump = connections.find(({ id }) => id === jumpId);
+    if (!jump) {
+      return { error: `${current.name}’s jump host was deleted. Choose another in its settings.` };
+    }
+    if (jump.kind !== 'ssh')
+      return { error: `${jump.name} isn’t SSH, so it can’t be a jump host.` };
+    if (jump.id === connection.id || hops.includes(jump)) {
+      return { error: 'Its jump hosts go round in a circle. Choose another in its settings.' };
+    }
+    hops.unshift(jump);
+    current = jump;
+  }
+  return { hops };
+}
+
+/**
+ * The connections that connection `id` (null for a new one) can go through: SSH ones that
+ * can connect and don't go through it themselves.
+ */
+export function jumpChoices(id: string | null, connections: Connection[]): SshConnection[] {
+  return connections.filter((candidate): candidate is SshConnection => {
+    if (candidate.kind !== 'ssh' || candidate.id === id) return false;
+    const chain = jumpHosts(candidate, connections);
+    return 'hops' in chain && !chain.hops.some((hop) => hop.id === id);
+  });
 }
 
 /** Whether leaving a session on this connection keeps it running (the default). */
@@ -189,6 +235,7 @@ export function toInput(connection: Connection, password: string | null): Connec
         username: connection.username,
         password: password ?? '',
         keyId: connection.keyId ?? '',
+        jumpId: connection.jumpId ?? '',
       }
     : {
         ...EMPTY_CONNECTION_INPUT,

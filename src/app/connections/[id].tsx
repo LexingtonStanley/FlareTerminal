@@ -37,6 +37,7 @@ export default function EditConnectionScreen() {
 
   return (
     <ConnectionForm
+      connectionId={connection.id}
       initial={toInput(connection, getPassword(connection.id))}
       submitLabel="Save"
       onSubmit={(input) => {

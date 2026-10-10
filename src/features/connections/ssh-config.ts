@@ -1,9 +1,9 @@
 /**
  * Reading an OpenSSH client config (`~/.ssh/config`, ssh_config(5)) for the hosts in it, to
  * add them as connections. Only what a connection holds is read: HostName, User and Port, and
- * whether the host is reached through another (ProxyJump, ProxyCommand), which Flare can't do
- * yet. Settings resolve as OpenSSH resolves them: for each name, the first value from any
- * block that matches it wins, so `Host *` defaults at the end fill in what's left.
+ * how the host is reached through another (ProxyJump; a ProxyCommand Flare can't run).
+ * Settings resolve as OpenSSH resolves them: for each name, the first value from any block
+ * that matches it wins, so `Host *` defaults at the end fill in what's left.
  */
 
 /** A host named in the config, with what OpenSSH would use to reach it. */
@@ -15,8 +15,10 @@ export type ConfigHost = {
   /** User, else null: OpenSSH uses the computer's own username. */
   user: string | null;
   port: number;
-  /** Reached through another host (ProxyJump or ProxyCommand). */
-  jump: boolean;
+  /** ProxyJump as written (`bastion`, `ada@bastion:2222`, `a,b`), or null. */
+  proxyJump: string | null;
+  /** Reached with a ProxyCommand instead. */
+  proxyCommand: boolean;
 };
 
 export type SshConfig = {
@@ -104,7 +106,15 @@ const isMatchAll = (args: string[]) => args.length === 1 && args[0].toLowerCase(
 /** A name typed after `Host`, not a pattern (nor one `ssh` refuses): a host to add. */
 const isAlias = (pattern: string) => !/[*?!\s]/.test(pattern);
 
-type Settings = { hostName?: string; user?: string; port?: number; jump?: boolean };
+type Settings = {
+  hostName?: string;
+  user?: string;
+  port?: number;
+  /** ProxyJump, or null for `none`. */
+  jump?: string | null;
+  /** Whether ProxyCommand runs one, null for `none`. */
+  command?: true | null;
+};
 
 class Reader {
   missing = new Set<string>();
@@ -175,9 +185,19 @@ class Reader {
               settings.port ??= port;
             break;
           }
+          // The two compete as in OpenSSH 9.6 (checked with `ssh -G`): a ProxyCommand,
+          // even `none`, stops a later ProxyJump; a ProxyJump stops a later ProxyCommand
+          // unless it was `none`.
           case 'proxyjump':
+            if (!active || settings.jump !== undefined) break;
+            if (value.toLowerCase() === 'none') settings.jump = null;
+            else if (settings.command === undefined)
+              settings.jump = value.replace(/^ssh:\/\//i, '');
+            break;
           case 'proxycommand':
-            if (active) settings.jump ??= value.toLowerCase() !== 'none';
+            if (!active || settings.command !== undefined || typeof settings.jump === 'string')
+              break;
+            settings.command = value.toLowerCase() === 'none' ? null : true;
             break;
         }
       }
@@ -191,7 +211,8 @@ class Reader {
       ),
       user: settings.user ?? null,
       port: settings.port ?? 22,
-      jump: settings.jump ?? false,
+      proxyJump: settings.jump ?? null,
+      proxyCommand: settings.command === true,
     };
   }
 

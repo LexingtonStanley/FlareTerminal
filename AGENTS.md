@@ -156,7 +156,8 @@ src/app/                 Routes only. Every file here is a screen; never put tes
 src/components/ui/       Screen, Button, TextField primitives: build screens from these
 src/components/          ThemedText, ThemedView, ExternalLink
 src/features/terminal/   terminal-view ('use dom' xterm.js), transport.ts (interface), ttyd.ts,
-                         ssh-transport.ts, open-transport.ts, keys.ts (bytes for keys), composer,
+                         ssh-transport.ts (and through jump hosts), open-transport.ts, keys.ts
+                         (bytes for keys), composer,
                          cursor-tap.ts (a tap on the edited line as arrow keys),
                          touch-scroll.ts (a swipe as scrolling, or wheel reports)
 src/features/ssh/        SSH-2 client (client.ts), packets and ciphers, host keys, user keys
@@ -199,10 +200,11 @@ src/features/health/     Host health strip: health.ts (the sh script the session
                          and its parser), use-host-health, the strip
 src/features/notifications/ Local notifications for agent alerts, with Approve/Deny actions (no-op
                          on web)
-src/features/connections/ Connection type (SSH or ttyd), validation, ConnectionsProvider, form,
+src/features/connections/ Connection type (SSH or ttyd), validation, jump hosts (jumpHosts:
+                         the chain to go through, like ssh -J), ConnectionsProvider, form,
                          ssh-config.ts (an OpenSSH config's hosts, as `ssh -G` resolves them),
                          read-ssh-config.ts (~/.ssh/config and its includes, from a connected
-                         host), config-import (the import screen)
+                         host), config-import (the import screen, ProxyJump hosts with theirs)
 src/features/groups/     Connection groups: type, provider, Home's group tabs, form
 src/features/vault/      App lock and encrypted vault (vault.ts), LockProvider (lock screen),
                          UnlockPanel, AccessGuard (protected connections/groups, keep-alive)

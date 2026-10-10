@@ -10,6 +10,7 @@ import { SegmentedControl } from '@/components/ui/segmented-control';
 import { TextField } from '@/components/ui/text-field';
 import { ToggleRow } from '@/components/ui/toggle-row';
 import { Spacing } from '@/constants/theme';
+import { protectionScope } from '@/features/groups/groups';
 import { useGroups } from '@/features/groups/groups-provider';
 import { NO_KEY } from '@/features/ssh/keys';
 import { useKeys } from '@/features/ssh/keys-provider';
@@ -20,14 +21,18 @@ import { secretsSupported } from '@/lib/secrets';
 import {
   connectionWarning,
   EMPTY_CONNECTION_INPUT,
+  jumpChoices,
   validateConnection,
   type ConnectionErrors,
   type ConnectionInput,
   type ConnectionKind,
   type ConnectionTextField,
 } from './connections';
+import { useConnections } from './connections-provider';
 
 type ConnectionFormProps = {
+  /** The saved connection being edited, if it is one. */
+  connectionId?: string;
   initial?: ConnectionInput;
   submitLabel: string;
   onSubmit(input: ConnectionInput): void;
@@ -44,6 +49,7 @@ const KIND_OPTIONS: { value: ConnectionKind; label: string }[] = [
 ];
 
 export function ConnectionForm({
+  connectionId,
   initial = EMPTY_CONNECTION_INPUT,
   submitLabel,
   onSubmit,
@@ -61,8 +67,16 @@ export function ConnectionForm({
 
   const { groups } = useGroups();
   const { keys } = useKeys();
+  const { connections } = useConnections();
   const lock = useLock();
   const group = groups.find(({ id }) => id === values.groupId);
+  const jumps = jumpChoices(connectionId ?? null, connections);
+  const jump = isSsh ? jumps.find(({ id }) => id === values.jumpId) : undefined;
+  // Its sessions sign in to the jump host with that one's credentials, so its lock applies.
+  const jumpLocked = jump && protectionScope(jump, groups, connections) ? jump : null;
+  const jumpedBy = connections.filter(
+    (other) => other.kind === 'ssh' && connectionId && other.jumpId === connectionId
+  );
   // A deleted key leaves the connection offering every key.
   const keyChoice =
     values.keyId === NO_KEY || keys.some(({ id }) => id === values.keyId) ? values.keyId : '';
@@ -222,6 +236,24 @@ export function ConnectionForm({
         </View>
       ) : null}
 
+      {isSsh && (jumps.length || values.jumpId) ? (
+        <View style={styles.field}>
+          <Chips
+            label="Jump host"
+            options={[{ id: '', name: 'None' }, ...jumps.map(({ id, name }) => ({ id, name }))]}
+            value={values.jumpId}
+            onChange={(jumpId) => setValues((current) => ({ ...current, jumpId }))}
+          />
+          <ThemedText type="caption" themeColor="textSecondary">
+            {!values.jumpId
+              ? 'Connects to it directly'
+              : jump
+                ? `Connects to ${jump.name} first, then from there to the host above, like ssh -J`
+                : 'Its jump host was deleted. Choose another, or None to connect directly.'}
+          </ThemedText>
+        </View>
+      ) : null}
+
       {groups.length ? (
         <Chips
           label="Group"
@@ -238,14 +270,16 @@ export function ConnectionForm({
             caption={
               group?.protected
                 ? `Its group, ${group.name}, already asks for the app lock`
-                : lock.settings
-                  ? 'Ask for the app lock each time you come back to it'
-                  : lock.supported
-                    ? 'Turn on the app lock in Settings first'
-                    : 'Needs the app lock in the Android and iOS apps'
+                : jumpLocked
+                  ? `Its jump host, ${jumpLocked.name}, already asks for the app lock`
+                  : lock.settings
+                    ? 'Ask for the app lock each time you come back to it'
+                    : lock.supported
+                      ? 'Turn on the app lock in Settings first'
+                      : 'Needs the app lock in the Android and iOS apps'
             }
-            value={values.protected || group?.protected === true}
-            disabled={!lock.settings || group?.protected === true}
+            value={values.protected || group?.protected === true || !!jumpLocked}
+            disabled={!lock.settings || group?.protected === true || !!jumpLocked}
             onChange={(on) => setValues((current) => ({ ...current, protected: on }))}
           />
           <Divider inset={Spacing.three} />
@@ -287,6 +321,14 @@ export function ConnectionForm({
             onPress={hostKey.onForget}
           />
         </Card>
+      ) : null}
+
+      {confirmingDelete && jumpedBy.length ? (
+        <Callout tone="warning">
+          {jumpedBy.length === 1
+            ? `${jumpedBy[0].name} goes through this connection, and won’t connect until you choose another jump host for it.`
+            : `${jumpedBy.length} connections go through this one, and won’t connect until you choose another jump host for them.`}
+        </Callout>
       ) : null}
 
       <View style={styles.actions}>

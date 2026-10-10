@@ -10,7 +10,7 @@ import {
   waitFor,
 } from '@/test-utils/ssh-server';
 
-import { SshTransport } from './ssh-transport';
+import { SshTransport, type SshJump } from './ssh-transport';
 import type { InputMode, SessionStatus } from './transport';
 
 // known-hosts.ts imports the SQLite-backed storage; these tests pass their own store.
@@ -52,7 +52,12 @@ function reaches(root: unknown, target: unknown, seen = new Set<unknown>()): boo
 
 function open(
   port: number,
-  { password = null as string | null, knownHosts = memoryKnownHosts() } = {}
+  {
+    password = null as string | null,
+    knownHosts = memoryKnownHosts(),
+    jumps = [] as SshJump[],
+    opened = [] as number[],
+  } = {}
 ) {
   const screen = { text: '', statuses: [] as SessionStatus[], modes: [] as InputMode[] };
   const transport = new SshTransport(
@@ -63,8 +68,13 @@ function open(
       password,
       userKeys: [],
       knownHosts,
-      openSocket: openNodeSocket,
+      // Records the ports the phone itself connects to.
+      openSocket: (host, toPort, events) => {
+        opened.push(toPort);
+        return openNodeSocket(host, toPort, events);
+      },
       keepaliveInterval: 0,
+      jumps,
     },
     {
       onData: (text) => (screen.text += text),
@@ -209,5 +219,224 @@ describe('SshTransport', () => {
     await waitFor(() => ended.status() === 'closed');
     expect(ended.screen.statuses.at(-1)).toMatchObject({ message: 'Session ended' });
     expect(ended.screen.statuses.at(-1)).not.toHaveProperty('retry');
+  });
+});
+
+describe('SshTransport through a jump host', () => {
+  const jump = (port: number, changes: Partial<SshJump> = {}): SshJump => ({
+    name: 'Bastion',
+    host: '127.0.0.1',
+    port,
+    username: 'ada',
+    password: null,
+    userKeys: [],
+    ...changes,
+  });
+
+  /** A host behind the jump host, with its own password. */
+  const startInnerServer = (options: Parameters<typeof startTestSshServer>[0] = {}) =>
+    startTestSshServer({
+      authenticate: (ctx) =>
+        ctx.method === 'password' && ctx.password === 'battery-staple'
+          ? ctx.accept()
+          : ctx.reject(['password']),
+      ...options,
+    });
+
+  /** Both hosts' keys, trusted. */
+  async function trustBoth(bastionPort: number, innerPort: number) {
+    const knownHosts = memoryKnownHosts();
+    const first = open(innerPort, {
+      password: 'battery-staple',
+      knownHosts,
+      jumps: [jump(bastionPort, { password: 'correct-horse' })],
+    });
+    await waitFor(() => first.screen.text.includes('(yes/no)? '));
+    first.transport.write('yes\r');
+    await waitFor(() => first.screen.text.split('(yes/no)? ').length === 3);
+    first.transport.write('yes\r');
+    await waitFor(() => first.status() === 'connected');
+    first.transport.close();
+    return knownHosts;
+  }
+
+  it('signs in to the jump host, then to the host through it, asking about each in turn', async () => {
+    const bastion = await startTestSshServer();
+    const inner = await startInnerServer();
+    const opened: number[] = [];
+    const { transport, screen, knownHosts, status } = open(inner.port, {
+      jumps: [jump(bastion.port)],
+      opened,
+    });
+
+    await waitFor(() => screen.text.includes('(yes/no)? '));
+    expect(screen.text).toContain(`The authenticity of host '[127.0.0.1]:${bastion.port}'`);
+    transport.write('yes\r');
+    await waitFor(() => screen.text.includes("ada@127.0.0.1's password: "));
+    transport.write('correct-horse\r');
+
+    await waitFor(() => screen.text.includes(`'[127.0.0.1]:${inner.port}' can't be established`));
+    transport.write('yes\r');
+    await waitFor(() => screen.text.split("ada@127.0.0.1's password: ").length === 3);
+    transport.write('battery-staple\r');
+
+    await waitFor(() => status() === 'connected');
+    // The phone only ever connected to the jump host, which forwarded to the host.
+    expect(opened).toEqual([bastion.port]);
+    expect(bastion.tunnels).toEqual([{ host: '127.0.0.1', port: inner.port }]);
+    expect(Object.keys(knownHosts.entries).sort()).toEqual(
+      [`127.0.0.1:${bastion.port}`, `127.0.0.1:${inner.port}`].sort()
+    );
+    expect(inner.ptys).toEqual([{ term: 'xterm-256color', cols: 50, rows: 20 }]);
+    expect(bastion.ptys).toEqual([]);
+
+    transport.write('uptime\r');
+    await waitFor(() => screen.text.includes('echo:uptime'));
+    expect(inner.received).toEqual(['uptime\r']);
+  });
+
+  it('goes through several, and keeps none of their saved passwords once signed in', async () => {
+    const outer = await startTestSshServer();
+    const middle = await startTestSshServer();
+    const inner = await startInnerServer();
+    const knownHosts = memoryKnownHosts();
+    const jumps = [
+      jump(outer.port, { name: 'Outer', password: 'correct-horse' }),
+      jump(middle.port, { name: 'Middle', password: 'correct-horse' }),
+    ];
+    const { transport, screen, status } = open(inner.port, {
+      password: 'battery-staple',
+      knownHosts,
+      jumps,
+    });
+    expect(reaches(transport, 'correct-horse')).toBe(true);
+
+    for (const count of [2, 3, 4]) {
+      await waitFor(() => screen.text.split('(yes/no)? ').length === count);
+      transport.write('yes\r');
+    }
+
+    await waitFor(() => status() === 'connected');
+    expect(outer.tunnels).toEqual([{ host: '127.0.0.1', port: middle.port }]);
+    expect(middle.tunnels).toEqual([{ host: '127.0.0.1', port: inner.port }]);
+    expect(reaches(transport, 'correct-horse')).toBe(false);
+    expect(reaches(transport, 'battery-staple')).toBe(false);
+    // Port forwarding and commands go through to the host.
+    const output: string[] = [];
+    await transport.runCommand('echo hi', {
+      onData: (bytes) => output.push(new TextDecoder().decode(bytes)),
+      onClose: () => {},
+    });
+    await waitFor(() => inner.commands.length === 1);
+    expect(outer.commands).toEqual([]);
+  });
+
+  it('names the jump host when it can’t go on', async () => {
+    const closed = await startTestSshServer({ forwarding: false });
+    const refused = open(2222, { jumps: [jump(closed.port, { password: 'correct-horse' })] });
+    await waitFor(() => refused.screen.text.includes('(yes/no)? '));
+    refused.transport.write('yes\r');
+    await waitFor(() => refused.status() === 'closed');
+    expect(refused.screen.statuses.at(-1)).toEqual({
+      state: 'closed',
+      message:
+        "Bastion won't forward the connection to 127.0.0.1:2222: its SSH server has forwarding turned off (AllowTcpForwarding).",
+    });
+
+    // Port 1 is closed on any machine running tests.
+    const bastion = await startTestSshServer();
+    const nothing = open(1, { jumps: [jump(bastion.port, { password: 'correct-horse' })] });
+    await waitFor(() => nothing.screen.text.includes('(yes/no)? '));
+    nothing.transport.write('yes\r');
+    await waitFor(() => nothing.status() === 'closed');
+    expect(nothing.screen.statuses.at(-1)).toMatchObject({
+      state: 'closed',
+      message: expect.stringMatching(/^Bastion couldn't reach 127\.0\.0\.1:1\./),
+      retry: true,
+    });
+  });
+
+  it('names the jump host when signing in to it fails', async () => {
+    const bastion = await startTestSshServer();
+    const inner = await startInnerServer();
+    const { transport, screen, status } = open(inner.port, { jumps: [jump(bastion.port)] });
+    await waitFor(() => screen.text.includes('(yes/no)? '));
+    transport.write('yes\r');
+    await waitFor(() => screen.text.includes('password: '));
+
+    transport.write('\x03');
+
+    await waitFor(() => status() === 'closed');
+    expect(screen.statuses.at(-1)).toEqual({
+      state: 'closed',
+      message: 'Bastion: Sign-in cancelled',
+    });
+    expect(bastion.tunnels).toEqual([]);
+  });
+
+  it('refuses a jump host whose key changed, and says where to forget it', async () => {
+    const bastion = await startTestSshServer();
+    const inner = await startInnerServer();
+    const knownHosts = await trustBoth(bastion.port, inner.port);
+    // A different server answering where the jump host was.
+    const impostor = await startTestSshServer();
+    knownHosts.entries[`127.0.0.1:${impostor.port}`] =
+      knownHosts.entries[`127.0.0.1:${bastion.port}`];
+
+    const { screen, status } = open(inner.port, {
+      password: 'battery-staple',
+      knownHosts,
+      jumps: [jump(impostor.port, { password: 'correct-horse' })],
+    });
+
+    await waitFor(() => status() === 'closed');
+    expect(screen.text).toContain('HAS CHANGED!');
+    expect(screen.statuses.at(-1)).toEqual({
+      state: 'closed',
+      message:
+        "Bastion's host key changed. If you expected that, forget the saved host key in Bastion's settings.",
+    });
+    expect(impostor.tunnels).toEqual([]);
+  });
+
+  it('ends the session, worth retrying, when the jump host’s connection drops', async () => {
+    const bastion = await startTestSshServer();
+    const inner = await startInnerServer();
+    const knownHosts = await trustBoth(bastion.port, inner.port);
+    const { status, screen } = open(inner.port, {
+      password: 'battery-staple',
+      knownHosts,
+      jumps: [jump(bastion.port, { password: 'correct-horse' })],
+    });
+    await waitFor(() => status() === 'connected');
+
+    testSockets.at(-1)!.destroy();
+
+    await waitFor(() => status() === 'closed');
+    expect(screen.statuses.at(-1)).toEqual({
+      state: 'closed',
+      message: 'Bastion: Connection lost',
+      retry: true,
+    });
+  });
+
+  it('ends at the jump host too when the session ends', async () => {
+    const bastion = await startTestSshServer();
+    const inner = await startInnerServer();
+    const knownHosts = await trustBoth(bastion.port, inner.port);
+    const { status, screen } = open(inner.port, {
+      password: 'battery-staple',
+      knownHosts,
+      jumps: [jump(bastion.port, { password: 'correct-horse' })],
+    });
+    await waitFor(() => status() === 'connected');
+    const socket = testSockets.at(-1)!;
+
+    inner.shell().exit(0);
+    inner.shell().end();
+
+    await waitFor(() => status() === 'closed');
+    expect(screen.statuses.at(-1)).toEqual({ state: 'closed', message: 'Session ended' });
+    await waitFor(() => socket.destroyed);
   });
 });

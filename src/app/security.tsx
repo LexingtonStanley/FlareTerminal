@@ -168,7 +168,7 @@ function LockSettingsView({ onChange, onRemove }: { onChange(): void; onRemove()
   const { groups } = useGroups();
   const settings = lock.settings!;
   const protectedCount = connections.filter((connection) =>
-    protectionScope(connection, groups)
+    protectionScope(connection, groups, connections)
   ).length;
 
   return (

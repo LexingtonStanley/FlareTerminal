@@ -15,7 +15,14 @@ import { useSessionManager, useSessions } from '@/features/sessions/sessions-pro
 import { useLock } from '@/features/vault/lock-provider';
 import { useProtection } from '@/features/vault/use-protection';
 
-import { importInput, importRows, IMPORT_NOTES, type ImportRow } from './config-import';
+import {
+  goesThrough,
+  importConnections,
+  importNote,
+  importRows,
+  withJumps,
+  type ImportRow,
+} from './config-import';
 import { Chips } from './connection-form';
 import type { Connection } from './connections';
 import { useConnections } from './connections-provider';
@@ -69,9 +76,14 @@ export function ConfigImportForm({
     [source, text]
   );
   const rows = useMemo(() => importRows(config.hosts, connections), [config, connections]);
-  const isTicked = (row: ImportRow) =>
-    row.note !== 'invalid' && (ticked ? ticked.has(row.host.alias) : row.note === null);
-  const chosen = rows.filter(isTicked);
+  // A host goes in with the hosts it jumps through.
+  const chosen = withJumps(
+    rows,
+    rows.filter(
+      (row) => row.note !== 'invalid' && (ticked ? ticked.has(row.host.alias) : row.note === null)
+    )
+  );
+  const isTicked = (row: ImportRow) => chosen.includes(row);
   const needUser = chosen.filter((row) => row.host.user === null).length;
 
   function pasted(next: string) {
@@ -111,10 +123,11 @@ export function ConfigImportForm({
   }
 
   function toggle(row: ImportRow, on: boolean) {
-    const next = new Set(rows.filter(isTicked).map(({ host }) => host.alias));
-    if (on) next.add(row.host.alias);
-    else next.delete(row.host.alias);
-    setTicked(next);
+    // Leaving out a jump host leaves out what goes through it.
+    const next = on
+      ? [...chosen, row]
+      : chosen.filter((other) => other !== row && !goesThrough(other, row, rows));
+    setTicked(new Set(next.map(({ host }) => host.alias)));
   }
 
   function submit() {
@@ -123,7 +136,9 @@ export function ConfigImportForm({
       setUserError('Enter the username for the hosts that don’t name one');
       return;
     }
-    onImported(add(chosen.map((row) => importInput(row.host, user, groupId))));
+    const added = importConnections(chosen, user, groupId);
+    add(added);
+    onImported(added);
   }
 
   return (
@@ -184,9 +199,7 @@ export function ConfigImportForm({
                   {index > 0 ? <Divider inset={Spacing.three} /> : null}
                   <ToggleRow
                     title={row.host.alias}
-                    caption={[rowLabel(row, user), row.note ? IMPORT_NOTES[row.note] : null]
-                      .filter(Boolean)
-                      .join(' · ')}
+                    caption={[rowLabel(row, user), importNote(row)].filter(Boolean).join(' · ')}
                     value={isTicked(row)}
                     disabled={row.note === 'invalid'}
                     onChange={(on) => toggle(row, on)}
