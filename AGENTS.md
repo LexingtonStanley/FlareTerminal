@@ -170,8 +170,8 @@ src/features/keyboard/   Accessory bar and coding keyboard: layout, gestures, to
 src/features/prompts/    The composer's suggestions: each agent's slash commands and saved prompts
                          (prompts.ts), the chip strip, provider, Settings card
 src/features/shortcuts/  Shortcut type and groups, agent-command.ts (the command for an agent:
-                         Claude Code/Codex/Hermes/pi in tmux/zellij), shell quoting, provider,
-                         form, Home tile
+                         Claude Code, Codex, Gemini CLI, OpenCode, Aider, Hermes or pi, in
+                         tmux/zellij), shell quoting, provider, form, Home tile
 src/features/preview/    Dev server preview: local-urls.ts (localhost links and ports in output),
                          forward.ts (ssh -L: a phone port whose connections are SSH tunnels),
                          local-server.ts (listens on 127.0.0.1; .web refuses), use-port-forward,

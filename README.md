@@ -25,8 +25,9 @@ web build), started from the RapidAppToolkit template.
   in tmux or zellij, the chip opens reading mode at that place instead, with just what's new
   (found by matching what was on screen when you left, `src/features/sessions/away.ts`).
 - **Shortcuts.** One tap connects and runs a command. An agent shortcut takes a folder, a
-  name, the agent (Claude Code, Codex, Hermes or pi), a tmux or zellij session and whether to
-  skip permission prompts, and writes the command, which stays yours to edit. Any other
+  name, the agent (Claude Code, Codex, Gemini CLI, OpenCode, Aider, Hermes or pi), a tmux or
+  zellij session, whether to skip permission prompts and, for Claude Code, whether to work in a
+  git worktree of its own, and writes the command, which stays yours to edit. Any other
   command works too (presets for tmux, zellij, `git pull`, `df -h`, htop, `docker ps`,
   `journalctl -f`, failed services, restarting a service, rebooting). A command that changes
   things (a restart, a reboot, `rm`, a force-push) asks before it runs; you can turn that on or
@@ -49,8 +50,8 @@ web build), started from the RapidAppToolkit template.
 - **Writing with the phone's keyboard**: the globe key opens a text field for prompts, with
   autocorrect, swiping and dictation, sent as a paste then Enter, and the coding keys above.
 - **Slash commands and saved prompts.** Above that field, chips offer the agent's own
-  commands (`/compact`, `/clear`, `/review` for Claude Code; Codex, Hermes and pi have
-  theirs) and the prompts you saved, narrowed as you type. A tap fills the field, ready for
+  commands (`/compact`, `/clear`, `/review` for Claude Code; every agent above has its
+  own) and the prompts you saved, narrowed as you type. A tap fills the field, ready for
   arguments; Send sends. Save what you're writing with one tap, and manage prompts in
   Settings.
 - [xterm.js](https://xtermjs.org) rendering (colours, full-screen apps, resize, Unicode,
@@ -146,8 +147,10 @@ mkdir -p ~/.config/zellij/layouts && echo 'layout { pane command="claude" { args
 ```
 
 The skip flags are Claude Code's `--dangerously-skip-permissions`, Codex's
-`--dangerously-bypass-approvals-and-sandbox` and Hermes's `--yolo`; pi never asks. Commands use
-bash/zsh syntax. Edit one by hand and it's kept as you wrote it, until you choose "Use the
+`--dangerously-bypass-approvals-and-sandbox`, Gemini CLI's `--approval-mode=yolo`, OpenCode's
+`--auto`, Aider's `--yes-always` and Hermes's `--yolo`; pi never asks. A Claude Code agent in
+its own worktree adds `--worktree <Name>`, which reopens the same worktree on the next start.
+Commands use bash/zsh syntax. Edit one by hand and it's kept as you wrote it, until you choose "Use the
 generated command".
 
 **Alerts from Claude Code.** Out of the box, Claude Code only sends alerts to the terminals it

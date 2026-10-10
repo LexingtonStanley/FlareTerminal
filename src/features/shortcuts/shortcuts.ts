@@ -87,6 +87,7 @@ export const DEFAULT_AGENT: ShortcutAgent = {
   harness: 'claude',
   session: 'tmux',
   skipPermissions: false,
+  worktree: false,
   commandEdited: false,
 };
 
@@ -197,12 +198,16 @@ export function migrateShortcut(stored: unknown): Shortcut | null {
 /** An agent setup this version doesn't know (from a newer one) keeps its command as is. */
 function migrateAgent(stored: unknown): ShortcutAgent | null {
   if (!stored || typeof stored !== 'object') return null;
-  const { harness, session, skipPermissions, commandEdited } = stored as Record<string, unknown>;
+  const { harness, session, skipPermissions, worktree, commandEdited } = stored as Record<
+    string,
+    unknown
+  >;
   const known = isKey(HARNESSES, harness) && isKey(SESSIONS, session);
   return {
     harness: known ? harness : DEFAULT_AGENT.harness,
     session: known ? session : DEFAULT_AGENT.session,
     skipPermissions: skipPermissions === true,
+    worktree: worktree === true,
     commandEdited: !known || commandEdited === true,
   };
 }

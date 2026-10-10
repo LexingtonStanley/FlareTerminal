@@ -12,9 +12,10 @@ export type SlashCommand = { command: string; description: string };
 
 /**
  * Each agent's most used built-in commands, in the order they're offered. Taken from the
- * agents' own references (Claude Code's commands page, Codex's `slash_command.rs`, Hermes's
- * `commands.py`, pi's usage docs) in October 2026. Short on purpose: the agent's own `/` menu
- * has the rest, and a command one of them drops only stops doing anything.
+ * agents' own references (Claude Code's commands page, Codex's `slash_command.rs`, Gemini
+ * CLI's and OpenCode's command docs, Aider's in-chat commands, Hermes's `commands.py`, pi's
+ * usage docs) in October 2026. Short on purpose: the agent's own `/` menu has the rest, and a
+ * command one of them drops only stops doing anything.
  */
 export const SLASH_COMMANDS: Record<AgentHarness, SlashCommand[]> = {
   claude: [
@@ -38,6 +39,41 @@ export const SLASH_COMMANDS: Record<AgentHarness, SlashCommand[]> = {
     { command: '/resume', description: 'Resume a saved chat' },
     { command: '/plan', description: 'Switch to plan mode' },
     { command: '/init', description: 'Write an AGENTS.md for the project' },
+  ],
+  gemini: [
+    { command: '/compress', description: 'Summarize to free up context' },
+    { command: '/clear', description: 'Clear the context and start over' },
+    { command: '/model', description: 'Switch the model' },
+    { command: '/rewind', description: 'Go back to an earlier point' },
+    { command: '/resume', description: 'Resume an earlier session' },
+    { command: '/plan', description: 'Switch to read-only plan mode' },
+    { command: '/stats', description: 'Show the session’s statistics' },
+    { command: '/memory', description: 'Show or change the GEMINI.md memory' },
+    { command: '/init', description: 'Write a GEMINI.md for the project' },
+  ],
+  opencode: [
+    { command: '/compact', description: 'Summarize to free up context' },
+    { command: '/new', description: 'Start a new session' },
+    { command: '/undo', description: 'Undo the last message and its changes' },
+    { command: '/redo', description: 'Redo what /undo took back' },
+    { command: '/models', description: 'Choose the model' },
+    { command: '/sessions', description: 'Switch to another session' },
+    { command: '/details', description: 'Show or hide tool details' },
+    { command: '/init', description: 'Write an AGENTS.md for the project' },
+  ],
+  // Aider works on the files added to its chat, so those commands come first.
+  aider: [
+    { command: '/add', description: 'Add files to the chat' },
+    { command: '/drop', description: 'Remove files from the chat' },
+    { command: '/ask', description: 'Ask without editing files' },
+    { command: '/code', description: 'Ask for changes to the code' },
+    { command: '/architect', description: 'Plan with one model, edit with another' },
+    { command: '/diff', description: 'Show the changes since the last message' },
+    { command: '/undo', description: 'Undo aider’s last commit' },
+    { command: '/test', description: 'Run tests and share what fails' },
+    { command: '/clear', description: 'Clear the chat history' },
+    { command: '/tokens', description: 'Show the tokens in use' },
+    { command: '/model', description: 'Switch the model' },
   ],
   hermes: [
     { command: '/compress', description: 'Compress to free up context' },

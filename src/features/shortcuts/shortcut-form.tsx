@@ -14,6 +14,7 @@ import { connectionLabel, type Connection } from '@/features/connections/connect
 import { useShape, useTheme, useType } from '@/hooks/use-theme';
 
 import {
+  agentSessionName,
   HARNESSES,
   SESSIONS,
   type AgentHarness,
@@ -211,6 +212,15 @@ export function ShortcutForm({
             value={agent.skipPermissions}
             onChange={(skipPermissions) => updateAgent({ skipPermissions })}
           />
+          {HARNESSES[agent.harness].worktreeFlag ? (
+            <FlagToggle
+              title="Work in its own git worktree"
+              flag={`${HARNESSES[agent.harness].worktreeFlag} ${agentSessionName(values.name, agent.harness)}`}
+              hint="Its own branch and folder, so it can work beside other agents in the same git repository"
+              value={agent.worktree === true}
+              onChange={(worktree) => updateAgent({ worktree })}
+            />
+          ) : null}
         </>
       ) : (
         <>
@@ -485,18 +495,38 @@ function PermissionsToggle({
   value: boolean;
   onChange(value: boolean): void;
 }) {
-  const theme = useTheme();
-  const shape = useShape();
   const { label, skipFlag } = HARNESSES[harness];
   if (!skipFlag) {
     return <Callout>{`${label} doesn’t ask for permission, so there’s nothing to skip.`}</Callout>;
   }
+  return (
+    <FlagToggle title="Skip permission prompts" flag={skipFlag} value={value} onChange={onChange} />
+  );
+}
+
+/** A switch that adds a flag to the agent's command, showing the flag. */
+function FlagToggle({
+  title,
+  flag,
+  hint,
+  value,
+  onChange,
+}: {
+  title: string;
+  flag: string;
+  /** What it does, under the flag. */
+  hint?: string;
+  value: boolean;
+  onChange(value: boolean): void;
+}) {
+  const theme = useTheme();
+  const shape = useShape();
 
   return (
     <Pressable
       role="switch"
       aria-checked={value}
-      aria-label="Skip permission prompts"
+      aria-label={title}
       onPress={() => onChange(!value)}
       style={({ pressed }) => [
         styles.box,
@@ -509,10 +539,15 @@ function PermissionsToggle({
         },
       ]}>
       <View style={styles.toggleText}>
-        <ThemedText type="smallBold">Skip permission prompts</ThemedText>
+        <ThemedText type="smallBold">{title}</ThemedText>
         <ThemedText type="code" themeColor="textSecondary">
-          {skipFlag}
+          {flag}
         </ThemedText>
+        {hint ? (
+          <ThemedText type="caption" themeColor="textSecondary">
+            {hint}
+          </ThemedText>
+        ) : null}
       </View>
       <View
         style={[

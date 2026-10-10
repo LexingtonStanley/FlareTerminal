@@ -69,7 +69,23 @@ describe('migrateShortcut', () => {
       agent: { ...agent, commandEdited: false },
     };
 
-    expect(migrateShortcut(saved)).toEqual({ ...saved, command: JANUS_ZELLIJ });
+    // Saved before worktrees: not in one.
+    expect(migrateShortcut(saved)).toEqual({
+      ...saved,
+      agent: { ...saved.agent, worktree: false },
+      command: JANUS_ZELLIJ,
+    });
+  });
+
+  it('keeps an agent in its own worktree', () => {
+    const saved = {
+      ...agentInput(),
+      id: 'k2',
+      command: 'old',
+      agent: { ...DEFAULT_AGENT, session: 'none', worktree: true },
+    };
+
+    expect(migrateShortcut(saved)?.command).toBe('cd ~/agents/janus && claude --worktree Janus');
   });
 
   it('keeps a command edited by hand', () => {
@@ -87,14 +103,14 @@ describe('migrateShortcut', () => {
     const saved = {
       ...agentInput(),
       id: 'k3',
-      command: 'cd ~/w && gemini',
-      agent: { harness: 'gemini', session: 'tmux', skipPermissions: true, commandEdited: false },
+      command: 'cd ~/w && goose',
+      agent: { harness: 'goose', session: 'tmux', skipPermissions: true, commandEdited: false },
     };
 
     const migrated = migrateShortcut(saved)!;
 
     expect(migrated.agent?.commandEdited).toBe(true);
-    expect(startupCommand(migrated)).toBe('cd ~/w && gemini');
+    expect(startupCommand(migrated)).toBe('cd ~/w && goose');
   });
 
   it('drops records it cannot read', () => {

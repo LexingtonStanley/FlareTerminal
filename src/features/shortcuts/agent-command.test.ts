@@ -69,12 +69,18 @@ describe('agentCommand for every agent and session', () => {
   const program: Record<AgentHarness, string> = {
     claude: 'claude --dangerously-skip-permissions',
     codex: 'codex --dangerously-bypass-approvals-and-sandbox',
+    gemini: 'gemini --approval-mode=yolo',
+    opencode: 'opencode --auto',
+    aider: 'aider --yes-always',
     hermes: 'hermes --yolo',
     pi: 'pi',
   };
   const layoutPane: Record<AgentHarness, string> = {
     claude: 'pane command="claude" { args "--dangerously-skip-permissions"; };',
     codex: 'pane command="codex" { args "--dangerously-bypass-approvals-and-sandbox"; };',
+    gemini: 'pane command="gemini" { args "--approval-mode=yolo"; };',
+    opencode: 'pane command="opencode" { args "--auto"; };',
+    aider: 'pane command="aider" { args "--yes-always"; };',
     hermes: 'pane command="hermes" { args "--yolo"; };',
     pi: 'pane command="pi";',
   };
@@ -123,10 +129,44 @@ describe('agentArgv', () => {
       'hermes',
       '--yolo',
     ]);
+    expect(agentArgv({ harness: 'gemini', session: 'none', skipPermissions: true })).toEqual([
+      'gemini',
+      '--approval-mode=yolo',
+    ]);
+    expect(agentArgv({ harness: 'opencode', session: 'none', skipPermissions: true })).toEqual([
+      'opencode',
+      '--auto',
+    ]);
+    expect(agentArgv({ harness: 'aider', session: 'none', skipPermissions: true })).toEqual([
+      'aider',
+      '--yes-always',
+    ]);
     expect(agentArgv({ harness: 'pi', session: 'none', skipPermissions: true })).toEqual(['pi']);
     expect(agentArgv({ harness: 'claude', session: 'none', skipPermissions: false })).toEqual([
       'claude',
     ]);
+  });
+});
+
+describe('a worktree of its own', () => {
+  it('starts Claude Code in a worktree named like its session', () => {
+    expect(agentCommand(janus({ session: 'tmux', worktree: true }))).toBe(
+      'cd ~/agents/janus && tmux new -A -s Janus claude --worktree Janus \\; set -q mouse on'
+    );
+    expect(agentCommand(janus({ session: 'none', worktree: true, skipPermissions: true }))).toBe(
+      'cd ~/agents/janus && claude --dangerously-skip-permissions --worktree Janus'
+    );
+    expect(agentCommand(janus({ worktree: true, name: 'Code Review: PRs' }))).toContain(
+      'echo \'layout { pane command="claude" { args "--worktree" "Code-Review-PRs"; }; }\''
+    );
+  });
+
+  it('leaves it out for agents that can’t start in one', () => {
+    for (const harness of ['codex', 'gemini', 'opencode', 'aider', 'hermes', 'pi'] as const) {
+      expect(
+        agentArgv({ harness, session: 'none', skipPermissions: false, worktree: true })
+      ).toEqual([HARNESSES[harness].program]);
+    }
   });
 });
 
