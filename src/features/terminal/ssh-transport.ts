@@ -64,10 +64,17 @@ export class SshTransport implements TerminalTransport {
   /** Ends each tunnel and command; the client drops channels silently with the connection. */
   private readonly tunnels = new Set<() => void>();
 
+  private readonly options: Omit<SshTransportOptions, 'password' | 'userKeys'>;
+  /** Handed to the client to sign in, then dropped: an open session doesn't keep them. */
+  private credentials: Pick<SshTransportOptions, 'password' | 'userKeys'> | null;
+
   constructor(
-    private readonly options: SshTransportOptions,
+    { password, userKeys, ...options }: SshTransportOptions,
     private readonly listener: TransportListener
-  ) {}
+  ) {
+    this.options = options;
+    this.credentials = { password, userKeys };
+  }
 
   connect(size: TerminalSize) {
     this.size = size;
@@ -193,12 +200,14 @@ export class SshTransport implements TerminalTransport {
       return;
     }
 
+    const credentials = this.credentials;
+    this.credentials = null;
     const client = new SshClient(socket, {
       host,
       port,
       username,
-      password: this.options.password,
-      userKeys: this.options.userKeys,
+      password: credentials?.password,
+      userKeys: credentials?.userKeys,
       keepaliveInterval: this.options.keepaliveInterval,
       verifyHostKey: (check) => this.verifyHostKey(check),
       prompt: (request) => this.prompt(request),

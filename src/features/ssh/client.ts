@@ -251,10 +251,17 @@ export class SshClient {
   private checkTimer: ReturnType<typeof setTimeout> | null = null;
   private closed = false;
 
+  private readonly options: Omit<SshClientOptions, 'userKeys' | 'password'>;
+  /** Offered once, while signing in, then dropped: an open connection doesn't keep them. */
+  private credentials: Pick<SshClientOptions, 'userKeys' | 'password'> | null;
+
   constructor(
     private readonly socket: ByteSocket,
-    private readonly options: SshClientOptions
-  ) {}
+    { userKeys, password, ...options }: SshClientOptions
+  ) {
+    this.options = options;
+    this.credentials = { userKeys, password };
+  }
 
   // ───────────────────────────── socket side ─────────────────────────────
 
@@ -659,8 +666,10 @@ export class SshClient {
   }
 
   async authenticate(): Promise<void> {
-    const { userKeys = [], username, host } = this.options;
-    let savedPassword = this.options.password ?? null;
+    const { username, host } = this.options;
+    const { userKeys = [], password = null } = this.credentials ?? {};
+    this.credentials = null;
+    let savedPassword = password;
 
     this.userauth('none');
     let methods = await this.authResult();

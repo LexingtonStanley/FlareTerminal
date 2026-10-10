@@ -208,11 +208,11 @@ describe('SessionManager', () => {
 
       transports[0].status({ state: 'closed', message: 'Connection lost', retry: true });
       expect(timers).toHaveLength(0);
-      expect(session(id)).toMatchObject({ reconnecting: true, waitingForNetwork: true });
+      expect(session(id)).toMatchObject({ reconnecting: true, waitingFor: 'network' });
 
       manager.setNetwork(CELLULAR);
       expect(transports).toHaveLength(2);
-      expect(session(id)).toMatchObject({ reconnecting: false, waitingForNetwork: false });
+      expect(session(id)).toMatchObject({ reconnecting: false, waitingFor: null });
       transports[1].status({ state: 'connected' });
       expect(transports[1].written).toEqual(['claude\r']);
     });
@@ -225,7 +225,7 @@ describe('SessionManager', () => {
       manager.setNetwork(OFFLINE);
 
       expect(timers[0].cancelled).toBe(true);
-      expect(session(id)).toMatchObject({ reconnecting: true, waitingForNetwork: true });
+      expect(session(id)).toMatchObject({ reconnecting: true, waitingFor: 'network' });
       manager.setNetwork(WIFI);
       expect(transports).toHaveLength(2);
     });
@@ -274,6 +274,68 @@ describe('SessionManager', () => {
       manager.setNetwork(WIFI);
       manager.setNetwork(CELLULAR);
 
+      expect(transports).toHaveLength(2);
+    });
+  });
+
+  // An app lock set to forget its key on locking: saved passwords and keys are sealed then.
+  describe('the vault’s key', () => {
+    function dropped() {
+      const env = setup();
+      const id = env.manager.start({ connectionId: 'box', name: 'Claude', command: 'claude' });
+      env.manager.attach(id, env.view(), SIZE);
+      env.transports[0].status({ state: 'connected' });
+      return { ...env, id };
+    }
+
+    it('keeps an open session running while it is forgotten', () => {
+      const { manager, transports, session, id } = dropped();
+      manager.setVaultOpen(false);
+
+      expect(transports[0].closed).toBe(false);
+      expect(session(id).status.state).toBe('connected');
+    });
+
+    it('waits for the unlock instead of retrying without a password or key', () => {
+      const { manager, transports, timers, session, id } = dropped();
+      manager.setVaultOpen(false);
+
+      transports[0].status({ state: 'closed', message: 'Connection lost', retry: true });
+      expect(timers).toHaveLength(0);
+      expect(session(id)).toMatchObject({ reconnecting: true, waitingFor: 'unlock' });
+
+      manager.setVaultOpen(true);
+      expect(transports).toHaveLength(2);
+      expect(session(id)).toMatchObject({ reconnecting: false, waitingFor: null });
+    });
+
+    it('stops a scheduled retry when it is forgotten', () => {
+      const { manager, transports, timers, session, id } = dropped();
+      transports[0].status({ state: 'closed', message: 'Connection lost', retry: true });
+
+      manager.setVaultOpen(false);
+
+      expect(timers[0].cancelled).toBe(true);
+      expect(session(id)).toMatchObject({ reconnecting: true, waitingFor: 'unlock' });
+      manager.setVaultOpen(true);
+      expect(transports).toHaveLength(2);
+    });
+
+    it('waits for the unlock when the app comes back, or the network does', () => {
+      const { manager, transports, timers, session, id } = dropped();
+      manager.setNetwork({ online: false, kind: 'NONE' });
+      transports[0].status({ state: 'closed', message: 'Connection lost', retry: true });
+      manager.setVaultOpen(false);
+      expect(session(id).waitingFor).toBe('network');
+
+      manager.setNetwork({ online: true, kind: 'WIFI' });
+      expect(session(id).waitingFor).toBe('unlock');
+      manager.setAppActive(false);
+      manager.setAppActive(true);
+      expect(transports).toHaveLength(1);
+      expect(timers).toHaveLength(0);
+
+      manager.setVaultOpen(true);
       expect(transports).toHaveLength(2);
     });
   });

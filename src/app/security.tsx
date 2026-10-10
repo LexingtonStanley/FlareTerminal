@@ -208,6 +208,14 @@ function LockSettingsView({ onChange, onRemove }: { onChange(): void; onRemove()
         <ThemedText type="caption" themeColor="textSecondary">
           Sessions keep running while Flare is locked.
         </ThemedText>
+        <Card flush>
+          <ToggleRow
+            title="Forget the key when locked"
+            caption="Passwords and keys stay sealed until you unlock. A session that drops meanwhile reconnects after."
+            value={settings.forgetKey}
+            onChange={lock.setForgetKey}
+          />
+        </Card>
       </Section>
 
       <View style={styles.actions}>

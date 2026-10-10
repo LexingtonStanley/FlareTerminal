@@ -24,7 +24,8 @@ import { base64ToBytes, bytesToBase64, seal, setVaultKey, unseal } from '@/lib/v
  *
  * Once unlocked, the vault key stays in memory until the app quits, so open sessions can
  * reconnect while the screen is locked. Later checks of the PIN (auto-lock, protected
- * connections) compare a keyed hash held in memory, so they are instant.
+ * connections) compare a keyed hash held in memory, so they are instant. With `forgetKey`,
+ * locking forgets the key instead, as a restart does, and the next unlock derives it again.
  */
 
 export type LockKind = 'pin' | 'password';
@@ -33,10 +34,18 @@ export type LockKind = 'pin' | 'password';
 export const AUTO_LOCK_CHOICES = [0, 60, 300, 900] as const;
 export type AutoLock = (typeof AUTO_LOCK_CHOICES)[number];
 
-export type LockSettings = { kind: LockKind; biometrics: boolean; autoLock: AutoLock };
+export type LockSettings = {
+  kind: LockKind;
+  biometrics: boolean;
+  autoLock: AutoLock;
+  /** Locking forgets the vault key, so nothing can read a secret until the next unlock. */
+  forgetKey: boolean;
+};
 
-type StoredLock = LockSettings & {
+type StoredLock = Omit<LockSettings, 'forgetKey'> & {
   v: 1;
+  /** Missing in locks set before the option existed: off. */
+  forgetKey?: boolean;
   /** scrypt parameters and salt for the key that wraps the vault key. */
   kdf: { N: number; r: number; p: number; salt: string };
   /** The vault key, sealed with the derived key. */
@@ -115,7 +124,9 @@ export class Vault {
   /** The lock's settings, or null when there is no app lock. */
   settings(): LockSettings | null {
     const lock = this.stored();
-    return lock ? { kind: lock.kind, biometrics: lock.biometrics, autoLock: lock.autoLock } : null;
+    if (!lock) return null;
+    const { kind, biometrics, autoLock, forgetKey = false } = lock;
+    return { kind, biometrics, autoLock, forgetKey };
   }
 
   isOpen(): boolean {
@@ -132,7 +143,12 @@ export class Vault {
   close() {
     this.key = null;
     this.secretCheck = null;
-    setVaultKey(null);
+    setVaultKey(null, this.stored() !== null);
+  }
+
+  /** The app locked: forgets the key if the lock is set to. */
+  lock() {
+    if (this.settings()?.forgetKey) this.close();
   }
 
   private async wrap(key: Uint8Array, kind: LockKind, secret: string) {
@@ -189,6 +205,11 @@ export class Vault {
   setAutoLock(autoLock: AutoLock) {
     const lock = this.stored();
     if (lock) this.store({ ...lock, autoLock });
+  }
+
+  setForgetKey(forgetKey: boolean) {
+    const lock = this.stored();
+    if (lock) this.store({ ...lock, forgetKey });
   }
 
   // ───────── unlocking ─────────
