@@ -16,7 +16,9 @@ export type FakeTunnel = { port: number; events: TunnelEvents; sent: string[]; c
 export type FakeCommand = {
   command: string;
   events: TunnelEvents;
+  /** What the app wrote, as text and as the bytes themselves (an image isn't text). */
   sent: string[];
+  sentBytes: Uint8Array[];
   closed: boolean;
 };
 
@@ -60,10 +62,13 @@ export class FakeTransport implements TerminalTransport {
         };
       };
       this.runCommand = async (command, events) => {
-        const run: FakeCommand = { command, events, sent: [], closed: false };
+        const run: FakeCommand = { command, events, sent: [], sentBytes: [], closed: false };
         this.commands.push(run);
         return {
-          write: (bytes) => run.sent.push(new TextDecoder().decode(bytes)),
+          write: (bytes) => {
+            run.sent.push(new TextDecoder().decode(bytes));
+            run.sentBytes.push(bytes);
+          },
           close: () => (run.closed = true),
         };
       };

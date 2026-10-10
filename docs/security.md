@@ -109,6 +109,26 @@ makes opens a `direct-tcpip` channel to `localhost:<port>` as the host resolves 
   addresses to the system browser.
 - **Protected connections** guard the preview as they guard the session's screen.
 
+## Images sent to the host
+
+The image button sends a screenshot or photo through the session's SSH connection
+(`src/features/images/`), for an agent to read.
+
+- **Only what you pick.** Flare reads the clipboard only when you tap Paste (iOS then asks
+  whether Flare may paste), and photos only through the system picker, which shows Flare
+  just the one you choose. The camera asks for permission the first time. The picker leaves
+  a copy in Flare's cache folder, which the phone clears when it needs space.
+- **On the host** each image is a new file in `~/.flare/uploads/`, made by one `sh -c`
+  command with `umask 077`, so the folder and files are readable only by your account. Flare
+  never deletes them; clear the folder when you like. The command is built from a fixed
+  script and a name Flare makes up (`flare-<date>-<time>-<random>.<type>`), never from
+  anything typed, and the image goes in as input, never as part of the command.
+- **What a photo carries.** A photo from the library or the camera goes as a fresh JPEG
+  (80% quality) that the picker encodes from the pixels, so none of the original's metadata
+  goes with it, where it was taken included (expo-image-picker's `base64` on both
+  platforms). A screenshot pasted from the clipboard goes as PNG. The file type comes from
+  the image's own first bytes; anything that isn't a PNG, JPEG, GIF, WebP or HEIC isn't sent.
+
 ## Limits
 
 - A 6-digit PIN can't resist an offline guessing attack on its own: someone with the phone's

@@ -72,7 +72,15 @@
           "color": "#FF8A3D"
         }
       ],
-      "./plugins/with-background-sessions"
+      "./plugins/with-background-sessions",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Flare Terminal sends the photos you choose to your computer, for your coding agent to read.",
+          "cameraPermission": "Flare Terminal sends the photos you take to your computer, for your coding agent to read.",
+          "microphonePermission": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

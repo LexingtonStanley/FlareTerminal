@@ -1,8 +1,11 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { Icon } from '@/components/ui/icon';
 import { Spacing } from '@/constants/theme';
+import { AttachRow } from '@/features/images/attach-row';
+import { NoImage, type ImageSource } from '@/features/images/image-source';
+import { insertPath, SendCancelled } from '@/features/images/upload';
 import { PromptStrip } from '@/features/prompts/prompt-strip';
 import type { AgentHarness } from '@/features/shortcuts/agent-command';
 import { shadows, useShape, useTheme, useType } from '@/hooks/use-theme';
@@ -21,13 +24,25 @@ type ComposerProps = {
   agent?: AgentHarness | null;
   /** Shows the strip of slash commands and saved prompts above the field. */
   suggestions?: boolean;
+  /**
+   * Sends an image to the host and resolves to its path there, or to null when the person
+   * didn't pick one. Missing when the host can't take images.
+   */
+  onAttachImage?: ((source: ImageSource, signal: AbortSignal) => Promise<string | null>) | null;
 };
+
+type Attach =
+  | { kind: 'closed' }
+  | { kind: 'menu' }
+  | { kind: 'sending'; controller: AbortController }
+  | { kind: 'failed'; message: string };
 
 /**
  * A native text field for writing an agent prompt (or a command) with the phone's own
  * keyboard: autocorrect, swiping and dictation, which can't work in a terminal. It opens
  * focused, and Enter or the send button pastes the text and presses Enter. Above it, a strip
- * offers the agent's slash commands and saved prompts (see PromptStrip).
+ * offers the agent's slash commands and saved prompts (see PromptStrip). Over SSH, the image
+ * button sends a screenshot or photo to the host and writes its path into the prompt.
  */
 export function Composer({
   modifiers,
@@ -36,6 +51,7 @@ export function Composer({
   onModifiedKey,
   agent = null,
   suggestions = true,
+  onAttachImage = null,
 }: ComposerProps) {
   const theme = useTheme();
   const shape = useShape();
@@ -43,6 +59,19 @@ export function Composer({
   const [draft, setDraft] = useState('');
   const input = useRef<TextInput>(null);
   const armed = modifiers.ctrl || modifiers.alt;
+  const [attach, setAttach] = useState<Attach>({ kind: 'closed' });
+  // What's written when an image arrives: the person may type while it's on its way.
+  const latestDraft = useRef(draft);
+  useEffect(() => {
+    latestDraft.current = draft;
+  });
+
+  // Leaving the session, or finishing, stops an upload still on its way.
+  useEffect(() => {
+    if (attach.kind !== 'sending') return;
+    const { controller } = attach;
+    return () => controller.abort();
+  }, [attach]);
 
   function handleChange(next: string) {
     // With a modifier armed, the next character is a key combination, not text.
@@ -66,13 +95,71 @@ export function Composer({
     requestAnimationFrame(() => input.current?.setSelection?.(text.length, text.length));
   }
 
+  async function attachImage(source: ImageSource) {
+    if (!onAttachImage) return;
+    const controller = new AbortController();
+    setAttach({ kind: 'sending', controller });
+    try {
+      const path = await onAttachImage(source, controller.signal);
+      setAttach({ kind: 'closed' });
+      // The person backed out of the picker.
+      if (path !== null) pick(insertPath(latestDraft.current, path));
+    } catch (error) {
+      const { message } = error as Error;
+      setAttach(
+        error instanceof SendCancelled
+          ? { kind: 'closed' }
+          : {
+              kind: 'failed',
+              message: error instanceof NoImage ? message : `Couldn’t send the image. ${message}`,
+            }
+      );
+    }
+  }
+
   return (
     // On the keyboard's tray, so the key bar and the composer read as one dock.
     <View style={{ backgroundColor: theme.keyboard }}>
-      {suggestions ? (
+      {attach.kind !== 'closed' && !secure ? (
+        <AttachRow
+          state={attach.kind === 'sending' ? { kind: 'sending' } : attach}
+          onPick={(source) => void attachImage(source)}
+          onCancel={() => attach.kind === 'sending' && attach.controller.abort()}
+          onClose={() => setAttach({ kind: 'closed' })}
+        />
+      ) : suggestions ? (
         <PromptStrip draft={draft} agent={agent} secure={secure} onPick={pick} />
       ) : null}
       <View style={styles.row}>
+        {onAttachImage && !secure ? (
+          <Pressable
+            role="button"
+            aria-label="Attach an image"
+            aria-expanded={attach.kind !== 'closed'}
+            disabled={attach.kind === 'sending'}
+            onPress={() =>
+              setAttach(attach.kind === 'menu' ? { kind: 'closed' } : { kind: 'menu' })
+            }
+            style={({ pressed }) => [
+              styles.attach,
+              {
+                borderRadius: shape.radius.medium,
+                borderWidth: Math.max(1, shape.borderWidth),
+                borderColor: theme.border,
+                // Held down while the menu is open; the send button keeps the accent.
+                backgroundColor:
+                  pressed || attach.kind !== 'closed'
+                    ? theme.backgroundSelected
+                    : theme.backgroundElement,
+              },
+            ]}>
+            <Icon
+              name="image"
+              size={20}
+              color={attach.kind === 'closed' ? 'textSecondary' : 'text'}
+            />
+          </Pressable>
+        ) : null}
         <TextInput
           ref={input}
           aria-label="Command"
@@ -150,6 +237,12 @@ const styles = StyleSheet.create({
     outlineWidth: 0,
   },
   send: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  attach: {
     width: 44,
     height: 44,
     alignItems: 'center',

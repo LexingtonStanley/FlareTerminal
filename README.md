@@ -54,6 +54,11 @@ web build), started from the RapidAppToolkit template.
   own) and the prompts you saved, narrowed as you type. A tap fills the field, ready for
   arguments; Send sends. Save what you're writing with one tap, and manage prompts in
   Settings.
+- **Images for your agent.** Over SSH, the image button beside that field pastes a
+  screenshot from the clipboard, or sends a photo from the library or the camera, to the host
+  and writes its path into the prompt for the agent to read. It goes through the session's
+  connection into `~/.flare/uploads/` (readable only by you; Flare never deletes it), with one
+  `sh -c` command and nothing to install (`src/features/images/upload.ts`).
 - [xterm.js](https://xtermjs.org) rendering (colours, full-screen apps, resize, Unicode,
   links) and adjustable font size.
 - **Ten themes**, each in light and dark: Flare, Phosphor, Tokyo Night, Catppuccin, Gruvbox,
@@ -231,6 +236,11 @@ host at `/keyboard-preview`.
   quicker on a phone than a terminal parser), and finds agents' tool calls by their shapes
   (`transcript.ts`). Without a multiplexer, or over ttyd, it reads the session's headless
   terminal.
+- `src/features/images/` sends an image to the host: the bytes go to `head -c <size>` over an
+  SSH `exec` channel, so the command ends without the app sending end-of-file. The command is
+  one single-quoted `sh -c` line that bash, dash, zsh and fish all pass on unchanged, checked
+  against OpenSSH 9.6 with each as the login shell. (Piping the bytes after an `sh -s` script
+  doesn't work: dash reads its script in blocks and swallows the start of the image.)
 - `src/features/preview/` forwards a port for the dev server preview: a listener on the
   phone's 127.0.0.1 (`local-server.ts`) whose connections each open an SSH `direct-tcpip`
   channel to `localhost:<port>` on the host (`forward.ts`), shown in react-native-webview.
@@ -243,7 +253,7 @@ host at `/keyboard-preview`.
 | [noble ciphers, curves and hashes](https://github.com/paulmillr)                                         | MIT     | SSH cryptography                        |
 | [react-native-tcp-socket](https://github.com/Rapsssito/react-native-tcp-socket)                          | MIT     | SSH connections and the preview's port  |
 | [react-native-webview](https://github.com/react-native-webview/react-native-webview)                     | MIT     | The dev server preview                  |
-| [Expo](https://github.com/expo/expo) (DOM components, SecureStore, notifications, haptics)               | MIT     | App, WebView host, Keychain, alerts     |
+| [Expo](https://github.com/expo/expo) (DOM components, SecureStore, notifications, haptics, image picker) | MIT     | App, WebView host, Keychain, alerts     |
 | [ssh2](https://github.com/mscdex/ssh2)                                                                   | MIT     | Test SSH server (development only)      |
 | [ttyd](https://github.com/tsl0922/ttyd)                                                                  | MIT     | Optional, on your computer; not shipped |
 | [Geist and Geist Mono](https://github.com/vercel/geist-font) (`assets/fonts`, with its licence)          | OFL 1.1 | The app's typefaces                     |
@@ -261,7 +271,7 @@ Thumb-Key, Unexpected Keyboard and Termux's extra keys.
 
 1. Mosh-style resilience: keep a session through a network change instead of reconnecting
    (mosh, or a relay on the host).
-2. Agent features: image and file hand-off, approve/deny buttons for agent prompts, alerts
+2. Agent features: files from the agent to the phone (an outbox of Markdown and HTML), alerts
    that reach the phone while the app is suspended (a small relay or push from the host).
 3. Jump hosts, `~/.ssh/config` import, port forwarding beyond previews.
 4. Touch selection, pinch to zoom, and a WebGL renderer.
