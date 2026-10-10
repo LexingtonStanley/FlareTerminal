@@ -55,7 +55,7 @@ function usePreviewable(session: SessionSnapshot): boolean {
 
 function TerminalSession({ session }: { session: SessionSnapshot }) {
   const terminalTheme = useTerminalTheme();
-  const { fontSize } = usePreferences();
+  const { fontSize, promptSuggestions } = usePreferences();
   const headerHeight = useHeaderHeight();
   const manager = useSessionManager();
   const router = useRouter();
@@ -241,6 +241,8 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
               secure={session.inputMode === 'secret'}
               onSubmit={typed(view.submit)}
               onModifiedKey={typed(view.type)}
+              agent={session.agent ?? null}
+              suggestions={promptSuggestions}
             />
           </>
         ) : input === 'keys' ? (

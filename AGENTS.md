@@ -127,7 +127,7 @@ Traps already hit in this exact stack:
 
 ```
 src/app/                 Routes only. Every file here is a screen; never put tests or helpers here.
-  _layout.tsx            Providers (preferences, connections, groups, shortcuts, sessions,
+  _layout.tsx            Providers (preferences, connections, groups, shortcuts, prompts, sessions,
                          lock, keys), stack, attention banner, access guard, root ErrorBoundary
   (tabs)/                Tab navigator: index (Home: sessions, shortcuts, connections), inbox
                          (every session by what it needs), settings
@@ -167,6 +167,8 @@ src/features/reading/    Reading mode: capture.ts (the script that lists tmux/ze
                          calls, folding, Markdown), colors.ts, use-history, the list, the pill
 src/features/keyboard/   Accessory bar and coding keyboard: layout, gestures, touch tracking,
                          modifiers, haptics (docs/keyboard.md explains the design)
+src/features/prompts/    The composer's suggestions: each agent's slash commands and saved prompts
+                         (prompts.ts), the chip strip, provider, Settings card
 src/features/shortcuts/  Shortcut type and groups, agent-command.ts (the command for an agent:
                          Claude Code/Codex/Hermes/pi in tmux/zellij), shell quoting, provider,
                          form, Home tile

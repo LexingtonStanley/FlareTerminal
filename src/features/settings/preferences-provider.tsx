@@ -39,6 +39,7 @@ export function PreferencesProvider({ children }: PropsWithChildren) {
       appearance: isAppearance(stored?.appearance) ? stored.appearance : 'system',
       fontSize: typeof fontSize === 'number' ? clampFontSize(fontSize) : FONT_SIZE.default,
       hostHealth: stored?.hostHealth !== false,
+      promptSuggestions: stored?.promptSuggestions !== false,
     };
   });
 
@@ -61,6 +62,7 @@ export function PreferencesProvider({ children }: PropsWithChildren) {
     setAppearance: (appearance) => update({ appearance }),
     setFontSize: (size) => update({ fontSize: clampFontSize(size) }),
     setHostHealth: (hostHealth) => update({ hostHealth }),
+    setPromptSuggestions: (promptSuggestions) => update({ promptSuggestions }),
   };
 
   return <PreferencesContext value={value}>{children}</PreferencesContext>;

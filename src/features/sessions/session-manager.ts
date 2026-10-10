@@ -3,6 +3,7 @@ import type { IMarker } from '@xterm/headless';
 import { Terminal, type HeadlessTerminal } from './headless-terminal';
 
 import type { HistorySource } from '@/features/reading/capture';
+import type { AgentHarness } from '@/features/shortcuts/agent-command';
 import type {
   InputMode,
   SessionStatus,
@@ -38,6 +39,8 @@ export type SessionTarget = {
   name: string;
   /** Typed into the shell once connected (and again after a reconnect). */
   command: string | null;
+  /** The coding agent the command runs, if known: the composer offers its slash commands. */
+  agent?: AgentHarness | null;
 };
 
 /**

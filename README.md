@@ -48,6 +48,11 @@ web build), started from the RapidAppToolkit template.
   there. See [docs/keyboard.md](docs/keyboard.md).
 - **Writing with the phone's keyboard**: the globe key opens a text field for prompts, with
   autocorrect, swiping and dictation, sent as a paste then Enter, and the coding keys above.
+- **Slash commands and saved prompts.** Above that field, chips offer the agent's own
+  commands (`/compact`, `/clear`, `/review` for Claude Code; Codex, Hermes and pi have
+  theirs) and the prompts you saved, narrowed as you type. A tap fills the field, ready for
+  arguments; Send sends. Save what you're writing with one tap, and manage prompts in
+  Settings.
 - [xterm.js](https://xtermjs.org) rendering (colours, full-screen apps, resize, Unicode,
   links) and adjustable font size.
 - **Ten themes**, each in light and dark: Flare, Phosphor, Tokyo Night, Catppuccin, Gruvbox,
