@@ -130,6 +130,12 @@ colours clear 4.5:1); Tokyo Night, Catppuccin, Solarized and Gruvbox keep their 
 palettes. `useTerminalTheme()` gives the current one. The terminal draws in the system's
 monospace, not the theme's mono face (it runs in a WebView without the app's fonts).
 
+Reading mode shows a session's history in the same terminal colours (the 256-colour palette
+built from them in `src/features/reading/colors.ts`), but as app text in the theme's mono face,
+so it wraps to the phone and can be selected. Default-coloured text on a background a program
+chose takes whichever end of the theme reads better on it: Claude Code shades prompts dark
+grey, which a light theme's dark text vanishes into.
+
 ## The keyboard
 
 Keys are drawn by `src/features/keyboard/key-cap.tsx` from the `keyboard`, `key`,

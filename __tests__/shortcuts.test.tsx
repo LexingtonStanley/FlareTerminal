@@ -37,6 +37,9 @@ const JANUS =
   `if zellij ls -s 2>/dev/null | grep -qx Janus; then zellij attach Janus; ` +
   `else zellij -s Janus -n flare-janus; fi`;
 
+/** Claude Code in tmux in ~/agents/janus, with tmux's mouse mode on so swipes scroll it. */
+const JANUS_TMUX = 'cd ~/agents/janus && tmux new -A -s Janus claude \\; set -q mouse on';
+
 /** Starts the app with saved connections and shortcuts, as if from a previous launch. */
 function saved(connections: Connection[], shortcuts: unknown[] = []) {
   writeJson('flare.connections.v1', connections);
@@ -47,7 +50,7 @@ const agentShortcut = (fields: Partial<Shortcut>): Shortcut => ({
   id: 'janus',
   name: 'Janus',
   connectionId: 'devbox',
-  command: 'cd ~/agents/janus && tmux new -A -s Janus claude',
+  command: JANUS_TMUX,
   directory: '~/agents/janus',
   group: 'Agents',
   agent: { harness: 'claude', session: 'tmux', skipPermissions: false, commandEdited: false },
@@ -106,19 +109,21 @@ describe('agent shortcuts', () => {
     expect(screen.getByText('--dangerously-bypass-approvals-and-sandbox')).toBeOnTheScreen();
     expect(
       screen.getByDisplayValue(
-        'tmux new -A -s Ada codex --dangerously-bypass-approvals-and-sandbox'
+        'tmux new -A -s Ada codex --dangerously-bypass-approvals-and-sandbox \\; set -q mouse on'
       )
     ).toBeOnTheScreen();
 
     await user.press(screen.getByRole('radio', { name: 'Hermes' }));
-    expect(screen.getByDisplayValue('tmux new -A -s Ada hermes --yolo')).toBeOnTheScreen();
+    expect(
+      screen.getByDisplayValue('tmux new -A -s Ada hermes --yolo \\; set -q mouse on')
+    ).toBeOnTheScreen();
 
     await user.press(screen.getByRole('radio', { name: 'pi' }));
     expect(
       screen.getByText('pi doesn’t ask for permission, so there’s nothing to skip.')
     ).toBeOnTheScreen();
     expect(screen.queryByRole('switch', { name: 'Skip permission prompts' })).not.toBeOnTheScreen();
-    expect(screen.getByDisplayValue('tmux new -A -s Ada pi')).toBeOnTheScreen();
+    expect(screen.getByDisplayValue('tmux new -A -s Ada pi \\; set -q mouse on')).toBeOnTheScreen();
 
     await user.press(screen.getByRole('radio', { name: 'None' }));
     expect(screen.getByDisplayValue('pi')).toBeOnTheScreen();
@@ -129,10 +134,9 @@ describe('agent shortcuts', () => {
     const user = userEvent.setup();
     await renderApp('/shortcuts/janus');
 
-    const command = await screen.findByDisplayValue(
-      'cd ~/agents/janus && tmux new -A -s Janus claude'
-    );
-    await user.type(command, ' --continue');
+    const command = await screen.findByDisplayValue(JANUS_TMUX);
+    await user.clear(command);
+    await user.type(command, 'cd ~/agents/janus && tmux new -A -s Janus claude --continue');
     expect(
       screen.getByText('Edited by hand, so the choices above no longer change it.')
     ).toBeOnTheScreen();
@@ -177,7 +181,7 @@ describe('agent shortcuts', () => {
     const command = await screen.findByDisplayValue('cd ~/agents/janus && claude --continue');
     await user.press(screen.getByRole('button', { name: 'Use the generated command' }));
 
-    expect(command).toHaveDisplayValue('cd ~/agents/janus && tmux new -A -s Janus claude');
+    expect(command).toHaveDisplayValue(JANUS_TMUX);
     expect(
       screen.queryByRole('button', { name: 'Use the generated command' })
     ).not.toBeOnTheScreen();

@@ -82,7 +82,9 @@ export type AgentCommandInput = AgentSetup & {
 /**
  * The line typed into the shell (bash or zsh syntax):
  * - none: `cd <folder> && <agent>`
- * - tmux: `cd <folder> && tmux new -A -s <Name> <agent>` (attach, or create running the agent)
+ * - tmux: `cd <folder> && tmux new -A -s <Name> <agent> \; set -q mouse on` (attach, or
+ *   create running the agent). Mouse mode, for that session only, lets a swipe scroll
+ *   tmux's history; without it tmux keeps its history to itself.
  * - zellij: writes a layout that runs the agent to `~/.config/zellij/layouts/flare-<name>.kdl`
  *   (prefixed, so it can't overwrite a layout of the person's own), then attaches to the
  *   session or starts it with that layout. `zellij attach -c` can't run a command.
@@ -96,7 +98,7 @@ export function agentCommand(input: AgentCommandInput): string {
     case 'none':
       return `${cd}${argv.join(' ')}`;
     case 'tmux':
-      return `${cd}tmux new -A -s ${session} ${argv.join(' ')}`;
+      return `${cd}tmux new -A -s ${session} ${argv.join(' ')} \\; set -q mouse on`;
     case 'zellij': {
       const layout = `flare-${session.toLowerCase()}`;
       return (

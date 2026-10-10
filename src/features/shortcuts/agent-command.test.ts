@@ -41,7 +41,7 @@ describe('agentCommand for the owner’s Janus agent', () => {
 
   it('starts it in tmux', () => {
     expect(agentCommand(janus({ session: 'tmux', skipPermissions: true }))).toBe(
-      'cd ~/agents/janus && tmux new -A -s Janus claude --dangerously-skip-permissions'
+      'cd ~/agents/janus && tmux new -A -s Janus claude --dangerously-skip-permissions \\; set -q mouse on'
     );
   });
 
@@ -57,7 +57,7 @@ describe('agentCommand for the owner’s Janus agent', () => {
         `else zellij -s Swayze -n flare-swayze; fi`
     );
     expect(agentCommand(janus({ directory: '', session: 'tmux' }))).toBe(
-      'tmux new -A -s Janus claude'
+      'tmux new -A -s Janus claude \\; set -q mouse on'
     );
     expect(agentCommand(janus({ directory: '', session: 'none' }))).toBe('claude');
   });
@@ -96,7 +96,8 @@ describe('agentCommand for every agent and session', () => {
     const pane = skipPermissions ? layoutPane[harness] : `pane command="${bare}";`;
 
     if (session === 'none') expect(command).toBe(`cd ~/w && ${argv}`);
-    if (session === 'tmux') expect(command).toBe(`cd ~/w && tmux new -A -s Ada ${argv}`);
+    if (session === 'tmux')
+      expect(command).toBe(`cd ~/w && tmux new -A -s Ada ${argv} \\; set -q mouse on`);
     if (session === 'zellij') {
       expect(command).toBe(
         `mkdir -p ~/.config/zellij/layouts && ` +
@@ -172,7 +173,7 @@ describe('agentCommand with odd folders and names', () => {
 
   it('names an unnamed agent after its harness', () => {
     expect(agentCommand(janus({ name: ' ', session: 'tmux', harness: 'hermes' }))).toBe(
-      'cd ~/agents/janus && tmux new -A -s hermes hermes'
+      'cd ~/agents/janus && tmux new -A -s hermes hermes \\; set -q mouse on'
     );
   });
 });

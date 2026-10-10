@@ -57,7 +57,12 @@ Traps already hit in this exact stack:
   `src/features/terminal/ttyd.ts`.
 - **xterm.js 6** paints its viewport black under the themed layer; `terminal-view.css` hides
   the seam this leaves in light mode. Click `.xterm-screen` in Playwright to focus the terminal
-  (`.xterm-rows` never counts as stable).
+  (`.xterm-rows` never counts as stable). It scrolls only for a mouse wheel, never a finger:
+  `touch-scroll.ts` and the view's `scrollByTouch` do that (the scrollback, or wheel events
+  xterm.js encodes for tmux and zellij). In Playwright, drag a finger with CDP's
+  `Input.dispatchTouchEvent` (`swipe()` in `e2e/web/touch.ts`); the mouse API makes no
+  touches. In Jest, the fake terminal view has "Swipe back" and "Swipe on a full-screen
+  program" buttons for the two things a swipe reports.
 - **React Compiler lint (`react-hooks/refs`)** treats any object that contains a ref as a ref,
   so returning a ref from a hook taints everything else it returns. Let the component own the
   ref and pass it in (see `useSessionView`).
@@ -131,13 +136,16 @@ src/app/                 Routes only. Every file here is a screen; never put tes
   session/[id].tsx       A session: session strip, view, coding keyboard (or, for writing,
                          the key bar and composer with the phone's keyboard)
   session/[id]/preview.tsx  The session's dev server in a browser, over an SSH port forward
+  session/[id]/reading.tsx  Reading mode: the session's history as text, from tmux/zellij
+                         over SSH or from its headless terminal
   keyboard-preview.tsx   Both keyboards against a pretend shell, no host needed
   +not-found.tsx
 src/components/ui/       Screen, Button, TextField primitives: build screens from these
 src/components/          ThemedText, ThemedView, ExternalLink
 src/features/terminal/   terminal-view ('use dom' xterm.js), transport.ts (interface), ttyd.ts,
                          ssh-transport.ts, open-transport.ts, keys.ts (bytes for keys), composer,
-                         cursor-tap.ts (a tap on the edited line as arrow keys)
+                         cursor-tap.ts (a tap on the edited line as arrow keys),
+                         touch-scroll.ts (a swipe as scrolling, or wheel reports)
 src/features/ssh/        SSH-2 client (client.ts), packets and ciphers, host keys, user keys
                          (user-key.ts: Ed25519, ECDSA, RSA signing), OpenSSH key files
                          (private-key.ts, bcrypt-pbkdf.ts), the person's keys (keys.ts, provider,
@@ -147,7 +155,11 @@ src/features/sessions/   SessionManager (every open session, headless xterm), al
                          (screen preview, needs you/finished/working/idle), prompts.ts
                          (read off the screen: approval menus, [y/N], an agent's working
                          line, the keys for Approve/Deny), provider,
-                         useSessionView, session strip, status, attention banner
+                         useSessionView, session strip, status, attention banner, scroll hint
+src/features/reading/    Reading mode: capture.ts (the script that lists tmux/zellij sessions
+                         and prints one's history; which session a command opens), history.ts
+                         (SGR codes or an xterm buffer as styled lines), transcript.ts (tool
+                         calls, folding, Markdown), colors.ts, use-history, the list, the pill
 src/features/keyboard/   Accessory bar and coding keyboard: layout, gestures, touch tracking,
                          modifiers, haptics (docs/keyboard.md explains the design)
 src/features/shortcuts/  Shortcut type and groups, agent-command.ts (the command for an agent:
@@ -174,7 +186,8 @@ src/test-utils/          Jest helpers: renderApp, memory-storage, fake-terminal-
                          node:net), ssh-server (a real SSH server from ssh2, with forwarding and
                          exec), ssh-keys (OpenSSH key files written by ssh2, so no key is checked in)
 __tests__/               Router-level Jest tests (render the real src/app tree)
-e2e/web/                 Playwright specs; fake-ttyd.ts plays a ttyd host via page.routeWebSocket
+e2e/web/                 Playwright specs; fake-ttyd.ts plays a ttyd host via page.routeWebSocket,
+                         touch.ts opens a terminal and swipes it
 .maestro/                Device flows, run on EAS
 .eas/workflows/          EAS cloud workflows (device E2E, production deploy)
 patches/                 Fixes to libraries' native code (patch-package, applied by postinstall)

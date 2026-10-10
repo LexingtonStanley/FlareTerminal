@@ -106,7 +106,7 @@ describe('newShortcutInput', () => {
     expect(newShortcutInput()).toEqual({
       name: '',
       connectionId: '',
-      command: 'tmux new -A -s claude claude',
+      command: 'tmux new -A -s claude claude \\; set -q mouse on',
       directory: '',
       group: 'Agents',
       agent: DEFAULT_AGENT,
