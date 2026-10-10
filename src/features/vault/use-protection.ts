@@ -12,6 +12,7 @@ export function useProtection(): (connectionId: string) => string | null {
   return (connectionId) =>
     protectionScope(
       connections.find(({ id }) => id === connectionId),
-      groups
+      groups,
+      connections
     );
 }

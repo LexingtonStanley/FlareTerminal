@@ -1,4 +1,5 @@
 import type { Connection } from '@/features/connections/connections';
+import type { JumpHost } from '@/features/terminal/open-transport';
 import type {
   InputMode,
   SessionStatus,
@@ -48,7 +49,9 @@ export class FakeTransport implements TerminalTransport {
   constructor(
     readonly connection: Connection,
     readonly password: string | null,
-    private readonly listener: TransportListener
+    private readonly listener: TransportListener,
+    /** The connections it goes through, the one reached directly first. */
+    readonly jumps: JumpHost[] = []
   ) {
     if (connection.kind === 'ssh') {
       this.checkAlive = () => this.checks++;
@@ -110,9 +113,10 @@ export const transports: FakeTransport[] = [];
 export function openTransport(
   connection: Connection,
   password: string | null,
-  listener: TransportListener
+  listener: TransportListener,
+  jumps: JumpHost[] = []
 ) {
-  const transport = new FakeTransport(connection, password, listener);
+  const transport = new FakeTransport(connection, password, listener, jumps);
   transports.push(transport);
   return transport;
 }

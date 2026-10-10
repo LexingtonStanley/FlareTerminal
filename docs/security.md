@@ -61,6 +61,10 @@ notifications. Android's live status (the ongoing notification) leaves their nam
 questions out too, as "A session needs you". Moving between sessions of the same protected group doesn't ask again; going
 anywhere else, or leaving the app, does.
 
+A connection reached through a protected jump host is behind that one's lock too: its sessions
+sign in to the jump host with the jump host's password and keys, so opening one asks for the
+lock, and its text stays out of notifications the same way.
+
 A connection can also be set not to stay connected: its sessions close when you leave them or
 the app.
 
@@ -159,6 +163,23 @@ terminal output.
 - **Protected connections and groups.** Their files' names stay out of notifications, banners
   and the inbox, and opening one asks for the lock, as their sessions do.
 
+## Jump hosts
+
+A connection can go through another saved SSH connection, like `ssh -J`
+(`src/features/terminal/ssh-transport.ts`). The phone signs in to the jump host, opens a
+`direct-tcpip` channel from it to the next host, and runs a second SSH connection inside that
+channel: the jump host relays bytes it can't read, and nothing is decrypted there.
+
+- **Host keys.** Every hop's key is checked against the phone's known hosts, under that hop's
+  own name and port, and a changed key refuses the connection, naming the hop.
+- **Credentials.** Each hop signs in with its own connection's password and keys, which the
+  phone keeps. Nothing is forwarded to the jump host (no agent forwarding), so a compromised
+  jump host can't use your keys. Like a direct session, each hop's password and keys are
+  dropped once it has signed in.
+- **A chain that can't be followed** (a jump host deleted, or jump hosts that go round in a
+  circle) doesn't connect at all, rather than reaching the host directly, where its name could
+  mean a different computer.
+
 ## Importing an SSH config
 
 Import adds connections from an OpenSSH config (`src/features/connections/ssh-config.ts`).
@@ -175,6 +196,8 @@ passwords.
   of another.
 - `Match` blocks are skipped (they test the computer they run on, `Match exec` runs commands),
   and Flare says so.
+- `ProxyJump` links a host to its jump host when that's another host in the config or a saved
+  connection. `ProxyCommand` is never run.
 - **Protected connections and groups.** While an app lock is set, their computers aren't
   offered to read from, as their screens aren't shown.
 

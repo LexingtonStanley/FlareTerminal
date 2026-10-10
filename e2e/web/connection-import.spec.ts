@@ -59,8 +59,12 @@ for (const colorScheme of ['light', 'dark'] as const) {
         path: testInfo.outputPath(`connection-form-import-${colorScheme}.png`),
       });
       await page.getByRole('button', { name: 'Import from SSH config' }).click();
-      await page.getByLabel('Paste it').fill(`${CONFIG}\nHost orb\n  HostName 127.0.0.1`);
-      await expect(page.getByText('Hosts · 4')).toBeVisible();
+      await page
+        .getByLabel('Paste it')
+        .fill(
+          `${CONFIG}\nHost orb\n  HostName 127.0.0.1\nHost bastion\nHost db\n  ProxyJump bastion`
+        );
+      await expect(page.getByText('Hosts · 6')).toBeVisible();
       await page.screenshot({
         path: testInfo.outputPath(`connection-import-${colorScheme}.png`),
         fullPage: true,

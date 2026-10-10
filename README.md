@@ -119,10 +119,16 @@ after a clean install.
    you to trust it. If the key ever changes, it refuses to connect until you forget the old
    one (in the connection's settings).
 
+**Behind a bastion?** Save the bastion as a connection, then choose it as the other one's
+**Jump host**, like `ssh -J`. Flare signs in to the bastion, then to the computer through it;
+each has its own host key check, password and key, and the bastion only relays encrypted
+bytes. A jump host can have its own jump host.
+
 **Already have hosts in `~/.ssh/config`?** New connection → Import pastes the file, or reads it
 (and the files its `Include` lines name) from a computer you're connected to, and adds a
-connection for each `Host` you tick, with its HostName, User and Port. Hosts reached through
-another (`ProxyJump`) are listed but left unticked: jump hosts aren't supported yet.
+connection for each `Host` you tick, with its HostName, User and Port. A host with a
+`ProxyJump` comes with its jump host, when that's another host in the config or already
+saved. `ProxyCommand` can't be imported.
 
 With [Tailscale](https://tailscale.com) on the phone and the computer, use the computer's
 Tailscale name (`lexbox`) or IP. Traffic is encrypted twice (SSH inside WireGuard) and sshd
@@ -243,7 +249,9 @@ host at `/keyboard-preview`.
   [noble](https://paulmillr.com/noble/) cryptography: curve25519 key exchange with strict KEX,
   Ed25519 / ECDSA / RSA-SHA2 host keys, ChaCha20-Poly1305 and AES-GCM, rekeying, keepalives,
   and flow control. It is tested against the `ssh2` server in Jest, and was checked by hand
-  against OpenSSH 9.6 and Go's `x/crypto/ssh`. `ttyd.ts` implements ttyd's protocol, checked
+  against OpenSSH 9.6 and Go's `x/crypto/ssh`. Through jump hosts, it speaks SSH to each next
+  host over a `direct-tcpip` channel from the one before, as `ssh -J` does (checked with
+  OpenSSH 9.6 as the jump host). `ttyd.ts` implements ttyd's protocol, checked
   by hand against ttyd 1.7.7; Playwright drives it against a fake host
   (`e2e/web/fake-ttyd.ts`).
 - `src/features/reading/` is reading mode. Over SSH it asks tmux (`capture-pane`) or zellij
@@ -263,8 +271,8 @@ host at `/keyboard-preview`.
   a page with [marked](https://marked.js.org), its HTML shown as text, and pages show in
   react-native-webview behind a Content-Security-Policy (`page.ts`, `file-frame.tsx`).
 - `src/features/connections/ssh-config.ts` reads an OpenSSH client config the way `ssh`
-  does (first value wins, `Host` patterns with `!`, `Include`, `%h`), checked against
-  OpenSSH 9.6's `ssh -G`. `read-ssh-config.ts` reads `~/.ssh/config` and its includes on a
+  does (first value wins, `Host` patterns with `!`, `Include`, `%h`, which of `ProxyJump`
+  and `ProxyCommand` applies), checked against OpenSSH 9.6's `ssh -G`. `read-ssh-config.ts` reads `~/.ssh/config` and its includes on a
   connected host with one read-only `sh -s` script per round of includes.
 - `src/features/preview/` forwards a port for the dev server preview: a listener on the
   phone's 127.0.0.1 (`local-server.ts`) whose connections each open an SSH `direct-tcpip`
@@ -300,7 +308,7 @@ Thumb-Key, Unexpected Keyboard and Termux's extra keys.
 2. Agent features: alerts that reach the phone while the app is suspended (a small relay or
    push from the host), which would also keep an iOS Live Activity current; opening an
    agent's HTML file in the phone's own browser.
-3. Jump hosts (and importing them from `~/.ssh/config`), port forwarding beyond previews.
+3. Port forwarding beyond previews; importing `ProxyJump` lines that list several hosts.
 4. Touch selection, pinch to zoom, and a WebGL renderer.
 
 ## Limits

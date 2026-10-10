@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 
 import { ThemedText } from '@/components/themed-text';
 import { Screen } from '@/components/ui/screen';
+import { useConnections } from '@/features/connections/connections-provider';
 import { useLock } from '@/features/vault/lock-provider';
 import { UnlockPanel } from '@/features/vault/unlock-panel';
 import { useProtection } from '@/features/vault/use-protection';
@@ -24,6 +25,9 @@ export function SessionGate({
   const session = useSessions().find((candidate) => candidate.id === id);
   const { settings, isAuthorized, authorize } = useLock();
   const scope = useProtection()(session?.connectionId ?? '');
+  const connection = useConnections().connections.find(
+    (candidate) => candidate.id === session?.connectionId
+  );
 
   if (!session) {
     return (
@@ -48,9 +52,11 @@ export function SessionGate({
         <UnlockPanel
           title={`Unlock ${session.name}`}
           message={
-            scope.startsWith('group:')
+            scope === `group:${connection?.groupId}`
               ? 'Its group is protected. It stays connected while locked.'
-              : 'This connection is protected. It stays connected while locked.'
+              : scope === `connection:${connection?.id}`
+                ? 'This connection is protected. It stays connected while locked.'
+                : 'It goes through a protected jump host. It stays connected while locked.'
           }
           autoBiometrics
           onUnlocked={() => authorize(scope)}

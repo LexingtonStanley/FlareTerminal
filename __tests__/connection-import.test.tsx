@@ -73,7 +73,7 @@ describe('importing from an SSH config', () => {
     expect(screen.getByRole('switch', { name: 'pi' })).toBeChecked();
     expect(screen.getByRole('switch', { name: 'prod' })).not.toBeChecked();
     expect(
-      screen.getByText('prod · Reached through another host, which Flare can’t do yet')
+      screen.getByText('prod · Reached through bastion, which isn’t saved or here to add')
     ).toBeOnTheScreen();
     expect(screen.getByText('pi:2222')).toBeOnTheScreen();
 
@@ -120,6 +120,38 @@ describe('importing from an SSH config', () => {
 
     await user.press(screen.getByRole('button', { name: 'Add 1 connection' }));
     await waitFor(() => expect(saved().map(({ name }) => name)).toEqual(['Lexbox', 'prod']));
+  });
+
+  it('adds a host with the jump host it goes through', async () => {
+    await renderApp('/connections/import');
+    const user = userEvent.setup();
+    await fireEvent.changeText(
+      await screen.findByLabelText('Paste it'),
+      [
+        'Host bastion',
+        '  HostName jump.example.com',
+        '  User ec2-user',
+        'Host web',
+        '  HostName 10.0.1.5',
+        '  User deploy',
+        '  ProxyJump bastion',
+      ].join('\n')
+    );
+
+    expect(screen.getByText('deploy@10.0.1.5 · Through bastion')).toBeOnTheScreen();
+    // Leaving out the jump host leaves out what goes through it, and back.
+    await user.press(screen.getByRole('switch', { name: 'bastion' }));
+    expect(screen.getByRole('switch', { name: 'web' })).not.toBeChecked();
+    expect(screen.getByRole('button', { name: 'Add connections' })).toBeDisabled();
+    await user.press(screen.getByRole('switch', { name: 'web' }));
+    expect(screen.getByRole('switch', { name: 'bastion' })).toBeChecked();
+
+    await user.press(screen.getByRole('button', { name: 'Add 2 connections' }));
+
+    await waitFor(() => expect(saved()).toHaveLength(2));
+    const [bastion, web] = saved();
+    expect(web).toMatchObject({ name: 'web', host: '10.0.1.5', jumpId: bastion.id });
+    expect(bastion).toMatchObject({ name: 'bastion', host: 'jump.example.com', jumpId: null });
   });
 
   it('says what it skipped', async () => {

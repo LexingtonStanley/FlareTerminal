@@ -18,8 +18,8 @@ type ConnectionsContextValue = {
   connections: Connection[];
   /** Creates a connection, or updates it when `id` is given. Returns the saved record. */
   save(input: ConnectionInput, id?: string): Connection;
-  /** Creates several at once (an import), without passwords. */
-  add(inputs: ConnectionInput[]): Connection[];
+  /** Adds several at once (an import), without passwords. */
+  add(added: Connection[]): void;
   remove(id: string): void;
   /** The stored password, for editing and connecting. */
   getPassword(id: string): string | null;
@@ -53,10 +53,8 @@ export function ConnectionsProvider({ children }: PropsWithChildren) {
       setSecret(passwordKey(connection.id), keep && input.password ? input.password : null);
       return connection;
     },
-    add(inputs) {
-      const added = inputs.map((input) => toConnection(input, newConnectionId()));
+    add(added) {
       commit([...connections, ...added]);
-      return added;
     },
     remove(id) {
       commit(connections.filter((connection) => connection.id !== id));

@@ -8,6 +8,7 @@ import {
 } from 'react';
 import { AppState, Platform } from 'react-native';
 
+import { jumpHosts } from '@/features/connections/connections';
 import { useConnections } from '@/features/connections/connections-provider';
 import {
   ensureNotificationPermission,
@@ -15,6 +16,7 @@ import {
   useNotificationAnswers,
 } from '@/features/notifications/notify';
 import { openTransport } from '@/features/terminal/open-transport';
+import { refusedTransport } from '@/features/terminal/transport';
 import { useProtection } from '@/features/vault/use-protection';
 
 import { keepSessionsAlive } from './background';
@@ -42,7 +44,11 @@ export function SessionsProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     manager.setTransportOpener((connectionId, listener) => {
       const connection = connections.find(({ id }) => id === connectionId);
-      return connection ? openTransport(connection, getPassword(connection.id), listener) : null;
+      if (!connection) return null;
+      const chain = jumpHosts(connection, connections);
+      if ('error' in chain) return refusedTransport(chain.error, listener);
+      const jumps = chain.hops.map((hop) => ({ connection: hop, password: getPassword(hop.id) }));
+      return openTransport(connection, getPassword(connection.id), listener, jumps);
     });
   }, [manager, connections, getPassword]);
 

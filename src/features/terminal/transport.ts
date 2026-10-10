@@ -65,3 +65,13 @@ export interface TerminalTransport {
    */
   checkAlive?(): void;
 }
+
+/** A session that can't connect, and says why when it tries (a jump host was deleted). */
+export function refusedTransport(message: string, listener: TransportListener): TerminalTransport {
+  return {
+    connect: () => listener.onStatus({ state: 'closed', message }),
+    write: () => {},
+    resize: () => {},
+    close: () => {},
+  };
+}

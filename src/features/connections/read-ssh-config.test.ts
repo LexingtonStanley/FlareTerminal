@@ -180,9 +180,30 @@ describe('over SSH', () => {
     const found = await readSshConfig((command, events) => transport.runCommand(command, events));
 
     expect(found?.hosts).toEqual([
-      { alias: 'work', hostName: 'work.example.com', user: null, port: 2222, jump: false },
-      { alias: 'orb', hostName: '127.0.0.1', user: null, port: 2222, jump: false },
-      { alias: 'lexbox', hostName: 'lexbox', user: 'lexde', port: 2222, jump: false },
+      {
+        alias: 'work',
+        hostName: 'work.example.com',
+        user: null,
+        port: 2222,
+        proxyJump: null,
+        proxyCommand: false,
+      },
+      {
+        alias: 'orb',
+        hostName: '127.0.0.1',
+        user: null,
+        port: 2222,
+        proxyJump: null,
+        proxyCommand: false,
+      },
+      {
+        alias: 'lexbox',
+        hostName: 'lexbox',
+        user: 'lexde',
+        port: 2222,
+        proxyJump: null,
+        proxyCommand: false,
+      },
     ]);
     expect(existsSync(pwned)).toBe(false);
     expect(statuses.at(-1)).toBe('connected');

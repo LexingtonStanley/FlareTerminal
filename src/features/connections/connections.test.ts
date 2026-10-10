@@ -2,12 +2,16 @@ import {
   connectionLabel,
   connectionWarning,
   EMPTY_CONNECTION_INPUT,
+  jumpChoices,
+  jumpHosts,
   migrateConnection,
   parseSshTarget,
   toConnection,
   toInput,
   validateConnection,
+  type Connection,
   type ConnectionInput,
+  type SshConnection,
 } from './connections';
 
 const ssh = (fields: Partial<ConnectionInput>): ConnectionInput => ({
@@ -78,16 +82,20 @@ describe('toConnection', () => {
       port: 2222,
       username: 'lexde',
       keyId: null,
+      jumpId: null,
       groupId: null,
       protected: false,
       keepAlive: true,
     });
   });
 
-  it('keeps the chosen key and reads it back for editing', () => {
-    const connection = toConnection(ssh({ host: 'lexbox', username: 'a', keyId: 'k1' }), 'c1');
-    expect(connection).toMatchObject({ keyId: 'k1' });
-    expect(toInput(connection, null).keyId).toBe('k1');
+  it('keeps the chosen key and jump host, and reads them back for editing', () => {
+    const connection = toConnection(
+      ssh({ host: 'lexbox', username: 'a', keyId: 'k1', jumpId: 'bastion' }),
+      'c1'
+    );
+    expect(connection).toMatchObject({ keyId: 'k1', jumpId: 'bastion' });
+    expect(toInput(connection, null)).toMatchObject({ keyId: 'k1', jumpId: 'bastion' });
   });
 
   it('keeps the group, protection and keep-alive, and reads them back for editing', () => {
@@ -115,6 +123,7 @@ describe('toConnection', () => {
     expect(toInput(old, null)).toMatchObject({
       groupId: '',
       keyId: '',
+      jumpId: '',
       protected: false,
       keepAlive: true,
     });
@@ -127,6 +136,63 @@ describe('toConnection', () => {
     );
     expect(connection).toMatchObject({ name: 'Lexbox', username: 'lexde', port: 22 });
     expect(connectionLabel(connection)).toBe('lexde@lexbox');
+  });
+});
+
+const sshConnection = (id: string, jumpId: string | null = null): SshConnection => ({
+  id,
+  kind: 'ssh',
+  name: id,
+  host: id,
+  port: 22,
+  username: 'ada',
+  jumpId,
+});
+
+describe('jumpHosts', () => {
+  it('lists the hosts to go through, the one reached directly first', () => {
+    const outer = sshConnection('outer');
+    const inner = sshConnection('inner', 'outer');
+    const db = sshConnection('db', 'inner');
+    expect(jumpHosts(db, [db, inner, outer])).toEqual({ hops: [outer, inner] });
+    expect(jumpHosts(outer, [db, inner, outer])).toEqual({ hops: [] });
+  });
+
+  it('refuses a chain it can’t follow', () => {
+    const db = sshConnection('db', 'gone');
+    expect(jumpHosts(db, [db])).toEqual({
+      error: 'db’s jump host was deleted. Choose another in its settings.',
+    });
+
+    const web: Connection = { id: 'web', kind: 'ttyd', name: 'Web', url: 'web:7681', username: '' };
+    const viaWeb = sshConnection('app', 'web');
+    expect(jumpHosts(viaWeb, [viaWeb, web])).toEqual({
+      error: 'Web isn’t SSH, so it can’t be a jump host.',
+    });
+
+    const a = sshConnection('a', 'b');
+    const b = sshConnection('b', 'c');
+    const c = sshConnection('c', 'b');
+    expect(jumpHosts(a, [a, b, c])).toEqual({
+      error: 'Its jump hosts go round in a circle. Choose another in its settings.',
+    });
+    const self = sshConnection('self', 'self');
+    expect(jumpHosts(self, [self])).toMatchObject({ error: expect.stringContaining('circle') });
+  });
+});
+
+describe('jumpChoices', () => {
+  it('offers the SSH connections that don’t go through this one', () => {
+    const bastion = sshConnection('bastion');
+    const db = sshConnection('db', 'bastion');
+    const broken = sshConnection('broken', 'gone');
+    const web: Connection = { id: 'web', kind: 'ttyd', name: 'Web', url: 'web:7681', username: '' };
+    const all = [bastion, db, broken, web];
+
+    expect(jumpChoices(null, all)).toEqual([bastion, db]);
+    expect(jumpChoices('db', all)).toEqual([bastion]);
+    // db goes through bastion, so bastion can't go through db.
+    expect(jumpChoices('bastion', all)).toEqual([]);
   });
 });
 

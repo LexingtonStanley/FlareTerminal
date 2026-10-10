@@ -5,7 +5,8 @@ const host = (alias: string, rest: Partial<ConfigHost> = {}): ConfigHost => ({
   hostName: alias,
   user: null,
   port: 22,
-  jump: false,
+  proxyJump: null,
+  proxyCommand: false,
   ...rest,
 });
 
@@ -103,23 +104,47 @@ describe('parseSshConfig', () => {
     ]);
   });
 
-  it('marks hosts reached through another', () => {
+  it('reads how a host is reached through another, as `ssh -G` does', () => {
+    // Each host's result is what OpenSSH 9.6's `ssh -G` printed for this config.
     const { hosts } = parseSshConfig(
       [
         'Host prod',
-        '  ProxyJump bastion',
+        '  ProxyJump ada@bastion:2222',
         'Host old',
         '  ProxyCommand ssh -W %h:%p bastion',
-        'Host direct',
+        'Host deep',
+        '  ProxyJump outer,inner',
+        'Host uri',
+        '  ProxyJump ssh://ada@bastion.example.com:2200',
+        'Host jump-none',
         '  ProxyJump none',
+        '  ProxyJump x',
+        'Host command-none',
+        '  ProxyCommand none',
+        'Host command-then-jump-none',
+        '  ProxyCommand nc',
+        '  ProxyJump none',
+        'Host jump-then-command-none',
+        '  ProxyJump j1',
+        '  ProxyCommand none',
         'Host *',
         '  ProxyJump bastion',
+        '  ProxyCommand nc2 %h',
       ].join('\n')
     );
-    expect(hosts.map(({ alias, jump }) => [alias, jump])).toEqual([
-      ['prod', true],
-      ['old', true],
-      ['direct', false],
+    expect(
+      hosts.map(({ alias, proxyJump, proxyCommand }) => [alias, proxyJump, proxyCommand])
+    ).toEqual([
+      ['prod', 'ada@bastion:2222', false],
+      ['old', null, true],
+      ['deep', 'outer,inner', false],
+      ['uri', 'ada@bastion.example.com:2200', false],
+      // `ProxyJump none` keeps out a later ProxyJump, but not a ProxyCommand.
+      ['jump-none', null, true],
+      // A ProxyCommand, even none, keeps out a later ProxyJump.
+      ['command-none', null, false],
+      ['command-then-jump-none', null, true],
+      ['jump-then-command-none', 'j1', false],
     ]);
   });
 
