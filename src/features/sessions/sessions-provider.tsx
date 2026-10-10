@@ -18,6 +18,7 @@ import { openTransport } from '@/features/terminal/open-transport';
 import { useProtection } from '@/features/vault/use-protection';
 
 import { keepSessionsAlive } from './background';
+import { watchNetwork } from './network';
 import { answersFor } from './prompts';
 import { SessionManager, type SessionTarget } from './session-manager';
 
@@ -79,6 +80,9 @@ export function SessionsProvider({ children }: PropsWithChildren) {
       );
     }
   });
+
+  // Reconnect when the phone gets a network back or changes to another (Wi-Fi ↔ cellular).
+  useEffect(() => watchNetwork((network) => manager.setNetwork(network)), [manager]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) =>

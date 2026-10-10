@@ -21,5 +21,7 @@ module.exports = {
       '<rootDir>/node_modules/react-native-keyboard-controller/jest',
     // No native WebView in Jest: a plain View that keeps its props.
     '^react-native-webview$': '<rootDir>/jest/webview-stub.js',
+    // No native network module in Jest: Wi-Fi, until a test says otherwise.
+    '^expo-network$': '<rootDir>/jest/expo-network-stub.js',
   },
 };

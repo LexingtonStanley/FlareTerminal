@@ -430,4 +430,38 @@ describe('SshClient against the ssh2 server', () => {
 
     expect(await closed).toEqual({ message: 'Connection lost', clean: false });
   });
+
+  it('keeps a connection that answers the check after a network change', async () => {
+    const server = await startServer();
+    const { client, closed } = await connect(server.port, { password: 'correct-horse' });
+    await client.handshake();
+    // Not before signing in: the request belongs to that phase.
+    client.checkAlive(50);
+    await client.authenticate();
+    const { channel, output } = await shell(client);
+
+    client.checkAlive(300);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    channel.write(utf8('still here\n'));
+
+    await waitFor(() => output.text.includes('echo:still here'));
+    const outcome = await Promise.race([closed, Promise.resolve('open')]);
+    expect(outcome).toBe('open');
+  });
+
+  it('drops a connection that doesn’t answer the check, as a network failure', async () => {
+    const server = await startServer();
+    const { client, closed } = await connect(server.port, { password: 'correct-horse' });
+    await client.handshake();
+    await client.authenticate();
+
+    // A dead network: nothing more arrives, and nothing says so.
+    sockets.at(-1)!.pause();
+    client.checkAlive(200);
+
+    expect(await closed).toEqual({
+      message: 'Connection lost (the network changed)',
+      clean: false,
+    });
+  });
 });

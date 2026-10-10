@@ -17,6 +17,7 @@ import type {
 import { parseOsc777, parseOsc9, parseOsc99, type AgentAlert } from './alerts';
 import { AWAY_MIN_MS, JUMP_CONTEXT_LINES, screenContent } from './away';
 import { contentLines, lastMeaningfulLine, type SessionActivity } from './inbox';
+import type { Network } from './network';
 import {
   answersFor,
   detectPrompt,
@@ -89,6 +90,8 @@ export type SessionSnapshot = SessionTarget & {
   prompt: AgentPrompt | null;
   /** The connection dropped and a reconnect is scheduled. */
   reconnecting: boolean;
+  /** It dropped while the phone had no network: it reconnects when one comes back. */
+  waitingForNetwork?: boolean;
   /**
    * The tmux or zellij session whose history reading mode shows, once the person picked one
    * (null: this screen). Until then reading mode goes by the command.
@@ -545,22 +548,51 @@ class Session {
 
   /** The app is back on screen: reconnect if the connection was lost while it was away. */
   resume() {
-    const { status } = this.snapshot;
-    if (status.state === 'closed' && status.retry && this.everConnected && !this.cancelRetry) {
-      this.reconnect();
-    }
+    if (this.dropped && !this.cancelRetry) this.reconnect();
   }
 
   private retryNow() {
     this.cancelRetry?.();
     this.cancelRetry = null;
-    if (this.snapshot.reconnecting) this.update({ reconnecting: false });
+    if (this.snapshot.reconnecting || this.snapshot.waitingForNetwork) {
+      this.update({ reconnecting: false, waitingForNetwork: false });
+    }
     this.output('\r\n');
     this.connect();
   }
 
+  /** It was connected, and lost the connection to a network failure. */
+  private get dropped() {
+    const { status } = this.snapshot;
+    return status.state === 'closed' && !!status.retry && this.everConnected;
+  }
+
+  /**
+   * The phone lost its network, got one back, or moved to another (Wi-Fi to cellular, say).
+   * Without one, retries wait for it rather than fail. With a new one, a dropped session
+   * reconnects at once, and an open one checks it still works: a connection over the old
+   * network is dead, but can take a minute of missed keepalives to notice.
+   */
+  networkChanged(online: boolean, changed: boolean) {
+    if (!online) {
+      if (!this.cancelRetry) return;
+      this.cancelRetry();
+      this.cancelRetry = null;
+      this.update({ reconnecting: true, waitingForNetwork: true });
+      return;
+    }
+    if (!changed) return;
+    if (this.dropped) this.reconnect();
+    else if (this.snapshot.status.state === 'connected') this.transport?.checkAlive?.();
+  }
+
   private scheduleRetry(status: SessionStatus) {
     if (status.state !== 'closed' || !status.retry || !this.everConnected) return;
+    // With no network a retry would only fail: wait for one (networkChanged).
+    if (!this.manager.online) {
+      this.update({ reconnecting: true, waitingForNetwork: true });
+      return;
+    }
     const delay = RECONNECT_DELAYS_MS[this.retries];
     if (delay === undefined) return;
     this.retries++;
@@ -626,6 +658,7 @@ export class SessionManager {
   private listeners = new Set<() => void>();
   private focusedId: string | null = null;
   private appActive = true;
+  private network: Network | null = null;
   private counter = 0;
 
   constructor(private deps: SessionManagerDeps) {}
@@ -765,6 +798,21 @@ export class SessionManager {
   setFocused(id: string | null) {
     this.focusedId = id;
     this.updateWatched();
+  }
+
+  /** The phone's network, as watchNetwork reports it. */
+  setNetwork(network: Network) {
+    // The first reading only matters when there's no network.
+    const previous = this.network ?? { online: true, kind: network.kind };
+    this.network = network;
+    const changed = network.online && (!previous.online || previous.kind !== network.kind);
+    if (!changed && network.online === previous.online) return;
+    this.sessions.forEach((session) => session.networkChanged(network.online, changed));
+  }
+
+  /** @internal Unknown counts as online, so sessions behave as they did on timers alone. */
+  get online() {
+    return this.network?.online ?? true;
   }
 
   setAppActive(active: boolean) {

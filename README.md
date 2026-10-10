@@ -132,7 +132,11 @@ there sessions drop and reconnect when you come back.
 
 **Keep agents running.** If a connection drops (a network change, the phone out of signal),
 the app reconnects by itself, and a shortcut's command runs again: run agents inside tmux or
-zellij (agent shortcuts do) and that reattaches you to the same agent, still running.
+zellij (agent shortcuts do) and that reattaches you to the same agent, still running. With no
+network it waits and says so, then reconnects the moment the phone has one again. When the
+phone moves between Wi-Fi and cellular, each SSH session checks its connection at once, so one
+that didn't survive reconnects within about ten seconds rather than a minute of missed
+keepalives.
 
 **Agent shortcuts.** The session is named after the agent, so a second tap attaches instead of
 starting another. In tmux they turn on mouse mode for that session only, so a swipe scrolls
@@ -255,7 +259,8 @@ Thumb-Key, Unexpected Keyboard and Termux's extra keys.
 
 ## Roadmap
 
-1. Mosh-style resilience: resume a dropped SSH session automatically on network changes.
+1. Mosh-style resilience: keep a session through a network change instead of reconnecting
+   (mosh, or a relay on the host).
 2. Agent features: image and file hand-off, approve/deny buttons for agent prompts, alerts
    that reach the phone while the app is suspended (a small relay or push from the host).
 3. Jump hosts, `~/.ssh/config` import, port forwarding beyond previews.

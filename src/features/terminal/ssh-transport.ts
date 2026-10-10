@@ -43,6 +43,9 @@ const KEY_NAMES: Record<string, string> = {
   'ssh-rsa': 'RSA',
 };
 
+/** How long the host has to answer after the phone changes network (cellular can be slow). */
+export const NETWORK_CHECK_MS = 10_000;
+
 const RED = '\x1b[1;31m';
 const DIM = '\x1b[2m';
 const RESET = '\x1b[0m';
@@ -86,6 +89,12 @@ export class SshTransport implements TerminalTransport {
     this.reader?.resolve(null);
     this.client?.close();
     this.endTunnels();
+  }
+
+  checkAlive() {
+    if (this.channel && !this.finished && !this.closedByUs) {
+      this.client?.checkAlive(NETWORK_CHECK_MS);
+    }
   }
 
   async openTunnel(port: number, events: TunnelEvents): Promise<Tunnel> {
