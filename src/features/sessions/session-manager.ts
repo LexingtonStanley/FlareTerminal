@@ -102,6 +102,8 @@ export type SessionSnapshot = SessionTarget & {
   history?: HistorySource | null;
   /** What arrived while the person was away, until they jump to it, read it or dismiss it. */
   away: Away | null;
+  /** Since when an agent's working line has been on screen, while it is. */
+  workingSince?: number | null;
 };
 
 /** Where a session's output goes while a terminal view shows it. */
@@ -351,10 +353,10 @@ class Session {
     this.checkPrompt(lines);
     if (this.snapshot.prompt) {
       // Asking, not finished: the question is the alert.
-      this.working = false;
+      this.setWorking(false);
       this.stopFinishTimer();
     } else if (isWorking(lines)) {
-      this.working = true;
+      this.setWorking(true);
       this.stopFinishTimer();
     } else if (this.working && !this.cancelFinish) {
       this.cancelFinish = this.manager.delay(() => {
@@ -362,6 +364,12 @@ class Session {
         this.finish();
       }, FINISH_SETTLE_MS);
     }
+  }
+
+  private setWorking(working: boolean) {
+    this.working = working;
+    if (working && !this.snapshot.workingSince) this.update({ workingSince: this.manager.now() });
+    else if (!working && this.snapshot.workingSince) this.update({ workingSince: null });
   }
 
   private stopFinishTimer() {
@@ -405,7 +413,7 @@ class Session {
     if (this.closed) return;
     const lines = this.screenLines();
     if (isWorking(lines) || this.snapshot.prompt) return;
-    this.working = false;
+    this.setWorking(false);
     this.alert(
       { title: `${this.snapshot.name} finished`, body: lastMeaningfulLine(lines) ?? 'Done' },
       'finished'

@@ -169,7 +169,8 @@ src/features/sessions/   SessionManager (every open session, headless xterm), al
                          (read off the screen: approval menus, [y/N], an agent's working
                          line, the keys for Approve/Deny), away.ts (what arrived while the
                          person was away, and where it starts in a history), provider,
-                         network.ts (the phone's network, from expo-network), useSessionView,
+                         network.ts (the phone's network, from expo-network), live-status.ts
+                         (the Android service notification's text), useSessionView,
                          session strip, status, attention banner, scroll hint, away chip
 src/features/reading/    Reading mode: capture.ts (the script that lists tmux/zellij sessions
                          and prints one's history; which session a command opens), history.ts
