@@ -14,9 +14,16 @@ test('says what arrived while the person was away, and jumps back to it', async 
   await expect(screen).toContainText('before 29');
 
   await page.getByRole('link', { name: 'Home, back' }).click();
+  const resume = page.getByRole('button', { name: 'Resume Devbox' });
+  await expect(resume).toBeVisible();
+  await expect(page.locator('.xterm-screen')).toHaveCount(0);
+  // Ends by setting the title, which Home shows once the app has read everything before it.
+  session.output(lines('while away', 200) + '\x1b]0;Still working\x07');
+  await expect(resume).toContainText('Still working');
+  // Each step waits for the last, so the person surely left before the minute passed, and
+  // the lines surely arrived before they came back.
   await page.clock.setFixedTime(new Date('2026-10-09T10:01:00Z'));
-  session.output(lines('while away', 200));
-  await page.getByRole('button', { name: 'Resume Devbox' }).click();
+  await resume.click();
 
   const chip = page.getByRole('button', { name: 'Jump to 200 new lines since you left' });
   await expect(chip).toBeVisible();
