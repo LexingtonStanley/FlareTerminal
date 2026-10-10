@@ -7,7 +7,7 @@ import { cdPrefix, quote } from './shell';
  * starting another.
  */
 
-export type AgentHarness = 'claude' | 'codex' | 'hermes' | 'pi';
+export type AgentHarness = 'claude' | 'codex' | 'gemini' | 'opencode' | 'aider' | 'hermes' | 'pi';
 
 export type AgentSession = 'tmux' | 'zellij' | 'none';
 
@@ -16,6 +16,11 @@ export type AgentSetup = {
   session: AgentSession;
   /** Adds the harness's flag for running without permission prompts, when it has one. */
   skipPermissions: boolean;
+  /**
+   * Starts the agent in a git worktree of its own, named after it, when the harness can
+   * (Claude Code). Off when missing (shortcuts saved before it existed).
+   */
+  worktree?: boolean;
 };
 
 type Harness = {
@@ -23,17 +28,33 @@ type Harness = {
   program: string;
   /** Runs without asking before commands and edits; null when the harness never asks. */
   skipFlag: string | null;
+  /** Starts in a git worktree named by the next argument; missing when it has no such flag. */
+  worktreeFlag?: string;
 };
 
-/** In the order the form offers them. */
+/**
+ * In the order the form offers them. Flags are from each agent's own CLI reference (October
+ * 2026).
+ */
 export const HARNESSES: Record<AgentHarness, Harness> = {
-  claude: { label: 'Claude Code', program: 'claude', skipFlag: '--dangerously-skip-permissions' },
+  claude: {
+    label: 'Claude Code',
+    program: 'claude',
+    skipFlag: '--dangerously-skip-permissions',
+    // An existing worktree of that name is reopened, so a restart picks up where it was.
+    worktreeFlag: '--worktree',
+  },
   // `--yolo` is an alias; the long flag says what it does.
   codex: {
     label: 'Codex',
     program: 'codex',
     skipFlag: '--dangerously-bypass-approvals-and-sandbox',
   },
+  // Its `--yolo` is deprecated for this. (Its `--worktree` needs an experimental setting.)
+  gemini: { label: 'Gemini CLI', program: 'gemini', skipFlag: '--approval-mode=yolo' },
+  // Approves what the configuration doesn't explicitly deny.
+  opencode: { label: 'OpenCode', program: 'opencode', skipFlag: '--auto' },
+  aider: { label: 'Aider', program: 'aider', skipFlag: '--yes-always' },
   hermes: { label: 'Hermes', program: 'hermes', skipFlag: '--yolo' },
   // pi has no permission prompts.
   pi: { label: 'pi', program: 'pi', skipFlag: null },
@@ -59,10 +80,22 @@ export function agentSessionName(name: string, harness: AgentHarness): string {
   return safe || harness;
 }
 
-/** The program and its arguments, e.g. `['claude', '--dangerously-skip-permissions']`. */
-export function agentArgv({ harness, skipPermissions }: AgentSetup): string[] {
-  const { program, skipFlag } = HARNESSES[harness];
-  return skipPermissions && skipFlag ? [program, skipFlag] : [program];
+/**
+ * The program and its arguments, e.g. `['claude', '--dangerously-skip-permissions']`. A
+ * worktree is named like the agent's session.
+ */
+export function agentArgv({
+  harness,
+  skipPermissions,
+  worktree = false,
+  name = '',
+}: AgentSetup & { name?: string }): string[] {
+  const { program, skipFlag, worktreeFlag } = HARNESSES[harness];
+  return [
+    program,
+    ...(skipPermissions && skipFlag ? [skipFlag] : []),
+    ...(worktree && worktreeFlag ? [worktreeFlag, agentSessionName(name, harness)] : []),
+  ];
 }
 
 /** A zellij layout with one pane running the agent. */

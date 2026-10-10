@@ -114,6 +114,21 @@ describe('agent shortcuts', () => {
       )
     ).toBeOnTheScreen();
 
+    await user.press(screen.getByRole('radio', { name: 'Gemini CLI' }));
+    expect(
+      screen.getByDisplayValue('tmux new -A -s Ada gemini --approval-mode=yolo \\; set -q mouse on')
+    ).toBeOnTheScreen();
+
+    await user.press(screen.getByRole('radio', { name: 'OpenCode' }));
+    expect(
+      screen.getByDisplayValue('tmux new -A -s Ada opencode --auto \\; set -q mouse on')
+    ).toBeOnTheScreen();
+
+    await user.press(screen.getByRole('radio', { name: 'Aider' }));
+    expect(
+      screen.getByDisplayValue('tmux new -A -s Ada aider --yes-always \\; set -q mouse on')
+    ).toBeOnTheScreen();
+
     await user.press(screen.getByRole('radio', { name: 'Hermes' }));
     expect(
       screen.getByDisplayValue('tmux new -A -s Ada hermes --yolo \\; set -q mouse on')
@@ -128,6 +143,42 @@ describe('agent shortcuts', () => {
 
     await user.press(screen.getByRole('radio', { name: 'None' }));
     expect(screen.getByDisplayValue('pi')).toBeOnTheScreen();
+  });
+
+  it('starts Claude Code in a git worktree of its own', async () => {
+    saved([DEVBOX]);
+    const user = userEvent.setup();
+    await renderApp('/shortcuts/new');
+
+    await user.type(await screen.findByLabelText('Folder'), '~/code/flare');
+    await user.type(screen.getByLabelText('Name'), 'Fix login');
+    const worktree = screen.getByRole('switch', { name: 'Work in its own git worktree' });
+    expect(screen.getByText('--worktree Fix-login')).toBeOnTheScreen();
+    await user.press(worktree);
+    expect(worktree).toBeChecked();
+    expect(
+      screen.getByDisplayValue(
+        'cd ~/code/flare && tmux new -A -s Fix-login claude --worktree Fix-login \\; set -q mouse on'
+      )
+    ).toBeOnTheScreen();
+
+    // Only Claude Code can.
+    await user.press(screen.getByRole('radio', { name: 'Codex' }));
+    expect(
+      screen.queryByRole('switch', { name: 'Work in its own git worktree' })
+    ).not.toBeOnTheScreen();
+    expect(
+      screen.getByDisplayValue(
+        'cd ~/code/flare && tmux new -A -s Fix-login codex \\; set -q mouse on'
+      )
+    ).toBeOnTheScreen();
+
+    await user.press(screen.getByRole('radio', { name: 'Claude Code' }));
+    await user.press(screen.getByRole('button', { name: 'Save' }));
+    const transport = await runShortcut('Fix login');
+    expect(transport.written).toEqual([
+      'cd ~/code/flare && tmux new -A -s Fix-login claude --worktree Fix-login \\; set -q mouse on\r',
+    ]);
   });
 
   it('keeps a command edited by hand, and runs it', async () => {
@@ -153,6 +204,7 @@ describe('agent shortcuts', () => {
       harness: 'claude',
       session: 'zellij',
       skipPermissions: false,
+      worktree: false,
       commandEdited: true,
     });
     const transport = await runShortcut('Janus');
