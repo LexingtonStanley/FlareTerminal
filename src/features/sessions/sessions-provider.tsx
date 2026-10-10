@@ -18,6 +18,7 @@ import { openTransport } from '@/features/terminal/open-transport';
 import { useProtection } from '@/features/vault/use-protection';
 
 import { keepSessionsAlive } from './background';
+import { liveStatus, LIVE_TICK_MS } from './live-status';
 import { watchNetwork } from './network';
 import { answersFor } from './prompts';
 import { SessionManager, type SessionTarget } from './session-manager';
@@ -91,20 +92,31 @@ export function SessionsProvider({ children }: PropsWithChildren) {
     return () => {
       subscription.remove();
       manager.closeAll();
-      keepSessionsAlive(0);
+      keepSessionsAlive(null);
     };
   }, [manager]);
 
-  // Keep the app running in the background while any session is connected (Android).
+  // Keep the app running in the background while any session is connected (Android), its
+  // notification saying what the agents are doing: redrawn as that changes, and each minute
+  // while one works, for its time.
   const sessions = useSyncExternalStore(
     manager.subscribe,
     manager.getSnapshot,
     manager.getSnapshot
   );
-  const live = sessions.filter(
-    ({ status, reconnecting }) => status.state !== 'closed' || reconnecting
-  ).length;
-  useEffect(() => keepSessionsAlive(live), [live]);
+  useEffect(() => {
+    const post = () =>
+      keepSessionsAlive(
+        liveStatus(
+          sessions.map((session) => ({ ...session, hidden: !!scopeOf(session.connectionId) })),
+          Date.now()
+        )
+      );
+    post();
+    if (!sessions.some(({ workingSince }) => workingSince)) return;
+    const timer = setInterval(post, LIVE_TICK_MS);
+    return () => clearInterval(timer);
+  }, [sessions, scopeOf]);
 
   return <SessionsContext value={manager}>{children}</SessionsContext>;
 }

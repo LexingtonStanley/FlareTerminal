@@ -672,7 +672,25 @@ describe('SessionManager', () => {
       await parsed(manager, id);
 
       expect(session(id).attention?.kind).toBe('question');
+      expect(session(id).workingSince).toBeNull();
       expect(timers.some((timer) => timer.ms === FINISH_SETTLE_MS && !timer.cancelled)).toBe(false);
+    });
+
+    it('knows since when the agent has been working, until it stops', async () => {
+      const { manager, transports, timers, session, id, advance } = await working();
+      expect(session(id).workingSince).toBe(1_000_000);
+
+      advance(65_000);
+      transports[0].output(SPINNER(66));
+      await parsed(manager, id);
+      expect(session(id).workingSince).toBe(1_000_000);
+
+      transports[0].output('\x1b[2J\x1b[H\u23fa Done.\r\n');
+      await parsed(manager, id);
+      // Not until it has stayed gone.
+      expect(session(id).workingSince).toBe(1_000_000);
+      timers.find((timer) => timer.ms === FINISH_SETTLE_MS)!.run();
+      expect(session(id).workingSince).toBeNull();
     });
   });
 

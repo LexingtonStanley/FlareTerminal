@@ -8,17 +8,24 @@ type FakeService = {
   calls: string[];
 };
 
+jest.mock('expo-linking', () => ({
+  createURL: (path: string) => `flareterminal://${path.replace(/^\//, '')}`,
+}));
+
 jest.mock('react-native-background-actions', () => {
   const fake = {
     running: false,
     calls: [] as string[],
     isRunning: () => fake.running,
-    async start(_task: () => Promise<void>, options: { taskDesc: string }) {
+    async start(
+      _task: () => Promise<void>,
+      options: { taskTitle: string; taskDesc: string; linkingURI: string }
+    ) {
       fake.running = true;
-      fake.calls.push(`start: ${options.taskDesc}`);
+      fake.calls.push(`start: ${options.taskTitle} | ${options.taskDesc} → ${options.linkingURI}`);
     },
-    async updateNotification({ taskDesc }: { taskDesc: string }) {
-      fake.calls.push(`update: ${taskDesc}`);
+    async updateNotification({ taskTitle, taskDesc }: { taskTitle: string; taskDesc: string }) {
+      fake.calls.push(`update: ${taskTitle} | ${taskDesc}`);
     },
     async stop() {
       fake.running = false;
@@ -33,18 +40,25 @@ const service = jest.requireMock<{ default: FakeService }>(
 ).default;
 const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-it('runs the foreground service while sessions are live, in order', async () => {
-  keepSessionsAlive(0);
-  keepSessionsAlive(1);
-  keepSessionsAlive(2);
-  keepSessionsAlive(0);
-  keepSessionsAlive(1);
+const working = { title: 'Janus is working', text: 'For 12m' };
+const needs = { title: 'Janus needs you', text: 'Do you want to make this edit?' };
+
+it('runs the foreground service while sessions are open, its notification the status', async () => {
+  keepSessionsAlive(null);
+  keepSessionsAlive(working);
+  keepSessionsAlive({ ...working });
+  keepSessionsAlive(needs);
+  keepSessionsAlive(null);
+  keepSessionsAlive(working);
   await settled();
 
   expect(service.calls).toEqual([
-    'start: 1 session connected',
-    'update: 2 sessions connected',
+    // The channel is named after what it starts with, so that stays the same.
+    'start: Flare Terminal | Keeps your sessions connected → flareterminal://inbox',
+    'update: Janus is working | For 12m',
+    'update: Janus needs you | Do you want to make this edit?',
     'stop',
-    'start: 1 session connected',
+    'start: Flare Terminal | Keeps your sessions connected → flareterminal://inbox',
+    'update: Janus is working | For 12m',
   ]);
 });

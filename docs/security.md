@@ -57,7 +57,8 @@ its login for the life of its connection.
 A connection or group can require the lock every time you come back to its sessions
 (`AccessGuard`, `src/app/session/[id].tsx`). Their sessions keep running. While locked, their
 screen isn't shown, and their alerts show only "Needs your attention" in lists, banners and
-notifications. Moving between sessions of the same protected group doesn't ask again; going
+notifications. Android's live status (the ongoing notification) leaves their names and
+questions out too, as "A session needs you". Moving between sessions of the same protected group doesn't ask again; going
 anywhere else, or leaving the app, does.
 
 A connection can also be set not to stay connected: its sessions close when you leave them or

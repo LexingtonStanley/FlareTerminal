@@ -35,6 +35,9 @@ web build), started from the RapidAppToolkit template.
 - **Agent alerts.** When an agent rings the bell or sends a terminal notification (OSC 9, 777
   or 99), the app flags the session, shows a banner on other screens, and posts a phone
   notification while the app is in the background.
+- **Live status (Android).** While sessions are open, the ongoing notification says what the
+  agents are doing: "Janus needs you" with its question, "Janus is working · For 12m", or
+  "Janus finished" with its last line. A tap opens the inbox.
 - **Previews of what your agent is building.** When a dev server prints
   `http://localhost:5173`, tap the link (or the preview button) and the page opens in the app,
   forwarded through the session's SSH connection like `ssh -L`. Back, forward, reload and the
@@ -295,7 +298,8 @@ Thumb-Key, Unexpected Keyboard and Termux's extra keys.
 1. Mosh-style resilience: keep a session through a network change instead of reconnecting
    (mosh, or a relay on the host).
 2. Agent features: alerts that reach the phone while the app is suspended (a small relay or
-   push from the host); opening an agent's HTML file in the phone's own browser.
+   push from the host), which would also keep an iOS Live Activity current; opening an
+   agent's HTML file in the phone's own browser.
 3. Jump hosts (and importing them from `~/.ssh/config`), port forwarding beyond previews.
 4. Touch selection, pinch to zoom, and a WebGL renderer.
 
