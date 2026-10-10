@@ -20,6 +20,10 @@ web build), started from the RapidAppToolkit template.
   runs in tmux or zellij over SSH, it reads their whole history (the newest 10,000 lines), not
   just the screen, with one read-only `sh` script beside the session
   (`src/features/reading/capture.ts`); chips at the top switch to the host's other sessions.
+- **While you were away.** Come back to a session that kept writing and a chip at the top
+  says how many lines arrived; a tap scrolls back to where you left off. When the agent runs
+  in tmux or zellij, the chip opens reading mode at that place instead, with just what's new
+  (found by matching what was on screen when you left, `src/features/sessions/away.ts`).
 - **Shortcuts.** One tap connects and runs a command. An agent shortcut takes a folder, a
   name, the agent (Claude Code, Codex, Hermes or pi), a tmux or zellij session and whether to
   skip permission prompts, and writes the command, which stays yours to edit. Any other

@@ -66,6 +66,12 @@ export function cleanLine(line: string): string {
   return line.replace(DECORATION, ' ').replace(/\s+/g, ' ').trim();
 }
 
+/** Whether a line is chrome: a status bar or key hints, not what the program wrote. */
+export function isChrome(line: string): boolean {
+  const cleaned = cleanLine(line);
+  return CHROME.some((pattern) => pattern.test(cleaned));
+}
+
 /** Whether a line carries content: at least three letters or digits and not chrome. */
 export function isMeaningful(line: string): boolean {
   const cleaned = cleanLine(line);

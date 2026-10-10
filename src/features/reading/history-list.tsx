@@ -34,18 +34,25 @@ function useLineRenderer() {
 /**
  * A session's history, newest at the bottom and shown first: paragraphs as selectable text
  * in the terminal's colours, and tool calls with their output folded to its first lines.
+ * `fromStart` shows the first block first instead, to read what's new in order.
  */
-export function HistoryList({ blocks }: { blocks: Block[] }) {
+export function HistoryList({
+  blocks,
+  fromStart = false,
+}: {
+  blocks: Block[];
+  fromStart?: boolean;
+}) {
   const terminal = useTerminalTheme();
   const { fontSize } = usePreferences();
   const { mono } = useType();
   const renderLines = useLineRenderer();
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
   // Inverted, so it opens at the newest output, like the terminal.
-  const items = useMemo<Item[]>(
-    () => blocks.map((block, index) => ({ key: String(index), block })).reverse(),
-    [blocks]
-  );
+  const items = useMemo<Item[]>(() => {
+    const items = blocks.map((block, index) => ({ key: String(index), block }));
+    return fromStart ? items : items.reverse();
+  }, [blocks, fromStart]);
   const text: TextStyle = {
     ...mono(),
     fontSize,
@@ -63,7 +70,7 @@ export function HistoryList({ blocks }: { blocks: Block[] }) {
 
   return (
     <FlatList
-      inverted
+      inverted={!fromStart}
       data={items}
       extraData={open}
       keyExtractor={(item) => item.key}

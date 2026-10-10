@@ -11,7 +11,8 @@ import type { TerminalViewProps } from '@/features/terminal/terminal-view';
  * reports a press on it as a tap. Each web link in the output is also a link (named by its
  * URL) that reports a tap through onOpenLink, as xterm's link addon does. Two buttons stand
  * for swipes: "Swipe back" (one that scrolled back into the history) and "Swipe on a
- * full-screen program" (one that couldn't scroll).
+ * full-screen program" (one that couldn't scroll). After scrollUp, "Lines scrolled up" says
+ * how far.
  *
  *   jest.mock('@/features/terminal/terminal-view', () =>
  *     jest.requireActual('@/test-utils/fake-terminal-view')
@@ -30,6 +31,7 @@ export default function FakeTerminalView({
   onScrollUnavailable,
 }: TerminalViewProps) {
   const [output, setOutput] = useState('');
+  const [scrolledUp, setScrolledUp] = useState<number | null>(null);
   const links = [...new Set(output.match(/https?:\/\/[^\s]+/g) ?? [])];
 
   useImperativeHandle(ref, () => ({
@@ -38,6 +40,7 @@ export default function FakeTerminalView({
     pressKey: (key) => onInput(sequenceForKey(key)),
     paste: (text: string) => onInput(text),
     reset: () => setOutput(''),
+    scrollUp: (lines: number) => setScrolledUp(lines),
   }));
 
   useEffect(() => {
@@ -54,6 +57,7 @@ export default function FakeTerminalView({
       {links.map((url) => (
         <Text key={url} role="link" aria-label={url} onPress={() => onOpenLink(url)} />
       ))}
+      {scrolledUp !== null ? <Text aria-label="Lines scrolled up">{scrolledUp}</Text> : null}
       <Text role="button" aria-label="Swipe back" onPress={() => onScrollBack?.()} />
       <Text
         role="button"

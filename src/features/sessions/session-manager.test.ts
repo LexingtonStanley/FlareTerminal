@@ -518,4 +518,138 @@ describe('SessionManager', () => {
       expect(timers.some((timer) => timer.ms === FINISH_SETTLE_MS && !timer.cancelled)).toBe(false);
     });
   });
+
+  describe('while you were away', () => {
+    const numbered = (from: number, count: number) =>
+      Array.from({ length: count }, (_, i) => `line ${from + i}\r\n`).join('');
+
+    /** A session on screen, as useSessionView shows it, that has written `text`. */
+    async function watching(text = numbered(0, 5)) {
+      const harness = setup();
+      const { manager, transports, view } = harness;
+      const id = manager.start({ connectionId: 'box', name: 'Box', command: null });
+      let sink = view();
+      manager.setFocused(id);
+      manager.attach(id, sink, SIZE);
+      transports[0].status({ state: 'connected' });
+      transports[0].output(text);
+      await parsed(manager, id);
+      return {
+        ...harness,
+        id,
+        leave() {
+          manager.detach(id, sink);
+          manager.setFocused(null);
+        },
+        /** Opens the session again; resolves once it has said what arrived. */
+        async comeBack() {
+          sink = view();
+          manager.setFocused(id);
+          manager.attach(id, sink, SIZE);
+          await parsed(manager, id);
+        },
+      };
+    }
+
+    it('counts the lines that scrolled past while the person looked elsewhere', async () => {
+      const { manager, transports, advance, session, id, leave, comeBack } = await watching();
+
+      leave();
+      advance(60_000);
+      transports[0].output(numbered(5, 40));
+      await comeBack();
+
+      expect(session(id).away).toEqual({
+        since: 1_000_000,
+        lines: 40,
+        more: false,
+        screen: [...Array.from({ length: 5 }, (_, i) => `line ${i}`), ...Array(7).fill('')],
+      });
+      // Back up to where they left off (line 5), two lines early: 31 above the bottom screen.
+      expect(manager.awayScroll(id)).toBe(31);
+      const buffer = manager.screen(id)!.buffer.active;
+      expect(buffer.getLine(buffer.baseY - 31)?.translateToString(true)).toBe('line 3');
+
+      manager.dismissAway(id);
+      expect(session(id).away).toBeNull();
+      expect(manager.awayScroll(id)).toBeNull();
+    });
+
+    it('says nothing after a short look elsewhere, or when the new lines are all in view', async () => {
+      const { transports, advance, session, id, leave, comeBack } = await watching();
+
+      leave();
+      advance(5_000);
+      transports[0].output(numbered(5, 40));
+      await comeBack();
+      expect(session(id).away).toBeNull();
+
+      leave();
+      advance(60_000);
+      transports[0].output(numbered(45, 3));
+      await comeBack();
+      expect(session(id).away).toBeNull();
+    });
+
+    it('counts time in another app as away', async () => {
+      const { manager, transports, advance, session, id } = await watching();
+
+      manager.setAppActive(false);
+      advance(60_000);
+      transports[0].output(numbered(5, 40));
+      manager.setAppActive(true);
+      await parsed(manager, id);
+
+      expect(session(id).away?.lines).toBe(40);
+    });
+
+    it('forgets it when the person leaves again', async () => {
+      const { transports, advance, session, id, leave, comeBack } = await watching();
+      leave();
+      advance(60_000);
+      transports[0].output(numbered(5, 40));
+      await comeBack();
+      expect(session(id).away).not.toBeNull();
+
+      leave();
+
+      expect(session(id).away).toBeNull();
+    });
+
+    it('jumps to the oldest line kept when the place has left the scrollback', async () => {
+      const { manager, transports, advance, session, id, leave, comeBack } = await watching();
+
+      leave();
+      advance(60_000);
+      transports[0].output(numbered(5, 5100));
+      await comeBack();
+
+      expect(session(id).away).toMatchObject({ lines: 5011, more: true });
+      expect(manager.awayScroll(id)).toBe(manager.screen(id)!.buffer.active.baseY);
+    });
+
+    it('notices a full-screen program drawing something new, but not its clock', async () => {
+      const screen = (body: string, time: string) =>
+        `\x1b[H\x1b[2J${body}\x1b[12;1H[Janus] 0:claude*  "devbox" ${time}`;
+      const { manager, transports, advance, session, id, leave, comeBack } = await watching(
+        `\x1b[?1049h${screen('Working on the failing test', '14:05')}`
+      );
+
+      leave();
+      advance(60_000);
+      transports[0].output(screen('Working on the failing test', '14:06'));
+      await comeBack();
+      expect(session(id).away).toBeNull();
+
+      leave();
+      advance(60_000);
+      transports[0].output(screen('All 41 tests pass.', '14:07'));
+      await comeBack();
+      const away = session(id).away!;
+      expect(away.lines).toBeNull();
+      expect(away.screen[0]).toBe('Working on the failing test');
+      // tmux keeps the lines: reading mode finds them, not a jump.
+      expect(manager.awayScroll(id)).toBeNull();
+    });
+  });
 });
