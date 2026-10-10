@@ -21,8 +21,15 @@ export type TestServer = {
   tunnels: { host: string; port: number }[];
   /** Commands clients ran (exec), in order. */
   commands: string[];
+  /** Times a client asked for agent forwarding (auth-agent-req@openssh.com). */
+  agentRequests: () => number;
   /** The server side of the latest shell. */
   shell: () => ServerChannel;
+  /**
+   * Opens an agent channel to the latest client, as sshd does when a program connects to
+   * $SSH_AUTH_SOCK. Rejects when the client refuses it.
+   */
+  openAgentChannel: () => Promise<ServerChannel>;
   rekey: () => Promise<void>;
   close: () => Promise<void>;
 };
@@ -49,6 +56,7 @@ export async function startTestSshServer({
   algorithms,
   forwarding = true,
   commands = true,
+  agent = false,
   home,
   authenticate = (ctx) =>
     ctx.method === 'password' && ctx.password === 'correct-horse'
@@ -61,6 +69,8 @@ export async function startTestSshServer({
   forwarding?: boolean;
   /** Whether it runs commands (exec) with this machine's /bin/sh, like sshd. */
   commands?: boolean;
+  /** Whether it agrees to forward the agent (AllowAgentForwarding). */
+  agent?: boolean;
   /** The commands' $HOME (a test can't change this process's: Jest gives it a copy). */
   home?: string;
   authenticate?: (ctx: AuthContext) => void;
@@ -68,7 +78,7 @@ export async function startTestSshServer({
   const keys = generateHostKey(hostKey);
 
   let latestShell: ServerChannel | null = null;
-  let latestConnection: { rekey(cb: (err?: Error) => void): void } | null = null;
+  let latestConnection: ServerInternals | null = null;
   const state = {
     ptys: [] as TestServer['ptys'],
     resizes: [] as TestServer['resizes'],
@@ -76,6 +86,7 @@ export async function startTestSshServer({
     tunnels: [] as TestServer['tunnels'],
     commands: [] as string[],
   };
+  let agentRequests = 0;
 
   const server = new Server({ hostKeys: [keys.private], algorithms }, (connection) => {
     latestConnection = connection as unknown as typeof latestConnection;
@@ -101,6 +112,12 @@ export async function startTestSshServer({
       }
       connection.on('session', (accept) => {
         const session = accept();
+        if (agent) {
+          session.on('auth-agent', (acceptAgent) => {
+            agentRequests++;
+            acceptAgent?.();
+          });
+        }
         session.on('pty', (acceptPty, _reject, info) => {
           state.ptys.push({ term: info.term, cols: info.cols, rows: info.rows });
           acceptPty?.();
@@ -153,10 +170,12 @@ export async function startTestSshServer({
     port: (server.address() as AddressInfo).port,
     publicKey: keys.public,
     ...state,
+    agentRequests: () => agentRequests,
     shell: () => {
       if (!latestShell) throw new Error('No shell yet');
       return latestShell;
     },
+    openAgentChannel: () => openAgentChannel(latestConnection!),
     rekey: () =>
       new Promise((resolve, reject) =>
         latestConnection!.rekey((error) => (error ? reject(error) : resolve()))
@@ -165,6 +184,28 @@ export async function startTestSshServer({
   };
   servers.push(testServer);
   return testServer;
+}
+
+/** The parts of ssh2's server connection these tests reach into. */
+type ServerInternals = {
+  rekey(cb: (err?: Error) => void): void;
+  _chanMgr: { add(open: (err: Error | undefined, stream: ServerChannel) => void): number };
+  _protocol: { openssh_authAgent(chan: number, window: number, packetSize: number): void };
+};
+
+/**
+ * ssh2's server can't open agent channels itself (it only answers the request), so this
+ * opens one the way it opens its other server-side channels (openChannel in its server.js).
+ */
+function openAgentChannel(connection: ServerInternals): Promise<ServerChannel> {
+  return new Promise((resolve, reject) => {
+    const open = Object.assign(
+      (err: Error | undefined, stream: ServerChannel) => (err ? reject(err) : resolve(stream)),
+      { type: 'auth-agent@openssh.com' }
+    );
+    const channel = connection._chanMgr.add(open);
+    connection._protocol.openssh_authAgent(channel, 2 * 1024 * 1024, 32 * 1024);
+  });
 }
 
 const servers: TestServer[] = [];

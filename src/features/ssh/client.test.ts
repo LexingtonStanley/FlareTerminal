@@ -13,6 +13,7 @@ import {
   testSockets as sockets,
   waitFor,
   type HostKeyType,
+  type TestServer,
 } from '@/test-utils/ssh-server';
 import { generateTestKey, type TestKeyType } from '@/test-utils/ssh-keys';
 
@@ -447,6 +448,82 @@ describe('SshClient against the ssh2 server', () => {
     await waitFor(() => output.text.includes('echo:still here'));
     const outcome = await Promise.race([closed, Promise.resolve('open')]);
     expect(outcome).toBe('open');
+  });
+
+  describe('agent forwarding', () => {
+    async function signedIn(server: TestServer, options: Partial<SshClientOptions> = {}) {
+      const { client } = await connect(server.port, { password: 'correct-horse', ...options });
+      await client.handshake();
+      await client.authenticate();
+      return client;
+    }
+
+    it('asks the host to forward the agent, and passes on the channels it opens', async () => {
+      const server = await startServer({ agent: true });
+      const channels: SshChannel[] = [];
+      const client = await signedIn(server, {
+        onAgentChannel: (channel) => channels.push(channel),
+      });
+
+      await client.openShell({ term: 'xterm-256color', cols: 80, rows: 24, forwardAgent: true });
+      expect(client.agentForwarding).toBe(true);
+      expect(server.agentRequests()).toBe(1);
+
+      const stream = await server.openAgentChannel();
+      await waitFor(() => channels.length === 1);
+      const [channel] = channels;
+      const received: string[] = [];
+      channel.onData = (data) => received.push(fromUtf8(data));
+      const sent: Buffer[] = [];
+      stream.on('data', (data: Buffer) => sent.push(data));
+      stream.write('request');
+      channel.write(utf8('answer'));
+
+      await waitFor(() => received.join('') === 'request');
+      await waitFor(() => Buffer.concat(sent).toString() === 'answer');
+      // The session it is, for the agent: the host key that signed it, and its id.
+      const parsed = utils.parseKey(server.publicKey);
+      if (parsed instanceof Error) throw parsed;
+      expect(client.session).toEqual({
+        hostKey: new Uint8Array(parsed.getPublicSSH()),
+        sessionId: expect.any(Uint8Array),
+      });
+    });
+
+    it('refuses agent channels it didn’t ask for', async () => {
+      const server = await startServer({ agent: true });
+      const onAgentChannel = jest.fn();
+      const client = await signedIn(server, { onAgentChannel });
+      await client.openShell({ term: 'xterm-256color', cols: 80, rows: 24 });
+
+      await expect(server.openAgentChannel()).rejects.toMatchObject({
+        reason: OPEN_FAILURE.ADMINISTRATIVELY_PROHIBITED,
+      });
+      expect(server.agentRequests()).toBe(0);
+      expect(client.agentForwarding).toBeNull();
+      expect(onAgentChannel).not.toHaveBeenCalled();
+    });
+
+    it('opens the shell without it when the host won’t forward the agent', async () => {
+      const server = await startServer({ agent: false });
+      const onAgentChannel = jest.fn();
+      const client = await signedIn(server, { onAgentChannel });
+
+      const channel = await client.openShell({
+        term: 'xterm-256color',
+        cols: 80,
+        rows: 24,
+        forwardAgent: true,
+      });
+
+      expect(client.agentForwarding).toBe(false);
+      channel.write(utf8('ls\n'));
+      await waitFor(() => server.received.includes('ls\n'));
+      await expect(server.openAgentChannel()).rejects.toMatchObject({
+        reason: OPEN_FAILURE.ADMINISTRATIVELY_PROHIBITED,
+      });
+      expect(onAgentChannel).not.toHaveBeenCalled();
+    });
   });
 
   it('drops a connection that doesn’t answer the check, as a network failure', async () => {

@@ -15,6 +15,10 @@ export function postAgentNotification(
   _questionAt?: number
 ) {}
 
+export function postKeyNotification(_sessionId: string, _title: string, _body: string) {}
+
+export function dismissKeyNotification(_sessionId: string) {}
+
 export function postFileNotification(
   _connectionId: string,
   _title: string,

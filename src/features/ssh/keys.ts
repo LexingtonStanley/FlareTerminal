@@ -2,7 +2,7 @@ import { quote } from '@/features/shortcuts/shell';
 import { getSecret, setSecret } from '@/lib/secrets';
 import { readJson, writeJson } from '@/lib/storage';
 
-import { loadAppKey } from './app-key';
+import { createAppKey, loadAppKey } from './app-key';
 import { fromBase64, SshReader, toBase64 } from './bytes';
 import { fingerprint } from './host-keys';
 import {
@@ -37,6 +37,8 @@ const STORAGE_KEY = 'flare.ssh-keys.v1';
 export const APP_KEY_ID = 'flare';
 /** A connection's key choice for "don't offer a key". Absent means every key. */
 export const NO_KEY = 'none';
+export const APP_KEY_NAME = 'Flare key';
+const APP_KEY_COMMENT = 'flare-terminal';
 
 const keySecret = (id: string) => `ssh.key.${id}`;
 
@@ -57,6 +59,28 @@ export function describeSavedKey(id: string, name: string, key: UserKey, comment
 
 export function readImportedKeys(): SavedKey[] {
   return readJson<SavedKey[]>(STORAGE_KEY) ?? [];
+}
+
+/** The app's own key as listed, or null before it's made or while the vault is sealed. */
+export function readAppKey(): SavedKey | null {
+  const key = loadAppKey();
+  return key ? describeSavedKey(APP_KEY_ID, APP_KEY_NAME, key, APP_KEY_COMMENT) : null;
+}
+
+export function createAppKeyEntry(): SavedKey {
+  return describeSavedKey(APP_KEY_ID, APP_KEY_NAME, createAppKey(), APP_KEY_COMMENT);
+}
+
+/** Every key, the app's first, as lists show them. */
+export function savedKeys(): SavedKey[] {
+  const appKey = readAppKey();
+  return appKey ? [appKey, ...readImportedKeys()] : readImportedKeys();
+}
+
+/** A listed key's public blob and comment, from its authorized_keys line. */
+export function publicHalf({ publicKey }: SavedKey): { blob: Uint8Array; comment: string } {
+  const [, base64 = '', ...comment] = publicKey.split(' ');
+  return { blob: fromBase64(base64), comment: comment.join(' ') };
 }
 
 export function writeImportedKeys(keys: SavedKey[]): void {

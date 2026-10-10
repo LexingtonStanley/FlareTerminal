@@ -164,7 +164,9 @@ src/features/ssh/        SSH-2 client (client.ts), packets and ciphers, host key
                          (user-key.ts: Ed25519, ECDSA, RSA signing), OpenSSH key files
                          (private-key.ts, bcrypt-pbkdf.ts), the person's keys (keys.ts, provider,
                          Settings card, import form), the app's key, known hosts, socket.ts (TCP;
-                         socket.web.ts refuses)
+                         socket.web.ts refuses), agent forwarding (agent.ts: the agent protocol
+                         and session binding; forwarded-agent.ts: the person's keys behind the
+                         prompt; key-request.ts: what the prompt says, code hosts' fingerprints)
 src/features/sessions/   SessionManager (every open session, headless xterm), alerts, inbox.ts
                          (screen preview, needs you/finished/working/idle), prompts.ts
                          (read off the screen: approval menus, [y/N], an agent's working
@@ -172,7 +174,8 @@ src/features/sessions/   SessionManager (every open session, headless xterm), al
                          person was away, and where it starts in a history), provider,
                          network.ts (the phone's network, from expo-network), live-status.ts
                          (the Android service notification's text), useSessionView,
-                         session strip, status, attention banner, scroll hint, away chip
+                         session strip, status, attention banner, scroll hint, away chip,
+                         key-request-dialog (Allow/Deny when a host asks to use a key)
 src/features/reading/    Reading mode: capture.ts (the script that lists tmux/zellij sessions
                          and prints one's history; which session a command opens), history.ts
                          (SGR codes or an xterm buffer as styled lines), transcript.ts (tool

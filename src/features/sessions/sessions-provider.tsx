@@ -11,8 +11,10 @@ import { AppState, Platform } from 'react-native';
 import { jumpHosts } from '@/features/connections/connections';
 import { useConnections } from '@/features/connections/connections-provider';
 import {
+  dismissKeyNotification,
   ensureNotificationPermission,
   postAgentNotification,
+  postKeyNotification,
   useNotificationAnswers,
 } from '@/features/notifications/notify';
 import { openTransport } from '@/features/terminal/open-transport';
@@ -36,6 +38,17 @@ export function SessionsProvider({ children }: PropsWithChildren) {
         // Both replaced below once the saved connections are known.
         openTransport: () => null,
         onAttention: () => {},
+        // The app asks on screen (KeyRequestDialog); away from it, a notification says so.
+        onKeyRequests: (session, appActive) => {
+          if (!session.keyRequests?.length) dismissKeyNotification(session.id);
+          else if (!appActive) {
+            postKeyNotification(
+              session.id,
+              `${session.name} asks to use your SSH key`,
+              'Open Flare to allow or deny it.'
+            );
+          }
+        },
       })
   );
   const scopeOf = useProtection();

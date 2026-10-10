@@ -173,12 +173,42 @@ channel: the jump host relays bytes it can't read, and nothing is decrypted ther
 - **Host keys.** Every hop's key is checked against the phone's known hosts, under that hop's
   own name and port, and a changed key refuses the connection, naming the hop.
 - **Credentials.** Each hop signs in with its own connection's password and keys, which the
-  phone keeps. Nothing is forwarded to the jump host (no agent forwarding), so a compromised
-  jump host can't use your keys. Like a direct session, each hop's password and keys are
+  phone keeps. The agent is never forwarded to a jump host, so a compromised jump host can't
+  use your keys. Like a direct session, each hop's password and keys are
   dropped once it has signed in.
 - **A chain that can't be followed** (a jump host deleted, or jump hosts that go round in a
   circle) doesn't connect at all, rather than reaching the host directly, where its name could
   mean a different computer.
+
+## Agent forwarding
+
+A connection can forward an SSH agent to its computer, like `ssh -A`, so programs there (git,
+ssh) can sign in elsewhere with your keys (`src/features/ssh/agent.ts`). It's off until turned
+on for a connection, and reaches only the computer itself, never its jump hosts.
+
+- **Keys stay on the phone.** The computer can list your keys' public halves and ask for a
+  signature. It can't add, remove or lock keys, or read a private half. A private key is read
+  from the vault only once you allow a signature, for that signature.
+- **Each signature asks you.** The prompt says which key and what for: signing in to a server
+  as a user, a git commit or tag (an SSHSIG signature), or something Flare can't read, which it
+  warns about. It's denied if nobody answers within a minute, when the program asking gives up,
+  and when the session ends or reconnects. Three can wait per session; more are denied without
+  asking.
+- **Which server.** OpenSSH 8.9 and later tell the agent which server they're about to sign in
+  to (`session-bind@openssh.com`), with that server's signature over the session, which Flare
+  checks. The prompt names the server by its host key: github.com, gitlab.com and bitbucket.org
+  by their published fingerprints, computers you trust by your known hosts, anything else by its
+  fingerprint. A sign-in for any session but the one bound last says Flare can't tell which
+  computer it's for, and a host-bound sign-in that names another server is refused. Bindings
+  follow OpenSSH's agent: at most 16, and none after the one a sign-in goes over.
+- **RSA** signs with SHA-2 only; a request for a SHA-1 signature is refused.
+- **Who can ask.** Anyone with root on the computer can ask the forwarded agent while the session
+  is open, as with OpenSSH. The prompt is what stops them: forward the agent only to computers
+  you trust, and deny what you didn't start.
+- **Where the prompt shows.** Over whatever screen is up, but under the app lock: a locked app
+  answers nothing until it's unlocked, and a protected connection's request asks for the lock
+  before showing what it wants. Away from the app, a notification says a session is asking and
+  opens the app; it has no buttons, so nothing is allowed from the lock screen.
 
 ## Importing an SSH config
 

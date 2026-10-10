@@ -83,19 +83,21 @@ describe('toConnection', () => {
       username: 'lexde',
       keyId: null,
       jumpId: null,
+      forwardAgent: false,
       groupId: null,
       protected: false,
       keepAlive: true,
     });
   });
 
-  it('keeps the chosen key and jump host, and reads them back for editing', () => {
+  it('keeps the chosen key, jump host and agent forwarding, and reads them back for editing', () => {
     const connection = toConnection(
-      ssh({ host: 'lexbox', username: 'a', keyId: 'k1', jumpId: 'bastion' }),
+      ssh({ host: 'lexbox', username: 'a', keyId: 'k1', jumpId: 'bastion', forwardAgent: true }),
       'c1'
     );
-    expect(connection).toMatchObject({ keyId: 'k1', jumpId: 'bastion' });
-    expect(toInput(connection, null)).toMatchObject({ keyId: 'k1', jumpId: 'bastion' });
+    const chosen = { keyId: 'k1', jumpId: 'bastion', forwardAgent: true };
+    expect(connection).toMatchObject(chosen);
+    expect(toInput(connection, null)).toMatchObject(chosen);
   });
 
   it('keeps the group, protection and keep-alive, and reads them back for editing', () => {

@@ -1,3 +1,4 @@
+import { AgentConnection, type AgentBackend } from '@/features/ssh/agent';
 import { toBase64 } from '@/features/ssh/bytes';
 import {
   ChannelOpenError,
@@ -55,6 +56,11 @@ export type SshTransportOptions = {
   keepaliveInterval?: number;
   /** Computers to go through, the one reached directly first. */
   jumps?: SshJump[];
+  /**
+   * Forwards this agent to the host, like `ssh -A` (never to jump hosts): programs there can
+   * ask it to sign with the person's keys.
+   */
+  agent?: AgentBackend;
 };
 
 /** One computer on the way: a jump host, named, or the host itself (name null). */
@@ -119,6 +125,8 @@ export class SshTransport implements TerminalTransport {
   private readonly decoder = new TextDecoder();
   /** Ends each tunnel and command; the client drops channels silently with the connection. */
   private readonly tunnels = new Set<() => void>();
+  /** Programs' connections to the forwarded agent, closed with the session. */
+  private readonly agents = new Set<AgentConnection>();
 
   private readonly options: Omit<SshTransportOptions, 'password' | 'userKeys' | 'jumps'>;
   private readonly jumps: Hop[];
@@ -161,6 +169,7 @@ export class SshTransport implements TerminalTransport {
     this.reader?.resolve(null);
     this.closeClients();
     this.endTunnels();
+    this.closeAgents();
   }
 
   checkAlive() {
@@ -227,12 +236,46 @@ export class SshTransport implements TerminalTransport {
     [...this.tunnels].forEach((end) => end());
   }
 
+  /** A program on the host connected to the forwarded agent. */
+  private serveAgent(client: SshClient, channel: SshChannel) {
+    const { agent } = this.options;
+    const session = client.session;
+    if (!agent || !session || this.finished || this.closedByUs) {
+      channel.close();
+      return;
+    }
+    const connection = new AgentConnection(
+      (bytes) => channel.write(bytes),
+      agent,
+      session,
+      () => channel.close()
+    );
+    this.agents.add(connection);
+    const end = () => {
+      connection.close();
+      this.agents.delete(connection);
+    };
+    channel.onData = (bytes) => connection.receive(bytes);
+    // The program closed its end; requests it left waiting no longer need an answer.
+    channel.onEof = () => {
+      end();
+      channel.close();
+    };
+    channel.onClose = end;
+  }
+
+  private closeAgents() {
+    this.agents.forEach((connection) => connection.close());
+    this.agents.clear();
+  }
+
   private print(text: string) {
     this.listener.onData(text);
   }
 
   private finish(message: string, retry = false) {
     this.endTunnels();
+    this.closeAgents();
     this.credentials = null;
     if (this.finished || this.closedByUs) return;
     this.finished = true;
@@ -272,8 +315,14 @@ export class SshTransport implements TerminalTransport {
         term: 'xterm-256color',
         cols: this.size.cols,
         rows: this.size.rows,
+        forwardAgent: !!this.options.agent,
       });
       this.channel = channel;
+      if (client.agentForwarding === false) {
+        this.print(
+          `${DIM}This computer's SSH server doesn't allow agent forwarding (AllowAgentForwarding), so commands here can't use your keys.${RESET}\r\n`
+        );
+      }
       channel.onData = (bytes) => {
         const text = this.decoder.decode(bytes, { stream: true });
         if (text) this.listener.onData(text);
@@ -347,6 +396,11 @@ export class SshTransport implements TerminalTransport {
       onBanner: (text) => this.print(text.replace(/\r?\n/g, '\r\n')),
       // Unclean: the socket dropped or the host stopped answering keepalives.
       onClose: (reason) => this.finish(about(reason.message), !reason.clean),
+      // Only to the host itself, as `ssh -J` does: jump hosts just relay.
+      onAgentChannel:
+        name === null && this.options.agent
+          ? (channel) => this.serveAgent(opened, channel)
+          : undefined,
     });
     client = opened;
     if (name !== null) this.jumpClients.push(opened);

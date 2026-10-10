@@ -43,3 +43,9 @@ export const knownHosts: KnownHosts = {
     writeJson(STORAGE_KEY, all);
   },
 };
+
+/** The trusted computer whose host key is `key` (base64), as known_hosts names it, or null. */
+export function trustedHostWith(key: string): string | null {
+  const found = Object.entries(load()).find(([, entry]) => entry.key === key);
+  return found?.[0] ?? null;
+}

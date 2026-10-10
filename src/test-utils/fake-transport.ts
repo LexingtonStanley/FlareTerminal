@@ -1,4 +1,5 @@
 import type { Connection } from '@/features/connections/connections';
+import type { KeyRequest } from '@/features/ssh/key-request';
 import type { JumpHost } from '@/features/terminal/open-transport';
 import type {
   InputMode,
@@ -105,6 +106,16 @@ export class FakeTransport implements TerminalTransport {
   /** The host asks for a password ('secret'), or stops asking ('normal'). */
   inputMode(mode: InputMode) {
     this.listener.onInputMode?.(mode);
+  }
+  /**
+   * A program on the host asks to use a key (agent forwarding): the person's answer, and a
+   * way to play the program giving up.
+   */
+  askForKey(request: KeyRequest): { answer: Promise<boolean>; giveUp(): void } {
+    const controller = new AbortController();
+    const answer = this.listener.onKeyRequest?.(request, controller.signal);
+    if (!answer) throw new Error('Nothing listens for key requests');
+    return { answer, giveUp: () => controller.abort() };
   }
 }
 

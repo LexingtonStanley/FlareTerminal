@@ -3,6 +3,7 @@ import {
   type Connection,
   type SshConnection,
 } from '@/features/connections/connections';
+import { forwardedAgent } from '@/features/ssh/forwarded-agent';
 import { keysForConnection } from '@/features/ssh/keys';
 import { knownHosts } from '@/features/ssh/known-hosts';
 import { openSocket } from '@/features/ssh/socket';
@@ -39,6 +40,10 @@ export function openTransport(
           password: jumpPassword,
           userKeys: keysForConnection(jump.keyId),
         })),
+        agent:
+          connection.forwardAgent && listener.onKeyRequest
+            ? forwardedAgent(listener.onKeyRequest.bind(listener))
+            : undefined,
       },
       listener
     );

@@ -19,6 +19,7 @@ import { ConnectionsProvider } from '@/features/connections/connections-provider
 import { GroupsProvider } from '@/features/groups/groups-provider';
 import { OutboxProvider } from '@/features/outbox/outbox-provider';
 import { AttentionBanner } from '@/features/sessions/attention-banner';
+import { KeyRequestDialog } from '@/features/sessions/key-request-dialog';
 import { PromptsProvider } from '@/features/prompts/prompts-provider';
 import { SessionsProvider } from '@/features/sessions/sessions-provider';
 import { PreferencesProvider } from '@/features/settings/preferences-provider';
@@ -160,6 +161,7 @@ function ThemedApp() {
                         />
                       </Stack>
                       <AttentionBanner />
+                      <KeyRequestDialog />
                       <AccessGuard />
                     </KeysProvider>
                   </LockProvider>

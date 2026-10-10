@@ -1,3 +1,5 @@
+import type { KeyRequest } from '@/features/ssh/key-request';
+
 /**
  * A transport carries one terminal session between the app and a host. The terminal
  * view only renders; transports only move bytes. ttyd over WebSocket is the first
@@ -23,6 +25,11 @@ export type TransportListener = {
   onStatus(status: SessionStatus): void;
   /** 'secret' while the transport is reading a password typed into the terminal. */
   onInputMode?(mode: InputMode): void;
+  /**
+   * A program on the host asks to sign with one of the person's keys (SSH agent forwarding).
+   * Resolves true once they allow it. `signal` aborts when the program stops waiting.
+   */
+  onKeyRequest?(request: KeyRequest, signal: AbortSignal): Promise<boolean>;
 };
 
 export type InputMode = 'normal' | 'secret';

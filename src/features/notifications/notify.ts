@@ -89,6 +89,26 @@ export function postAgentNotification(
   });
 }
 
+const keyIdentifierOf = (sessionId: string) => `key-${sessionId}`;
+
+/**
+ * Posts (or replaces) a session's notification that a program there asks to use a key
+ * (agent forwarding). It has no buttons: a tap opens the app, which asks.
+ */
+export function postKeyNotification(sessionId: string, title: string, body: string) {
+  configure();
+  void Notifications.scheduleNotificationAsync({
+    identifier: keyIdentifierOf(sessionId),
+    content: { title, body, data: {} },
+    trigger: Platform.OS === 'android' ? { channelId: CHANNEL_ID } : null,
+  });
+}
+
+/** Takes down a session's key request notification: nothing waits any more. */
+export function dismissKeyNotification(sessionId: string) {
+  void Notifications.dismissNotificationAsync(keyIdentifierOf(sessionId));
+}
+
 /**
  * Posts (or replaces) a host's notification for files its agents sent; a tap opens `fileId`.
  */
