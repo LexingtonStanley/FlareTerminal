@@ -34,6 +34,8 @@ type ConnectionFormProps = {
   onDelete?(): void;
   /** The trusted host key, when one is saved, with a way to forget it. */
   hostKey?: { fingerprint: string; onForget(): void } | null;
+  /** Offers to add the hosts in an SSH config instead (a new connection). */
+  onImport?(): void;
 };
 
 const KIND_OPTIONS: { value: ConnectionKind; label: string }[] = [
@@ -47,6 +49,7 @@ export function ConnectionForm({
   onSubmit,
   onDelete,
   hostKey,
+  onImport,
 }: ConnectionFormProps) {
   const theme = useTheme();
   const { radius } = useShape();
@@ -78,6 +81,22 @@ export function ConnectionForm({
 
   return (
     <Screen scroll edges={['left', 'right', 'bottom']} style={styles.screen}>
+      {onImport ? (
+        <Card style={styles.import}>
+          <ThemedText type="small" themeColor="textSecondary" style={styles.grow}>
+            Have hosts in ~/.ssh/config?
+          </ThemedText>
+          <Button
+            title="Import"
+            label="Import from SSH config"
+            icon="download"
+            variant="secondary"
+            size="small"
+            onPress={onImport}
+          />
+        </Card>
+      ) : null}
+
       <SegmentedControl
         label="Connection type"
         options={KIND_OPTIONS}
@@ -285,7 +304,7 @@ export function ConnectionForm({
 }
 
 /** One choice from a few named options, as a row of chips. */
-function Chips({
+export function Chips({
   label,
   options,
   value,
@@ -348,6 +367,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   actions: { gap: Spacing.two + 2, marginTop: Spacing.two },
+  import: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three },
+  grow: { flex: 1 },
   field: { gap: Spacing.two - 2 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
   chip: {

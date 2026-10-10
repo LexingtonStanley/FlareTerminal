@@ -116,6 +116,11 @@ after a clean install.
    you to trust it. If the key ever changes, it refuses to connect until you forget the old
    one (in the connection's settings).
 
+**Already have hosts in `~/.ssh/config`?** New connection → Import pastes the file, or reads it
+(and the files its `Include` lines name) from a computer you're connected to, and adds a
+connection for each `Host` you tick, with its HostName, User and Port. Hosts reached through
+another (`ProxyJump`) are listed but left unticked: jump hosts aren't supported yet.
+
 With [Tailscale](https://tailscale.com) on the phone and the computer, use the computer's
 Tailscale name (`lexbox`) or IP. Traffic is encrypted twice (SSH inside WireGuard) and sshd
 needn't face the internet.
@@ -254,6 +259,10 @@ host at `/keyboard-preview`.
   (`outbox-watcher.ts`). The phone keeps the newest 50 (`outbox-store.ts`). Markdown becomes
   a page with [marked](https://marked.js.org), its HTML shown as text, and pages show in
   react-native-webview behind a Content-Security-Policy (`page.ts`, `file-frame.tsx`).
+- `src/features/connections/ssh-config.ts` reads an OpenSSH client config the way `ssh`
+  does (first value wins, `Host` patterns with `!`, `Include`, `%h`), checked against
+  OpenSSH 9.6's `ssh -G`. `read-ssh-config.ts` reads `~/.ssh/config` and its includes on a
+  connected host with one read-only `sh -s` script per round of includes.
 - `src/features/preview/` forwards a port for the dev server preview: a listener on the
   phone's 127.0.0.1 (`local-server.ts`) whose connections each open an SSH `direct-tcpip`
   channel to `localhost:<port>` on the host (`forward.ts`), shown in react-native-webview.
@@ -287,7 +296,7 @@ Thumb-Key, Unexpected Keyboard and Termux's extra keys.
    (mosh, or a relay on the host).
 2. Agent features: alerts that reach the phone while the app is suspended (a small relay or
    push from the host); opening an agent's HTML file in the phone's own browser.
-3. Jump hosts, `~/.ssh/config` import, port forwarding beyond previews.
+3. Jump hosts (and importing them from `~/.ssh/config`), port forwarding beyond previews.
 4. Touch selection, pinch to zoom, and a WebGL renderer.
 
 ## Limits

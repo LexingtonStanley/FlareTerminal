@@ -16,6 +16,9 @@ export default function NewConnectionScreen() {
     <ConnectionForm
       initial={{ ...EMPTY_CONNECTION_INPUT, groupId: groupId ?? '' }}
       submitLabel="Save"
+      onImport={() =>
+        router.push({ pathname: '/connections/import', params: groupId ? { groupId } : {} })
+      }
       onSubmit={(input) => {
         save(input);
         leave();
