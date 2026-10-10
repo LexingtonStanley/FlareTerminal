@@ -14,6 +14,8 @@ import { IconButton } from '@/components/ui/icon-button';
 import { Spacing } from '@/constants/theme';
 import { useConnections } from '@/features/connections/connections-provider';
 import { SessionHealthStrip } from '@/features/health/health-strip';
+import { readImage, type ImageSource } from '@/features/images/image-source';
+import { sendImage } from '@/features/images/upload';
 import { parseLocalUrl, type LocalAddress } from '@/features/preview/local-urls';
 import { ReadingPill } from '@/features/reading/reading-pill';
 import { AwayChip } from '@/features/sessions/away-chip';
@@ -46,8 +48,11 @@ function openLink(url: string) {
   else void openBrowserAsync(url);
 }
 
-/** Whether a session's host can be previewed: SSH forwards ports, and only in the app. */
-function usePreviewable(session: SessionSnapshot): boolean {
+/**
+ * Whether the session is SSH in the app, which can forward ports (a dev server's preview)
+ * and run commands beside the terminal (sending images).
+ */
+function useOverSsh(session: SessionSnapshot): boolean {
   const { connections } = useConnections();
   const connection = connections.find(({ id }) => id === session.connectionId);
   return Platform.OS !== 'web' && connection?.kind === 'ssh';
@@ -64,7 +69,7 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
   const theme = useTheme();
   const shape = useShape();
   const insets = useSafeAreaInsets();
-  const previewable = usePreviewable(session);
+  const overSsh = useOverSsh(session);
   // The coding keyboard; none, to see the whole terminal (a tap brings it back); or
   // "writing": a text field with the phone's keyboard, for prose (autocorrect, swiping,
   // dictation) and the key bar for the keys it lacks.
@@ -112,6 +117,14 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
     manager.dismissAway(session.id);
   }
 
+  /** A screenshot or photo, saved on the host for the agent: its path there. */
+  async function attachImage(source: ImageSource, signal: AbortSignal) {
+    const bytes = await readImage(source);
+    if (!bytes) return null;
+    const run = manager.runCommand.bind(manager, session.id);
+    return sendImage(run, bytes, { signal });
+  }
+
   function preview(address?: LocalAddress) {
     router.push({
       pathname: '/session/[id]/preview',
@@ -124,7 +137,7 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
   // On the phone, localhost is the phone: a link to the host's own dev server opens its
   // preview instead.
   function openTerminalLink(url: string) {
-    const local = previewable ? parseLocalUrl(url) : null;
+    const local = overSsh ? parseLocalUrl(url) : null;
     if (local) preview(local);
     else openLink(url);
   }
@@ -136,12 +149,12 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
       <Stack.Screen
         options={{
           headerTitle: () => (
-            <SessionTitle name={session.name} title={session.title} wideHeader={previewable} />
+            <SessionTitle name={session.name} title={session.title} wideHeader={overSsh} />
           ),
           headerRight: () => (
             <View style={styles.headerRight}>
               <StatusBadge status={session.status} />
-              {previewable ? (
+              {overSsh ? (
                 <IconButton icon="preview" label="Preview a dev server" onPress={() => preview()} />
               ) : null}
               <IconButton icon="close" label="Close session" onPress={closeSession} />
@@ -247,6 +260,7 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
               onModifiedKey={typed(view.type)}
               agent={session.agent ?? null}
               suggestions={promptSuggestions}
+              onAttachImage={overSsh ? attachImage : null}
             />
           </>
         ) : input === 'keys' ? (

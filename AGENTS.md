@@ -179,6 +179,9 @@ src/features/preview/    Dev server preview: local-urls.ts (localhost links and 
                          forward.ts (ssh -L: a phone port whose connections are SSH tunnels),
                          local-server.ts (listens on 127.0.0.1; .web refuses), use-port-forward,
                          port picker, browser (react-native-webview)
+src/features/images/     Images for the agent: upload.ts (the `sh -c` command that saves one in
+                         ~/.flare/uploads over SSH exec, and its path for the prompt),
+                         image-source.ts (clipboard, photo library, camera), the attach row
 src/features/health/     Host health strip: health.ts (the sh script the session runs with exec,
                          and its parser), use-host-health, the strip
 src/features/notifications/ Local notifications for agent alerts, with Approve/Deny actions (no-op
