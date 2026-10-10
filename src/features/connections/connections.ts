@@ -28,6 +28,8 @@ export type SshConnection = ConnectionAccess & {
   keyId?: string | null;
   /** Another SSH connection to go through to reach it (`ssh -J`), or none. */
   jumpId?: string | null;
+  /** Forward the SSH agent to it (`ssh -A`): programs there may ask to use the person's keys. */
+  forwardAgent?: boolean;
 };
 
 export type TtydConnection = ConnectionAccess & {
@@ -57,6 +59,8 @@ export type ConnectionInput = {
   keyId: string;
   /** SSH: the connection to go through, '' for none. */
   jumpId: string;
+  /** SSH: forward the agent. */
+  forwardAgent: boolean;
   protected: boolean;
   keepAlive: boolean;
 };
@@ -77,6 +81,7 @@ export const EMPTY_CONNECTION_INPUT: ConnectionInput = {
   groupId: '',
   keyId: '',
   jumpId: '',
+  forwardAgent: false,
   protected: false,
   keepAlive: true,
 };
@@ -159,6 +164,7 @@ export function toConnection(input: ConnectionInput, id: string): Connection {
       ...fields,
       keyId: input.keyId || null,
       jumpId: input.jumpId || null,
+      forwardAgent: input.forwardAgent,
       ...access,
     };
     return { ...connection, name: input.name.trim() || connectionLabel(connection) };
@@ -236,6 +242,7 @@ export function toInput(connection: Connection, password: string | null): Connec
         password: password ?? '',
         keyId: connection.keyId ?? '',
         jumpId: connection.jumpId ?? '',
+        forwardAgent: connection.forwardAgent === true,
       }
     : {
         ...EMPTY_CONNECTION_INPUT,

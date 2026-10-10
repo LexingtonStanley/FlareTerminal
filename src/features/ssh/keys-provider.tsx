@@ -3,12 +3,14 @@ import { createContext, use, useState, type PropsWithChildren } from 'react';
 import { useLock } from '@/features/vault/lock-provider';
 import { secretsSupported } from '@/lib/secrets';
 
-import { createAppKey, deleteAppKey, loadAppKey } from './app-key';
+import { deleteAppKey } from './app-key';
 import {
   APP_KEY_ID,
+  createAppKeyEntry,
   deletePrivateKey,
   describeSavedKey,
   newKeyId,
+  readAppKey,
   readImportedKeys,
   storePrivateKey,
   writeImportedKeys,
@@ -29,23 +31,17 @@ type KeysContextValue = {
 
 const KeysContext = createContext<KeysContextValue | null>(null);
 
-const APP_KEY_NAME = 'Flare key';
-const APP_KEY_COMMENT = 'flare-terminal';
-
-function readAppKey(): SavedKey | null {
-  const key = secretsSupported ? loadAppKey() : null;
-  return key ? describeSavedKey(APP_KEY_ID, APP_KEY_NAME, key, APP_KEY_COMMENT) : null;
-}
+const listedAppKey = () => (secretsSupported ? readAppKey() : null);
 
 export function KeysProvider({ children }: PropsWithChildren) {
   const { locked } = useLock();
   const [imported, setImported] = useState(() => (secretsSupported ? readImportedKeys() : []));
-  const [appKey, setAppKey] = useState(readAppKey);
+  const [appKey, setAppKey] = useState(listedAppKey);
   // The app key is a secret, sealed until the vault opens: read it again once it does.
   const [wasLocked, setWasLocked] = useState(locked);
   if (wasLocked !== locked) {
     setWasLocked(locked);
-    setAppKey(readAppKey());
+    setAppKey(listedAppKey());
   }
 
   function commit(next: SavedKey[]) {
@@ -56,7 +52,7 @@ export function KeysProvider({ children }: PropsWithChildren) {
   const value: KeysContextValue = {
     keys: appKey ? [appKey, ...imported] : imported,
     createAppKey() {
-      const saved = describeSavedKey(APP_KEY_ID, APP_KEY_NAME, createAppKey(), APP_KEY_COMMENT);
+      const saved = createAppKeyEntry();
       setAppKey(saved);
       return saved;
     },

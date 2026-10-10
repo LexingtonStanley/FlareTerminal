@@ -68,6 +68,11 @@ export type SshClientOptions = {
   onClose(reason: SshCloseReason): void;
   /** Seconds between keepalives once signed in; 0 turns them off. */
   keepaliveInterval?: number;
+  /**
+   * Each connection a program on the host makes to the forwarded agent (see openShell's
+   * `forwardAgent`). The host can only open these once the shell asked for them.
+   */
+  onAgentChannel?(channel: SshChannel): void;
 };
 
 export type SshCloseReason = {
@@ -243,6 +248,14 @@ export class SshClient {
   private channels = new Map<number, SshChannel>();
   private opening = new Map<number, { resolve: () => void; reject: (error: Error) => void }>();
   private nextChannelId = 0;
+
+  /** The shell asked for agent forwarding: the host may open agent channels. */
+  private agentRequested = false;
+  /**
+   * Whether the host agreed to forward the agent: null until the shell asks (openShell's
+   * `forwardAgent`), false when its SSH server has it turned off.
+   */
+  agentForwarding: boolean | null = null;
 
   private keepaliveTimer: ReturnType<typeof setInterval> | null = null;
   private missedKeepalives = 0;
@@ -588,7 +601,7 @@ export class SshClient {
         this.checkTimer = null;
         return;
       case MSG.CHANNEL_OPEN:
-        this.refuseChannelOpen(payload);
+        this.handleChannelOpen(payload);
         return;
     }
 
@@ -841,14 +854,30 @@ export class SshClient {
     return channel;
   }
 
+  /**
+   * The session this connection is (its id from the first key exchange) and the host key
+   * that signed it, once the handshake is done.
+   */
+  get session(): { hostKey: Uint8Array; sessionId: Uint8Array } | null {
+    if (!this.sessionId || !this.trustedHostKey) return null;
+    return { hostKey: this.trustedHostKey, sessionId: this.sessionId };
+  }
+
+  /**
+   * Opens an interactive shell. With `forwardAgent`, also asks the host to forward the agent
+   * to it, like `ssh -A`: programs there then reach onAgentChannel. A host that won't leaves
+   * agentForwarding false, and the shell opens without it.
+   */
   async openShell({
     term,
     cols,
     rows,
+    forwardAgent = false,
   }: {
     term: string;
     cols: number;
     rows: number;
+    forwardAgent?: boolean;
   }): Promise<SshChannel> {
     let channel: SshChannel;
     try {
@@ -856,6 +885,12 @@ export class SshClient {
     } catch (error) {
       if (!(error instanceof ChannelOpenError)) throw error;
       throw new SshError(`The host refused a session: ${error.description || 'no reason given'}`);
+    }
+
+    // Before the shell starts, so its environment gets SSH_AUTH_SOCK (as OpenSSH asks).
+    if (forwardAgent && this.options.onAgentChannel) {
+      this.agentRequested = true;
+      this.agentForwarding = await this.channelRequest(channel, 'auth-agent-req@openssh.com', true);
     }
 
     // Terminal modes: VERASE = DEL, IUTF8 on (so backspace removes whole UTF-8 characters).
@@ -935,16 +970,46 @@ export class SshClient {
     this.send(this.message(MSG.CHANNEL_CLOSE, (w) => w.uint32(channel.remoteId)));
   }
 
-  private refuseChannelOpen(payload: Uint8Array) {
+  /**
+   * A channel the host opens: only agent connections, and only after the shell asked for
+   * agent forwarding. Anything else (X11, forwarded ports) is refused.
+   */
+  private handleChannelOpen(payload: Uint8Array) {
     const r = new SshReader(payload);
     r.byte();
-    r.utf8();
+    const type = r.utf8();
     const senderId = r.uint32();
+    const window = r.uint32();
+    const maxPacket = r.uint32();
+    const onAgentChannel = this.options.onAgentChannel;
+    if (
+      type !== 'auth-agent@openssh.com' ||
+      !this.agentRequested ||
+      this.agentForwarding === false ||
+      !onAgentChannel
+    ) {
+      this.send(
+        this.message(MSG.CHANNEL_OPEN_FAILURE, (w) =>
+          w
+            .uint32(senderId)
+            .uint32(OPEN_FAILURE.ADMINISTRATIVELY_PROHIBITED)
+            .string('Not supported')
+            .string('')
+        )
+      );
+      return;
+    }
+    const channel = new SshChannel(this, this.nextChannelId++);
+    channel.remoteId = senderId;
+    channel.remoteWindow = window;
+    channel.remoteMaxPacket = Math.max(1, Math.min(maxPacket, LOCAL_MAX_PACKET));
+    this.channels.set(channel.localId, channel);
     this.send(
-      this.message(MSG.CHANNEL_OPEN_FAILURE, (w) =>
-        w.uint32(senderId).uint32(1).string('Not supported').string('')
+      this.message(MSG.CHANNEL_OPEN_CONFIRMATION, (w) =>
+        w.uint32(senderId).uint32(channel.localId).uint32(LOCAL_WINDOW).uint32(LOCAL_MAX_PACKET)
       )
     );
+    onAgentChannel(channel);
   }
 
   private dispatchChannel(type: number, payload: Uint8Array) {

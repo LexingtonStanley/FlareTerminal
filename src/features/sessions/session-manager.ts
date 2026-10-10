@@ -4,6 +4,7 @@ import { Terminal, type HeadlessTerminal } from './headless-terminal';
 
 import type { HistorySource } from '@/features/reading/capture';
 import type { AgentHarness } from '@/features/shortcuts/agent-command';
+import type { KeyRequest } from '@/features/ssh/key-request';
 import type {
   InputMode,
   SessionStatus,
@@ -78,6 +79,9 @@ export type Away = {
 /** What became of an answer sent from a notification or the inbox. */
 export type AnswerResult = 'sent' | 'gone' | 'disconnected';
 
+/** A program on the session's host waiting to use one of the person's keys. */
+export type PendingKeyRequest = KeyRequest & { id: number; at: number };
+
 export type SessionSnapshot = SessionTarget & {
   id: string;
   status: SessionStatus;
@@ -104,6 +108,8 @@ export type SessionSnapshot = SessionTarget & {
   away: Away | null;
   /** Since when an agent's working line has been on screen, while it is. */
   workingSince?: number | null;
+  /** Programs on the host waiting for the person to allow a key (agent forwarding), oldest first. */
+  keyRequests?: PendingKeyRequest[];
 };
 
 /** Where a session's output goes while a terminal view shows it. */
@@ -123,6 +129,11 @@ export type SessionManagerDeps = {
   openTransport: TransportOpener;
   /** Called for alerts from sessions the person isn't looking at. */
   onAttention(session: SessionSnapshot, attention: Attention, appActive: boolean): void;
+  /**
+   * Called when a session's key requests change (one arrives or ends), and for those still
+   * waiting when the app leaves the screen.
+   */
+  onKeyRequests?(session: SessionSnapshot, appActive: boolean): void;
   now?: () => number;
   /** Runs `callback` after `ms`; returns a cancel function. Defaults to setTimeout. */
   delay?: (callback: () => void, ms: number) => () => void;
@@ -143,6 +154,11 @@ export const FINISH_SETTLE_MS = 2_000;
  * person, or for the app to come back on screen, when it tries again.
  */
 export const RECONNECT_DELAYS_MS = [1_000, 5_000, 15_000];
+
+/** A key request nobody answers is denied after this long. */
+export const KEY_REQUEST_TIMEOUT_MS = 60_000;
+/** Key requests a session may have waiting at once; more are denied without asking. */
+export const MAX_KEY_REQUESTS = 3;
 
 export type WaitingFor = 'network' | 'unlock';
 
@@ -185,6 +201,12 @@ class Session {
   private awayMarker: IMarker | null = null;
   /** Counts comings and goings, so the summary of a visit that has ended is dropped. */
   private visits = 0;
+  private keyWaiting: {
+    request: PendingKeyRequest;
+    resolve: (allowed: boolean) => void;
+    /** Stops the timeout, and listening for the program to give up. */
+    stop: () => void;
+  }[] = [];
   snapshot: SessionSnapshot;
 
   constructor(
@@ -644,8 +666,52 @@ class Session {
     }, delay);
   }
 
+  /**
+   * Waits for the person to allow or deny a key request: denied when they don't answer in
+   * time, when the program stops waiting, and when the session closes.
+   */
+  private requestKey(request: KeyRequest, signal: AbortSignal): Promise<boolean> {
+    if (this.closed || signal.aborted || this.keyWaiting.length >= MAX_KEY_REQUESTS) {
+      return Promise.resolve(false);
+    }
+    return new Promise((resolve) => {
+      const pending = { ...request, id: this.manager.nextKeyRequestId(), at: this.manager.now() };
+      const deny = () => this.answerKey(pending.id, false);
+      const cancelTimeout = this.manager.delay(deny, KEY_REQUEST_TIMEOUT_MS);
+      signal.addEventListener('abort', deny);
+      const stop = () => {
+        cancelTimeout();
+        signal.removeEventListener('abort', deny);
+      };
+      this.keyWaiting.push({ request: pending, resolve, stop });
+      this.keyRequestsChanged();
+    });
+  }
+
+  /** Answers a key request; false when it's no longer waiting. */
+  answerKey(id: number, allowed: boolean): boolean {
+    const index = this.keyWaiting.findIndex(({ request }) => request.id === id);
+    if (index < 0) return false;
+    const [waiting] = this.keyWaiting.splice(index, 1);
+    waiting.stop();
+    waiting.resolve(allowed);
+    this.keyRequestsChanged();
+    return true;
+  }
+
+  private keyRequestsChanged() {
+    this.update({ keyRequests: this.keyWaiting.map(({ request }) => request) });
+    this.manager.keyRequestsChanged(this.snapshot);
+  }
+
+  /** Denies every key request still waiting: the connection they came over is going. */
+  private denyKeyRequests() {
+    [...this.keyWaiting].forEach(({ request }) => this.answerKey(request.id, false));
+  }
+
   connect() {
     this.transport?.close();
+    this.denyKeyRequests();
     let sentCommand = false;
     const isCurrent = () => this.transport === transport;
     const transport = this.manager.openTransport(this.snapshot.connectionId, {
@@ -658,6 +724,8 @@ class Session {
       onInputMode: (inputMode) => {
         if (isCurrent()) this.update({ inputMode });
       },
+      onKeyRequest: (request, signal) =>
+        isCurrent() ? this.requestKey(request, signal) : Promise.resolve(false),
       onStatus: (status) => {
         if (!isCurrent()) return;
         this.update({ status, inputMode: 'normal' });
@@ -683,6 +751,7 @@ class Session {
 
   close() {
     this.closed = true;
+    this.denyKeyRequests();
     this.stopFinishTimer();
     this.cancelRetry?.();
     this.cancelRetry = null;
@@ -702,6 +771,7 @@ export class SessionManager {
   private network: Network | null = null;
   private vaultIsOpen = true;
   private counter = 0;
+  private keyRequestCounter = 0;
 
   constructor(private deps: SessionManagerDeps) {}
 
@@ -765,6 +835,14 @@ export class SessionManager {
 
   resize(id: string, size: TerminalSize) {
     this.sessions.get(id)?.resize(size);
+  }
+
+  /**
+   * Allows or denies a program's request to use a key (see SessionSnapshot.keyRequests);
+   * false when it's no longer waiting.
+   */
+  answerKeyRequest(id: string, requestId: number, allowed: boolean): boolean {
+    return this.sessions.get(id)?.answerKey(requestId, allowed) ?? false;
   }
 
   /** Answers a session's question (see Session.answer); 'gone' for a closed session. */
@@ -876,6 +954,12 @@ export class SessionManager {
     this.appActive = active;
     this.updateWatched();
     if (active) this.sessions.forEach((session) => session.resume());
+    // Requests the person may have left on screen: they're now away from it.
+    else {
+      this.sessions.forEach(({ snapshot }) => {
+        if (snapshot.keyRequests?.length) this.keyRequestsChanged(snapshot);
+      });
+    }
   }
 
   /** Whether the app is in front, as far as the sessions know. */
@@ -898,6 +982,16 @@ export class SessionManager {
   /** @internal */
   attention(session: SessionSnapshot, attention: Attention) {
     this.deps.onAttention(session, attention, this.appActive);
+  }
+
+  /** @internal */
+  keyRequestsChanged(session: SessionSnapshot) {
+    this.deps.onKeyRequests?.(session, this.appActive);
+  }
+
+  /** @internal */
+  nextKeyRequestId() {
+    return ++this.keyRequestCounter;
   }
 
   /** @internal */

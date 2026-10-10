@@ -1,13 +1,18 @@
 /**
  * @jest-environment node
  */
+import { AgentProtocol, type ParsedKey } from 'ssh2';
+
+import type { AgentBackend, SignRequest } from '@/features/ssh/agent';
 import type { KnownHost, KnownHosts } from '@/features/ssh/known-hosts';
+import { generateUserKey, publicKeyBlob, type UserKey } from '@/features/ssh/user-key';
 import {
   openNodeSocket,
   startTestSshServer,
   stopTestSshServers,
   testSockets,
   waitFor,
+  type TestServer,
 } from '@/test-utils/ssh-server';
 
 import { SshTransport, type SshJump } from './ssh-transport';
@@ -57,6 +62,7 @@ function open(
     knownHosts = memoryKnownHosts(),
     jumps = [] as SshJump[],
     opened = [] as number[],
+    agent = undefined as AgentBackend | undefined,
   } = {}
 ) {
   const screen = { text: '', statuses: [] as SessionStatus[], modes: [] as InputMode[] };
@@ -75,6 +81,7 @@ function open(
       },
       keepaliveInterval: 0,
       jumps,
+      agent,
     },
     {
       onData: (text) => (screen.text += text),
@@ -420,6 +427,23 @@ describe('SshTransport through a jump host', () => {
     });
   });
 
+  it('forwards the agent to the host only, never to a jump host', async () => {
+    const bastion = await startTestSshServer({ agent: true });
+    const inner = await startInnerServer({ agent: true });
+    const knownHosts = await trustBoth(bastion.port, inner.port);
+    const { status } = open(inner.port, {
+      password: 'battery-staple',
+      knownHosts,
+      jumps: [jump(bastion.port, { password: 'correct-horse' })],
+      agent: { keys: () => [], approve: async () => null },
+    });
+
+    await waitFor(() => status() === 'connected');
+    expect(inner.agentRequests()).toBe(1);
+    expect(bastion.agentRequests()).toBe(0);
+    await expect(bastion.openAgentChannel()).rejects.toThrow('Channel open failure');
+  });
+
   it('ends at the jump host too when the session ends', async () => {
     const bastion = await startTestSshServer();
     const inner = await startInnerServer();
@@ -438,5 +462,119 @@ describe('SshTransport through a jump host', () => {
     await waitFor(() => status() === 'closed');
     expect(screen.statuses.at(-1)).toEqual({ state: 'closed', message: 'Session ended' });
     await waitFor(() => socket.destroyed);
+  });
+});
+
+describe('SshTransport forwarding the agent', () => {
+  const phoneKey = generateUserKey();
+
+  /** A program on the host connecting to $SSH_AUTH_SOCK, as ssh2's agent client. */
+  async function program(server: TestServer) {
+    const stream = await server.openAgentChannel();
+    const protocol = new AgentProtocol(true);
+    protocol.pipe(stream).pipe(protocol);
+    return {
+      keys: () =>
+        new Promise<ParsedKey[]>((resolve, reject) =>
+          protocol.getIdentities((error, keys) => (error ? reject(error) : resolve(keys!)))
+        ),
+      sign: (key: ParsedKey, data: Buffer) =>
+        new Promise<Buffer>((resolve, reject) =>
+          protocol.sign(key, data, {}, (error, signature) =>
+            error ? reject(error) : resolve(signature!)
+          )
+        ),
+      close: () => stream.close(),
+    };
+  }
+
+  async function connected(
+    server: TestServer,
+    approve: AgentBackend['approve'] = async () => phoneKey
+  ) {
+    const asked: SignRequest[] = [];
+    const agent: AgentBackend = {
+      keys: () => [{ blob: publicKeyBlob(phoneKey), comment: 'flare-terminal' }],
+      approve: (request, signal) => {
+        asked.push(request);
+        return approve(request, signal);
+      },
+    };
+    const opened = open(server.port, { password: 'correct-horse', agent });
+    await waitFor(() => opened.screen.text.includes('(yes/no)? '));
+    opened.transport.write('yes\r');
+    await waitFor(() => opened.status() === 'connected');
+    return { ...opened, asked };
+  }
+
+  it('lets programs on the host list the phone’s keys, and sign once the person allows', async () => {
+    const server = await startTestSshServer({ agent: true });
+    const { asked } = await connected(server);
+    expect(server.agentRequests()).toBe(1);
+
+    const git = await program(server);
+    const [key, ...others] = await git.keys();
+    expect(others).toEqual([]);
+    expect(new Uint8Array(key.getPublicSSH())).toEqual(publicKeyBlob(phoneKey));
+    expect(key.comment).toBe('flare-terminal');
+
+    const data = Buffer.from('something to sign');
+    const signature = await git.sign(key, data);
+    expect(key.verify(data, signature, undefined)).toBe(true);
+    expect(asked).toEqual([
+      { key: publicKeyBlob(phoneKey), purpose: { kind: 'unknown' }, through: [] },
+    ]);
+  });
+
+  it('refuses what the person denies', async () => {
+    const server = await startTestSshServer({ agent: true });
+    await connected(server, async () => null);
+
+    const git = await program(server);
+    const [key] = await git.keys();
+    await expect(git.sign(key, Buffer.from('data'))).rejects.toThrow();
+  });
+
+  it('stops waiting for the person when the program gives up or the session closes', async () => {
+    const server = await startTestSshServer({ agent: true });
+    const signals: AbortSignal[] = [];
+    const { transport } = await connected(server, (_, signal) => {
+      signals.push(signal);
+      return new Promise<UserKey | null>(() => {});
+    });
+
+    const first = await program(server);
+    const [key] = await first.keys();
+    void first.sign(key, Buffer.from('one')).catch(() => {});
+    await waitFor(() => signals.length === 1);
+    first.close();
+    await waitFor(() => signals[0].aborted);
+
+    const second = await program(server);
+    void second.sign(key, Buffer.from('two')).catch(() => {});
+    await waitFor(() => signals.length === 2);
+    transport.close();
+    expect(signals[1].aborted).toBe(true);
+  });
+
+  it('says when the host won’t forward the agent, and connects anyway', async () => {
+    const server = await startTestSshServer({ agent: false });
+    const { screen } = await connected(server);
+
+    await waitFor(() => screen.text.includes('$ '));
+    expect(screen.text).toContain(
+      "This computer's SSH server doesn't allow agent forwarding (AllowAgentForwarding), so commands here can't use your keys."
+    );
+  });
+
+  it('doesn’t ask for it when the connection doesn’t forward the agent', async () => {
+    const server = await startTestSshServer({ agent: true });
+    const { transport, screen, status } = open(server.port, { password: 'correct-horse' });
+    await waitFor(() => screen.text.includes('(yes/no)? '));
+    transport.write('yes\r');
+    await waitFor(() => status() === 'connected');
+
+    expect(server.agentRequests()).toBe(0);
+    await expect(server.openAgentChannel()).rejects.toThrow('Channel open failure');
   });
 });

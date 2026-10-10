@@ -293,6 +293,26 @@ export function ConnectionForm({
             value={values.keepAlive}
             onChange={(on) => setValues((current) => ({ ...current, keepAlive: on }))}
           />
+          {isSsh ? (
+            <>
+              <Divider inset={Spacing.three} />
+              <ToggleRow
+                title="Forward SSH agent"
+                caption={
+                  !secretsSupported
+                    ? 'Needs your SSH keys, in the Android and iOS apps'
+                    : values.forwardAgent
+                      ? 'Commands there, like git push, can ask to use your keys. Flare asks you each time.'
+                      : keys.length
+                        ? 'Lets commands there, like git push, ask to use your keys, like ssh -A'
+                        : 'Make or import an SSH key in Settings first'
+                }
+                value={values.forwardAgent}
+                disabled={!values.forwardAgent && (!secretsSupported || !keys.length)}
+                onChange={(on) => setValues((current) => ({ ...current, forwardAgent: on }))}
+              />
+            </>
+          ) : null}
         </Card>
       </Section>
 

@@ -124,6 +124,11 @@ after a clean install.
 each has its own host key check, password and key, and the bastion only relays encrypted
 bytes. A jump host can have its own jump host.
 
+**`git push` from the computer with your phone's key?** Turn on **Forward SSH agent** in the
+connection's settings, like `ssh -A`. Programs there (git, ssh) can then ask to use your keys,
+and Flare asks you each time, saying what for ("Sign in to github.com as git"). The keys never
+leave the phone.
+
 **Already have hosts in `~/.ssh/config`?** New connection → Import pastes the file, or reads it
 (and the files its `Include` lines name) from a computer you're connected to, and adds a
 connection for each `Host` you tick, with its HostName, User and Port. A host with a
@@ -251,8 +256,12 @@ host at `/keyboard-preview`.
   and flow control. It is tested against the `ssh2` server in Jest, and was checked by hand
   against OpenSSH 9.6 and Go's `x/crypto/ssh`. Through jump hosts, it speaks SSH to each next
   host over a `direct-tcpip` channel from the one before, as `ssh -J` does (checked with
-  OpenSSH 9.6 as the jump host). `ttyd.ts` implements ttyd's protocol, checked
-  by hand against ttyd 1.7.7; Playwright drives it against a fake host
+  OpenSSH 9.6 as the jump host). `src/features/ssh/agent.ts` is the agent a connection can
+  forward, like `ssh -A`: it lists the phone's keys and signs once the person allows, checking
+  which server OpenSSH says a sign-in is for (`session-bind@openssh.com`). It was checked
+  with OpenSSH 9.6 on the computer: `ssh-add -l`, a host-bound sign-in, RSA,
+  `ssh-keygen -Y sign`, `ssh -A` on from there, and a denial. `ttyd.ts` implements ttyd's
+  protocol, checked by hand against ttyd 1.7.7; Playwright drives it against a fake host
   (`e2e/web/fake-ttyd.ts`).
 - `src/features/reading/` is reading mode. Over SSH it asks tmux (`capture-pane`) or zellij
   (`dump-screen`) for the history, reads its colour codes itself (`history.ts`, many times
@@ -317,7 +326,7 @@ Thumb-Key, Unexpected Keyboard and Termux's extra keys.
   sockets, the soft keyboard and IMEs, Keychain/Keystore, notifications, haptics) needs a
   device run, as do the preview (its WebView and local port) and the file viewer: `.maestro/terminal.yaml` covers the basics on EAS
   (`npx eas-cli@latest workflow:run .eas/workflows/e2e.yml`).
-- SSH agent forwarding, X11 and SFTP aren't supported.
+- X11 and SFTP aren't supported.
 
 ## Commands
 

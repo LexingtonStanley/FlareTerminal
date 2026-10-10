@@ -8,8 +8,11 @@ import type {
   TransportListener,
 } from '@/features/terminal/transport';
 
+import type { KeyRequest } from '@/features/ssh/key-request';
+
 import {
   FINISH_SETTLE_MS,
+  KEY_REQUEST_TIMEOUT_MS,
   RECONNECT_DELAYS_MS,
   SessionManager,
   type Attention,
@@ -51,6 +54,7 @@ class FakeTransport implements TerminalTransport {
 function setup({ connections = ['box'] } = {}) {
   const transports: FakeTransport[] = [];
   const alerts: { session: SessionSnapshot; attention: Attention; appActive: boolean }[] = [];
+  const keyChanges: { waiting: number; appActive: boolean }[] = [];
   const timers: { ms: number; run: () => void; cancelled: boolean }[] = [];
   let now = 1_000_000;
   const manager = new SessionManager({
@@ -61,6 +65,8 @@ function setup({ connections = ['box'] } = {}) {
       return transport;
     },
     onAttention: (session, attention, appActive) => alerts.push({ session, attention, appActive }),
+    onKeyRequests: (session, appActive) =>
+      keyChanges.push({ waiting: session.keyRequests?.length ?? 0, appActive }),
     now: () => now,
     delay: (run, ms) => {
       const timer = { ms, run, cancelled: false };
@@ -81,6 +87,7 @@ function setup({ connections = ['box'] } = {}) {
     manager,
     transports,
     alerts,
+    keyChanges,
     timers,
     view,
     advance: (ms: number) => (now += ms),
@@ -826,5 +833,109 @@ describe('SessionManager', () => {
       // tmux keeps the lines: reading mode finds them, not a jump.
       expect(manager.awayScroll(id)).toBeNull();
     });
+  });
+});
+
+describe('SessionManager key requests', () => {
+  const REQUEST: KeyRequest = {
+    key: { id: 'flare', name: 'Flare key', kind: 'ED25519', fingerprint: 'SHA256:phone' },
+    purpose: {
+      kind: 'sign-in',
+      user: 'git',
+      host: { name: 'github.com', fingerprint: 'SHA256:github' },
+    },
+    through: [],
+  };
+
+  function connected() {
+    const harness = setup();
+    const id = harness.manager.start({ connectionId: 'box', name: 'Box', command: null });
+    harness.manager.attach(id, harness.view(), SIZE);
+    harness.transports[0].status({ state: 'connected' });
+    const ask = (signal = new AbortController().signal, transport = harness.transports.at(-1)!) =>
+      transport.listener.onKeyRequest!(REQUEST, signal);
+    const waiting = () => harness.session(id).keyRequests ?? [];
+    return { ...harness, id, ask, waiting };
+  }
+
+  it('waits for the person to allow or deny each one, oldest first', async () => {
+    const { manager, id, ask, waiting, advance, keyChanges } = connected();
+    const first = ask();
+    advance(500);
+    const second = ask();
+
+    expect(waiting()).toEqual([
+      { ...REQUEST, id: expect.any(Number), at: 1_000_000 },
+      { ...REQUEST, id: expect.any(Number), at: 1_000_500 },
+    ]);
+    const [older, newer] = waiting();
+    expect(manager.answerKeyRequest(id, newer.id, true)).toBe(true);
+    expect(manager.answerKeyRequest(id, older.id, false)).toBe(true);
+    expect(manager.answerKeyRequest(id, older.id, true)).toBe(false);
+
+    await expect(second).resolves.toBe(true);
+    await expect(first).resolves.toBe(false);
+    expect(waiting()).toEqual([]);
+    expect(keyChanges).toEqual([
+      { waiting: 1, appActive: true },
+      { waiting: 2, appActive: true },
+      { waiting: 1, appActive: true },
+      { waiting: 0, appActive: true },
+    ]);
+  });
+
+  it('denies one nobody answers within a minute', async () => {
+    const { ask, waiting, timers } = connected();
+    const answer = ask();
+
+    const timeout = timers.find(({ ms }) => ms === KEY_REQUEST_TIMEOUT_MS)!;
+    timeout.run();
+
+    await expect(answer).resolves.toBe(false);
+    expect(waiting()).toEqual([]);
+  });
+
+  it('denies one the program stopped waiting for, and stops its timeout', async () => {
+    const { ask, waiting, timers } = connected();
+    const controller = new AbortController();
+    const answer = ask(controller.signal);
+
+    controller.abort();
+
+    await expect(answer).resolves.toBe(false);
+    expect(waiting()).toEqual([]);
+    expect(timers.find(({ ms }) => ms === KEY_REQUEST_TIMEOUT_MS)!.cancelled).toBe(true);
+  });
+
+  it('denies what waits when the session reconnects or closes, and ignores old connections', async () => {
+    const { manager, id, ask, waiting, transports } = connected();
+    const beforeReconnect = ask();
+    const old = transports[0];
+
+    manager.reconnect(id);
+    await expect(beforeReconnect).resolves.toBe(false);
+    await expect(ask(undefined, old)).resolves.toBe(false);
+    expect(waiting()).toEqual([]);
+
+    const beforeClose = ask();
+    manager.close(id);
+    await expect(beforeClose).resolves.toBe(false);
+  });
+
+  it('denies a fourth waiting at once without asking', async () => {
+    const { ask, waiting } = connected();
+    [ask(), ask(), ask()].forEach((answer) => void answer);
+
+    await expect(ask()).resolves.toBe(false);
+    expect(waiting()).toHaveLength(3);
+  });
+
+  it('says what still waits when the app leaves the screen', () => {
+    const { manager, ask, keyChanges } = connected();
+    void ask();
+
+    manager.setAppActive(false);
+
+    expect(keyChanges.at(-1)).toEqual({ waiting: 1, appActive: false });
   });
 });

@@ -33,6 +33,17 @@ export function postAgentNotification(
   posted.push({ sessionId, title, body, ...(questionAt === undefined ? {} : { questionAt }) });
 }
 
+/** Sessions' key request notifications that are up (see postKeyNotification), by session. */
+export const keyNotifications = new Map<string, { title: string; body: string }>();
+
+export function postKeyNotification(sessionId: string, title: string, body: string) {
+  keyNotifications.set(sessionId, { title, body });
+}
+
+export function dismissKeyNotification(sessionId: string) {
+  keyNotifications.delete(sessionId);
+}
+
 /** Notifications for files from agents (see postFileNotification). */
 export const postedFiles: { connectionId: string; title: string; body: string; fileId: string }[] =
   [];
