@@ -158,6 +158,25 @@ terminal output.
 - **Protected connections and groups.** Their files' names stay out of notifications, banners
   and the inbox, and opening one asks for the lock, as their sessions do.
 
+## Importing an SSH config
+
+Import adds connections from an OpenSSH config (`src/features/connections/ssh-config.ts`).
+Only each host's name, HostName, User and Port are kept. IdentityFile lines are ignored, so no
+key leaves the computer this way (import keys in Settings → SSH keys), and a config holds no
+passwords.
+
+- **Pasted**, the text is read on the phone and not kept.
+- **Read from a computer** you're connected to, one `sh -s` script beside the session prints
+  `~/.ssh/config`, then a second prints the files its `Include` lines name. Both only read.
+  An Include pattern goes into the script in single quotes and expands as a glob in sh, which
+  doesn't run anything inside it (no command substitution), so a config can't make Flare run
+  a command. Each file follows a line with a random marker, so a file can't pass for the end
+  of another.
+- `Match` blocks are skipped (they test the computer they run on, `Match exec` runs commands),
+  and Flare says so.
+- **Protected connections and groups.** While an app lock is set, their computers aren't
+  offered to read from, as their screens aren't shown.
+
 ## Limits
 
 - A 6-digit PIN can't resist an offline guessing attack on its own: someone with the phone's

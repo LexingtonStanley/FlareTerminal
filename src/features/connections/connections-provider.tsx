@@ -18,6 +18,8 @@ type ConnectionsContextValue = {
   connections: Connection[];
   /** Creates a connection, or updates it when `id` is given. Returns the saved record. */
   save(input: ConnectionInput, id?: string): Connection;
+  /** Creates several at once (an import), without passwords. */
+  add(inputs: ConnectionInput[]): Connection[];
   remove(id: string): void;
   /** The stored password, for editing and connecting. */
   getPassword(id: string): string | null;
@@ -50,6 +52,11 @@ export function ConnectionsProvider({ children }: PropsWithChildren) {
       const keep = connection.kind === 'ssh' || connection.username;
       setSecret(passwordKey(connection.id), keep && input.password ? input.password : null);
       return connection;
+    },
+    add(inputs) {
+      const added = inputs.map((input) => toConnection(input, newConnectionId()));
+      commit([...connections, ...added]);
+      return added;
     },
     remove(id) {
       commit(connections.filter((connection) => connection.id !== id));

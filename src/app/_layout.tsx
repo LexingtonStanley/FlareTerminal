@@ -107,6 +107,10 @@ function ThemedApp() {
                           options={{ headerShown: true, title: 'New connection' }}
                         />
                         <Stack.Screen
+                          name="connections/import"
+                          options={{ headerShown: true, title: 'Import from SSH config' }}
+                        />
+                        <Stack.Screen
                           name="connections/[id]"
                           options={{ headerShown: true, title: 'Edit connection' }}
                         />

@@ -138,7 +138,8 @@ src/app/                 Routes only. Every file here is a screen; never put tes
                          ErrorBoundary
   (tabs)/                Tab navigator: index (Home: sessions, shortcuts, connections), inbox
                          (every session by what it needs, then files from agents), settings
-  connections/           new.tsx, [id].tsx (edit): the connection form
+  connections/           new.tsx, [id].tsx (edit): the connection form; import.tsx: hosts
+                         from an SSH config
   shortcuts/             new.tsx, [id].tsx (edit): the shortcut form
   groups/                new.tsx, [id].tsx (edit): the group form
   security.tsx           App lock: set up, change or turn off the PIN/password, biometrics
@@ -197,7 +198,10 @@ src/features/health/     Host health strip: health.ts (the sh script the session
                          and its parser), use-host-health, the strip
 src/features/notifications/ Local notifications for agent alerts, with Approve/Deny actions (no-op
                          on web)
-src/features/connections/ Connection type (SSH or ttyd), validation, ConnectionsProvider, form
+src/features/connections/ Connection type (SSH or ttyd), validation, ConnectionsProvider, form,
+                         ssh-config.ts (an OpenSSH config's hosts, as `ssh -G` resolves them),
+                         read-ssh-config.ts (~/.ssh/config and its includes, from a connected
+                         host), config-import (the import screen)
 src/features/groups/     Connection groups: type, provider, Home's group tabs, form
 src/features/vault/      App lock and encrypted vault (vault.ts), LockProvider (lock screen),
                          UnlockPanel, AccessGuard (protected connections/groups, keep-alive)
