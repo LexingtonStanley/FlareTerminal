@@ -5,7 +5,7 @@ import { randomBytes } from '@noble/hashes/utils.js';
  * The vault key. While an app lock is set, every secret is sealed with it before it reaches
  * the Keychain/Keystore, so a dumped keychain is useless without the PIN or password
  * (src/features/vault explains the scheme). It lives only in memory: from the first unlock
- * until the app quits.
+ * until the app quits, or until it locks when the lock is set to forget it.
  */
 
 const SEALED = 'fv1:';
@@ -14,9 +14,13 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
 let vaultKey: Uint8Array | null = null;
+/** A lock is set but its key isn't in memory: a secret saved now couldn't be sealed. */
+let sealedShut = false;
 
-export function setVaultKey(key: Uint8Array | null): void {
+/** `locked`: with no key, an app lock is still set (the vault is closed, not gone). */
+export function setVaultKey(key: Uint8Array | null, locked = false): void {
   vaultKey = key;
+  sealedShut = !key && locked;
 }
 
 export function bytesToBase64(bytes: Uint8Array): string {
@@ -50,8 +54,12 @@ export function unseal(key: Uint8Array, text: string): Uint8Array {
   );
 }
 
-/** How a secret is stored: sealed while the vault has a key, as given otherwise. */
+/**
+ * How a secret is stored: sealed while the vault has a key, as given when there's no lock.
+ * Throws while the vault is closed: saving it as given would leave it outside the lock.
+ */
 export function sealSecret(value: string): string {
+  if (sealedShut) throw new Error('Unlock Flare to save passwords and keys');
   return vaultKey ? SEALED + seal(vaultKey, encoder.encode(value)) : value;
 }
 

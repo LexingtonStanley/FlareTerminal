@@ -1,4 +1,9 @@
-import { biometrics, clearMemoryStorage } from '@/test-utils/memory-storage';
+import {
+  biometrics,
+  clearMemoryStorage,
+  getVaultItem,
+  setVaultItem,
+} from '@/test-utils/memory-storage';
 import { openSecret, sealSecret } from '@/lib/vault-key';
 
 import { FREE_ATTEMPTS, validateLockSecret, Vault } from './vault';
@@ -24,7 +29,12 @@ describe('Vault', () => {
   it('seals secrets once a lock is set, and opens them only after an unlock', async () => {
     const first = vault();
     await first.create('pin', '123456');
-    expect(first.settings()).toEqual({ kind: 'pin', biometrics: false, autoLock: 60 });
+    expect(first.settings()).toEqual({
+      kind: 'pin',
+      biometrics: false,
+      autoLock: 60,
+      forgetKey: false,
+    });
 
     const sealed = sealSecret('hunter2');
     expect(sealed).toMatch(/^fv1:/);
@@ -97,6 +107,46 @@ describe('Vault', () => {
     expect(await vault().unlockWithBiometrics('Unlock Flare')).toBe(true);
     expect(openSecret(sealed)).toBe('hunter2');
     expect(biometrics.prompts).toEqual(['Unlock Flare', 'Unlock Flare']);
+  });
+
+  it('keeps the key on locking, unless set to forget it until the next unlock', async () => {
+    const v = vault();
+    await v.create('pin', '123456');
+    const sealed = sealSecret('hunter2');
+
+    v.lock();
+    expect(v.isOpen()).toBe(true);
+    expect(openSecret(sealed)).toBe('hunter2');
+
+    v.setForgetKey(true);
+    expect(v.settings()?.forgetKey).toBe(true);
+    v.lock();
+    expect(v.isOpen()).toBe(false);
+    expect(openSecret(sealed)).toBeNull();
+    // Not a re-check against the forgotten key: the PIN derives it again.
+    expect(await v.unlock('000000')).toMatchObject({ ok: false });
+    expect(await v.unlock('123456')).toEqual({ ok: true });
+    expect(openSecret(sealed)).toBe('hunter2');
+  });
+
+  it('saves no secret while its key is forgotten, rather than leave it unsealed', async () => {
+    const v = vault();
+    await v.create('pin', '123456');
+    v.setForgetKey(true);
+    v.lock();
+
+    expect(() => sealSecret('hunter2')).toThrow('Unlock Flare to save passwords and keys');
+    await v.unlock('123456');
+    expect(sealSecret('hunter2')).toMatch(/^fv1:/);
+  });
+
+  it('reads a lock set before the option as keeping the key', async () => {
+    const v = vault();
+    await v.create('pin', '123456');
+    const { forgetKey, ...older } = JSON.parse(getVaultItem('vault.lock')!);
+    expect(forgetKey).toBeUndefined();
+    setVaultItem('vault.lock', JSON.stringify(older));
+    expect(v.settings()?.forgetKey).toBe(false);
   });
 
   it('stores secrets as given again once the lock is removed', async () => {

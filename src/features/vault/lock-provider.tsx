@@ -1,4 +1,11 @@
-import { createContext, use, useEffect, useState, type PropsWithChildren } from 'react';
+import {
+  createContext,
+  use,
+  useEffect,
+  useEffectEvent,
+  useState,
+  type PropsWithChildren,
+} from 'react';
 import { AppState, StyleSheet, View } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 
@@ -7,6 +14,7 @@ import { Icon } from '@/components/ui/icon';
 import { Spacing } from '@/constants/theme';
 import { passwordKey } from '@/features/connections/connections';
 import { useConnections } from '@/features/connections/connections-provider';
+import { useSessionManager } from '@/features/sessions/sessions-provider';
 import { APP_KEY_SECRET } from '@/features/ssh/app-key';
 import { useTheme, useType } from '@/hooks/use-theme';
 import { biometricsSupported, secretsSupported } from '@/lib/secrets';
@@ -31,6 +39,7 @@ type LockContextValue = {
   remove(): Promise<void>;
   setBiometrics(on: boolean): Promise<void>;
   setAutoLock(autoLock: AutoLock): void;
+  setForgetKey(forgetKey: boolean): void;
   /** Whether a protected connection or group (see protectionScope) is open right now. */
   isAuthorized(scope: string): boolean;
   authorize(scope: string): void;
@@ -43,10 +52,12 @@ const LockContext = createContext<LockContextValue | null>(null);
 /**
  * The app lock. Its screen covers the app (which keeps running underneath, sessions and
  * all) on launch and after the app was away longer than the auto-lock time. While the app
- * is in the app switcher, a plain cover hides what is on screen.
+ * is in the app switcher, a plain cover hides what is on screen. Set to forget the vault
+ * key, locking also forgets it, at the auto-lock time even while the app is away.
  */
 export function LockProvider({ children }: PropsWithChildren) {
   const { connections } = useConnections();
+  const manager = useSessionManager();
   const [vault] = useState(() => {
     const created = new Vault();
     // A new provider is a new launch: start with the vault closed.
@@ -59,14 +70,44 @@ export function LockProvider({ children }: PropsWithChildren) {
   const [scopes, setScopes] = useState<ReadonlySet<string>>(new Set());
   const [biometricsAvailable] = useState(() => secretsSupported && biometricsSupported());
 
+  /**
+   * Tells sessions whether saved passwords and keys can be read. They can't while a lock is
+   * set and its key isn't in memory (on launch, or forgotten on locking): sessions that drop
+   * then wait for the unlock. Told at once, before the app's return reconnects anything.
+   */
+  function syncSessions() {
+    manager.setVaultOpen(vault.settings() === null || vault.isOpen());
+  }
+
+  function lockUp() {
+    vault.lock();
+    syncSessions();
+    setScopes(new Set());
+    setLocked(true);
+  }
+
+  function opened() {
+    syncSessions();
+    setLocked(false);
+  }
+
+  const lockWhileAway = useEffectEvent(lockUp);
+
   useEffect(() => {
     let leftAt: number | null = null;
+    // Forgets the key at the auto-lock time, rather than when the app is next opened.
+    let forgetTimer: ReturnType<typeof setTimeout> | null = null;
+    const stopTimer = () => {
+      if (forgetTimer) clearTimeout(forgetTimer);
+      forgetTimer = null;
+    };
     const subscription = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
+        stopTimer();
         setCovered(false);
         const current = vault.settings();
         if (current && leftAt !== null && Date.now() - leftAt >= current.autoLock * 1000) {
-          setLocked(true);
+          lockWhileAway();
         }
         leftAt = null;
         return;
@@ -75,10 +116,22 @@ export function LockProvider({ children }: PropsWithChildren) {
       if (state === 'background') {
         leftAt ??= Date.now();
         setScopes(new Set());
+        const current = vault.settings();
+        if (current?.forgetKey && !forgetTimer && vault.isOpen()) {
+          if (current.autoLock === 0) lockWhileAway();
+          else forgetTimer = setTimeout(() => lockWhileAway(), current.autoLock * 1000);
+        }
       }
     });
-    return () => subscription.remove();
+    return () => {
+      stopTimer();
+      subscription.remove();
+    };
   }, [vault]);
+
+  useEffect(() => {
+    manager.setVaultOpen(vault.settings() === null || vault.isOpen());
+  }, [manager, vault]);
 
   // Secrets saved before the app recorded their names.
   const secretNames = () => [APP_KEY_SECRET, ...connections.map(({ id }) => passwordKey(id))];
@@ -91,20 +144,18 @@ export function LockProvider({ children }: PropsWithChildren) {
     biometricsAvailable,
     async unlock(secret) {
       const result = await vault.unlock(secret);
-      if (result.ok) setLocked(false);
+      if (result.ok) opened();
       return result;
     },
     async unlockWithBiometrics() {
       const ok = await vault.unlockWithBiometrics('Unlock Flare');
-      if (ok) setLocked(false);
+      if (ok) opened();
       return ok;
     },
-    lockNow() {
-      setScopes(new Set());
-      setLocked(true);
-    },
+    lockNow: lockUp,
     async create(kind, secret) {
       await vault.create(kind, secret, secretNames());
+      syncSessions();
       refresh();
     },
     async change(kind, secret) {
@@ -113,6 +164,7 @@ export function LockProvider({ children }: PropsWithChildren) {
     },
     async remove() {
       await vault.remove(secretNames());
+      syncSessions();
       refresh();
     },
     async setBiometrics(on) {
@@ -121,6 +173,10 @@ export function LockProvider({ children }: PropsWithChildren) {
     },
     setAutoLock(autoLock) {
       vault.setAutoLock(autoLock);
+      refresh();
+    },
+    setForgetKey(forgetKey) {
+      vault.setForgetKey(forgetKey);
       refresh();
     },
     isAuthorized: (scope) => scopes.has(scope),

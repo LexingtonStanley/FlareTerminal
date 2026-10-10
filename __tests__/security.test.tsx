@@ -1,4 +1,5 @@
 import { act, userEvent } from '@testing-library/react-native';
+import { AppState, type AppStateStatus } from 'react-native';
 import { router } from 'expo-router';
 import { screen } from 'expo-router/testing-library';
 
@@ -50,6 +51,7 @@ beforeEach(() => {
   clearMemoryStorage();
   transports.splice(0);
 });
+afterEach(() => jest.restoreAllMocks());
 
 describe('app lock', () => {
   it('turns on a PIN in Settings, locks, and unlocks only with the right PIN', async () => {
@@ -112,6 +114,67 @@ describe('app lock', () => {
     await act(() => transport.output('\x1b]9;Deploying to prod with key abc\x07'));
     expect(await screen.findByText('Needs your attention')).toBeOnTheScreen();
     expect(screen.queryByText(/Deploying/)).not.toBeOnTheScreen();
+  });
+
+  it('can forget the key while locked: a session that drops reconnects after the unlock', async () => {
+    await lockedWith('123456');
+    saved([DEVBOX]);
+    const user = userEvent.setup();
+    await renderApp('/');
+    await unlockWith('123456');
+    await user.press(screen.getByRole('button', { name: 'Open Devbox' }));
+    const transport = transports[0];
+    await act(() => transport.status({ state: 'connected' }));
+
+    await act(() => router.push('/security'));
+    const forget = await screen.findByRole('switch', { name: 'Forget the key when locked' });
+    expect(forget).not.toBeChecked();
+    await user.press(forget);
+    expect(forget).toBeChecked();
+    await user.press(screen.getByRole('button', { name: 'Lock now' }));
+    expect(await screen.findByRole('heading', { name: 'Flare is locked' })).toBeOnTheScreen();
+
+    // Its password and keys are sealed until the unlock, so it doesn't try without them.
+    await act(() => transport.status({ state: 'closed', message: 'Connection lost', retry: true }));
+    await act(() => jest.advanceTimersByTime(60_000));
+    expect(transports).toHaveLength(1);
+
+    await unlockWith('123456');
+    expect(transports).toHaveLength(2);
+  });
+
+  it('forgets the key once the app has been away the auto-lock time', async () => {
+    // Jest has no app lifecycle: keep the app's listeners to play it leaving and coming back.
+    const appState: ((state: AppStateStatus) => void)[] = [];
+    jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, listener) => {
+      appState.push(listener as (state: AppStateStatus) => void);
+      return { remove: () => {} } as ReturnType<typeof AppState.addEventListener>;
+    });
+    const vault = new Vault({ cost: { N: 2 ** 10, r: 8, p: 1 } });
+    await vault.create('pin', '123456');
+    vault.setForgetKey(true);
+    vault.close();
+    saved([DEVBOX]);
+    const user = userEvent.setup();
+    await renderApp('/');
+    await unlockWith('123456');
+    await user.press(screen.getByRole('button', { name: 'Open Devbox' }));
+    const transport = transports[0];
+    await act(() => transport.status({ state: 'connected' }));
+
+    await act(() => appState.forEach((listener) => listener('background')));
+    await act(() => jest.advanceTimersByTime(59_000));
+    expect(screen.queryByRole('heading', { name: 'Flare is locked' })).not.toBeOnTheScreen();
+    await act(() => jest.advanceTimersByTime(1_000));
+    expect(screen.getByRole('heading', { name: 'Flare is locked' })).toBeOnTheScreen();
+
+    // Dropped while away: coming back doesn't reconnect it until the unlock.
+    await act(() => transport.status({ state: 'closed', message: 'Connection lost', retry: true }));
+    await act(() => appState.forEach((listener) => listener('active')));
+    await act(() => jest.advanceTimersByTime(60_000));
+    expect(transports).toHaveLength(1);
+    await unlockWith('123456');
+    expect(transports).toHaveLength(2);
   });
 
   it('protects every connection in a protected group', async () => {

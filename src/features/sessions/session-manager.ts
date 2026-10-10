@@ -90,8 +90,11 @@ export type SessionSnapshot = SessionTarget & {
   prompt: AgentPrompt | null;
   /** The connection dropped and a reconnect is scheduled. */
   reconnecting: boolean;
-  /** It dropped while the phone had no network: it reconnects when one comes back. */
-  waitingForNetwork?: boolean;
+  /**
+   * What a dropped session waits for before it reconnects: a network (the phone has none),
+   * or an unlock (the app lock forgot the key its password or SSH key is sealed with).
+   */
+  waitingFor?: WaitingFor | null;
   /**
    * The tmux or zellij session whose history reading mode shows, once the person picked one
    * (null: this screen). Until then reading mode goes by the command.
@@ -138,6 +141,8 @@ export const FINISH_SETTLE_MS = 2_000;
  * person, or for the app to come back on screen, when it tries again.
  */
 export const RECONNECT_DELAYS_MS = [1_000, 5_000, 15_000];
+
+export type WaitingFor = 'network' | 'unlock';
 
 /** What the person last saw of a session before looking elsewhere. */
 type Departure = {
@@ -548,14 +553,14 @@ class Session {
 
   /** The app is back on screen: reconnect if the connection was lost while it was away. */
   resume() {
-    if (this.dropped && !this.cancelRetry) this.reconnect();
+    if (this.dropped && !this.cancelRetry) this.reconnectWhenAble();
   }
 
   private retryNow() {
     this.cancelRetry?.();
     this.cancelRetry = null;
-    if (this.snapshot.reconnecting || this.snapshot.waitingForNetwork) {
-      this.update({ reconnecting: false, waitingForNetwork: false });
+    if (this.snapshot.reconnecting || this.snapshot.waitingFor) {
+      this.update({ reconnecting: false, waitingFor: null });
     }
     this.output('\r\n');
     this.connect();
@@ -574,23 +579,51 @@ class Session {
    * network is dead, but can take a minute of missed keepalives to notice.
    */
   networkChanged(online: boolean, changed: boolean) {
-    if (!online) {
-      if (!this.cancelRetry) return;
-      this.cancelRetry();
-      this.cancelRetry = null;
-      this.update({ reconnecting: true, waitingForNetwork: true });
-      return;
-    }
+    if (!online) return this.hold('network');
     if (!changed) return;
-    if (this.dropped) this.reconnect();
+    if (this.dropped) this.reconnectWhenAble();
     else if (this.snapshot.status.state === 'connected') this.transport?.checkAlive?.();
+  }
+
+  /**
+   * The app lock forgot the vault key, or an unlock brought it back. Without it, saved
+   * passwords and keys can't be read, so retries wait for the unlock rather than fail.
+   */
+  vaultChanged(open: boolean) {
+    if (!open) this.hold('unlock');
+    else if (this.dropped && this.snapshot.waitingFor === 'unlock') this.reconnectWhenAble();
+  }
+
+  /** What a reconnect would need and lacks right now, if anything. */
+  private get blockedBy(): WaitingFor | null {
+    if (!this.manager.online) return 'network';
+    if (!this.manager.vaultOpen) return 'unlock';
+    return null;
+  }
+
+  /** A scheduled retry would only fail: wait instead, saying for what. */
+  private hold(waitingFor: WaitingFor) {
+    if (!this.cancelRetry) return;
+    this.cancelRetry();
+    this.cancelRetry = null;
+    this.update({ reconnecting: true, waitingFor });
+  }
+
+  /** Reconnects now, or waits for what it lacks (networkChanged and vaultChanged). */
+  private reconnectWhenAble() {
+    const waitingFor = this.blockedBy;
+    if (!waitingFor) return this.reconnect();
+    this.cancelRetry?.();
+    this.cancelRetry = null;
+    this.update({ reconnecting: true, waitingFor });
   }
 
   private scheduleRetry(status: SessionStatus) {
     if (status.state !== 'closed' || !status.retry || !this.everConnected) return;
-    // With no network a retry would only fail: wait for one (networkChanged).
-    if (!this.manager.online) {
-      this.update({ reconnecting: true, waitingForNetwork: true });
+    // A retry would only fail: wait for what it lacks.
+    const waitingFor = this.blockedBy;
+    if (waitingFor) {
+      this.update({ reconnecting: true, waitingFor });
       return;
     }
     const delay = RECONNECT_DELAYS_MS[this.retries];
@@ -659,6 +692,7 @@ export class SessionManager {
   private focusedId: string | null = null;
   private appActive = true;
   private network: Network | null = null;
+  private vaultIsOpen = true;
   private counter = 0;
 
   constructor(private deps: SessionManagerDeps) {}
@@ -813,6 +847,21 @@ export class SessionManager {
   /** @internal Unknown counts as online, so sessions behave as they did on timers alone. */
   get online() {
     return this.network?.online ?? true;
+  }
+
+  /**
+   * Whether saved passwords and keys can be read: false while the app lock has forgotten the
+   * vault key (an opt-in setting). Sessions that drop meanwhile reconnect after the unlock.
+   */
+  setVaultOpen(open: boolean) {
+    if (open === this.vaultIsOpen) return;
+    this.vaultIsOpen = open;
+    this.sessions.forEach((session) => session.vaultChanged(open));
+  }
+
+  /** @internal */
+  get vaultOpen() {
+    return this.vaultIsOpen;
   }
 
   setAppActive(active: boolean) {

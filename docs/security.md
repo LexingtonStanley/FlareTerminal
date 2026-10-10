@@ -29,9 +29,28 @@ Without a lock, secrets are stored as in layer 1 only.
 
 ## What stays open
 
-Once unlocked, the vault key stays in memory until the app quits, so open sessions keep their
-credentials and can reconnect while the screen is locked. The lock screen covers the app; it
-doesn't stop sessions. A "forget the key on lock" option is on the roadmap.
+Once unlocked, the vault key stays in memory until the app quits, so sessions can reconnect
+while the screen is locked. The lock screen covers the app; it doesn't stop sessions.
+
+**Forget the key when locked** (Security settings, off by default) trades that for a closed
+vault while locked:
+
+- Locking forgets the vault key and the PIN check held with it, as a restart does. Nothing
+  can read a saved password or key until the next unlock, which derives the key again (a
+  second or two for a PIN or password; instant with biometrics).
+- It happens when the lock does: at once on "Lock now", and once Flare has been away for the
+  auto-lock time. While sessions are open on Android, Flare keeps running in the background
+  and forgets it on time. Otherwise the phone may pause Flare first (iOS always does, soon
+  after it leaves the screen), and the key goes when Flare next runs. An auto-lock of
+  "At once" forgets it as Flare leaves the screen, on both.
+- Open sessions keep running. A session that drops while locked waits for the unlock rather
+  than trying without its password or key, then reconnects.
+- While the key is forgotten, saving a secret fails rather than store it unsealed.
+
+Either way, an SSH session drops its password and keys once it has signed in, so an open
+session doesn't keep them in memory. JavaScript can't overwrite a string, so this removes the
+references and leaves the memory to be reclaimed; it doesn't scrub it. A ttyd session keeps
+its login for the life of its connection.
 
 ## Protected connections and groups
 

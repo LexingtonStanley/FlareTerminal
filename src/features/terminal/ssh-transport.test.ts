@@ -34,6 +34,22 @@ function memoryKnownHosts(initial: Record<string, KnownHost> = {}): KnownHosts &
   };
 }
 
+/** Whether `target` can be reached from `root` through properties (closures aside). */
+function reaches(root: unknown, target: unknown, seen = new Set<unknown>()): boolean {
+  if (root === target) return true;
+  if (root === null || typeof root !== 'object' || ArrayBuffer.isView(root) || seen.has(root)) {
+    return false;
+  }
+  seen.add(root);
+  const values =
+    root instanceof Map
+      ? [...root.keys(), ...root.values()]
+      : root instanceof Set
+        ? [...root]
+        : Object.values(root);
+  return values.some((value) => reaches(value, target, seen));
+}
+
 function open(
   port: number,
   { password = null as string | null, knownHosts = memoryKnownHosts() } = {}
@@ -105,6 +121,22 @@ describe('SshTransport', () => {
     });
     await waitFor(() => second.status() === 'connected');
     expect(second.screen.text).not.toContain('authenticity');
+  });
+
+  it('keeps no saved password once signed in', async () => {
+    const server = await startTestSshServer();
+    const first = open(server.port, { password: 'correct-horse' });
+    await waitFor(() => first.screen.text.includes('(yes/no)? '));
+    first.transport.write('yes\r');
+    await waitFor(() => first.status() === 'connected');
+
+    const second = open(server.port, { password: 'correct-horse', knownHosts: first.knownHosts });
+    expect(reaches(second.transport, 'correct-horse')).toBe(true);
+    await waitFor(() => second.status() === 'connected');
+
+    // A forgotten vault key leaves nothing readable behind in an open session either.
+    expect(reaches(first.transport, 'correct-horse')).toBe(false);
+    expect(reaches(second.transport, 'correct-horse')).toBe(false);
   });
 
   it('refuses a host whose key changed', async () => {

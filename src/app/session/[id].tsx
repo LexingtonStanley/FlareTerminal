@@ -206,11 +206,13 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
                 },
               ]}>
               <ThemedText type="small" role="alert">
-                {session.waitingForNetwork
+                {session.waitingFor === 'network'
                   ? `${session.status.message}. Reconnecting when there’s a network…`
-                  : session.reconnecting
-                    ? `${session.status.message}. Reconnecting…`
-                    : session.status.message}
+                  : session.waitingFor === 'unlock'
+                    ? `${session.status.message}. Reconnecting once Flare is unlocked…`
+                    : session.reconnecting
+                      ? `${session.status.message}. Reconnecting…`
+                      : session.status.message}
               </ThemedText>
               <Button title="Reconnect" onPress={() => manager.reconnect(session.id)} />
             </ThemedView>
