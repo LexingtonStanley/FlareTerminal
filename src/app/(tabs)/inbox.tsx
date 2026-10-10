@@ -9,6 +9,9 @@ import { Icon } from '@/components/ui/icon';
 import { Screen } from '@/components/ui/screen';
 import { Spacing } from '@/constants/theme';
 import { useConnections } from '@/features/connections/connections-provider';
+import { formatSize } from '@/features/outbox/outbox';
+import { useOutboxFiles } from '@/features/outbox/outbox-provider';
+import type { OutboxFile } from '@/features/outbox/outbox-store';
 import {
   formatSince,
   inboxGroup,
@@ -32,10 +35,13 @@ const GROUPS: { group: InboxGroup; title: string }[] = [
 
 type Look = { now: number; activity: Map<string, SessionActivity | null> };
 
+/** Files listed before "Show all". */
+const RECENT_FILES = 5;
+
 /**
  * Every open session on every host, sorted by what it needs from the person: an agent
  * waiting on them, one that finished, one at work, or a quiet one. Read from each session's own screen, so
- * nothing is installed on the hosts.
+ * nothing is installed on the hosts. Below them, the files agents sent to the phone.
  */
 export default function InboxScreen() {
   const manager = useSessionManager();
@@ -45,6 +51,9 @@ export default function InboxScreen() {
   const router = useRouter();
   const theme = useTheme();
   const { radius } = useShape();
+  const files = useOutboxFiles();
+  const [allFiles, setAllFiles] = useState(false);
+  const unread = files.filter(({ read }) => !read).length;
 
   // Screens are read once a second while the inbox is on screen, not on every write.
   const [look, setLook] = useState<Look>(() => ({ now: Date.now(), activity: new Map() }));
@@ -203,6 +212,51 @@ export default function InboxScreen() {
     );
   };
 
+  const fileRow = (file: OutboxFile) => {
+    // A protected connection's file names stay out of lists, as its screens do.
+    const locked = scopeOf(file.connectionId) !== null;
+    const name = locked ? 'A file' : file.name;
+    const details = [file.host, formatSize(file.size), sinceText(now - file.receivedAt)];
+    return (
+      <Pressable
+        role="button"
+        aria-label={[`Read ${name}`, file.read ? null : 'new', ...details]
+          .filter(Boolean)
+          .join(', ')}
+        onPress={() => router.push({ pathname: '/outbox/[id]', params: { id: file.id } })}
+        style={({ pressed }) => [
+          styles.rowMain,
+          styles.fileRow,
+          pressed && { backgroundColor: theme.backgroundSelected },
+        ]}>
+        <View style={styles.rowLead}>
+          <Icon name="file" size={18} color={file.read ? 'textSecondary' : 'text'} />
+        </View>
+        <View style={styles.rowText}>
+          <View style={styles.inline}>
+            <ThemedText
+              type={file.read ? 'default' : 'headline'}
+              numberOfLines={1}
+              style={styles.shrink}>
+              {name}
+            </ThemedText>
+            {locked ? <Icon name="lock" size={13} /> : null}
+            <View style={styles.grow} />
+            {file.read ? null : (
+              <View
+                style={[styles.unread, { backgroundColor: theme.text, borderRadius: radius.dot }]}
+              />
+            )}
+          </View>
+          <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+            {details.join(' · ')}
+          </ThemedText>
+        </View>
+      </Pressable>
+    );
+  };
+  const shownFiles = allFiles ? files : files.slice(0, RECENT_FILES);
+
   return (
     <Screen scroll style={styles.screen}>
       <View style={styles.header}>
@@ -210,16 +264,16 @@ export default function InboxScreen() {
           Inbox
         </ThemedText>
         <ThemedText type="small" themeColor="textSecondary">
-          {sessions.length === 0
-            ? 'Agents that need you show up here'
-            : [
-                needsYou ? `${needsYou} ${needsYou === 1 ? 'needs' : 'need'} you` : null,
-                finished ? `${finished} finished` : null,
-                working ? `${working} working` : null,
-                !needsYou && !finished && !working ? 'Nothing needs you' : null,
-              ]
-                .filter(Boolean)
-                .join(' · ')}
+          {[
+            sessions.length === 0 ? (unread ? null : 'Agents that need you show up here') : null,
+            needsYou ? `${needsYou} ${needsYou === 1 ? 'needs' : 'need'} you` : null,
+            finished ? `${finished} finished` : null,
+            working ? `${working} working` : null,
+            sessions.length && !needsYou && !finished && !working ? 'Nothing needs you' : null,
+            unread ? `${unread} new ${unread === 1 ? 'file' : 'files'}` : null,
+          ]
+            .filter(Boolean)
+            .join(' · ')}
         </ThemedText>
       </View>
 
@@ -256,8 +310,43 @@ export default function InboxScreen() {
           );
         })
       )}
+
+      {files.length ? (
+        <Section title={`Files from agents · ${files.length}`}>
+          <Card flush>
+            {shownFiles.map((file, index) => (
+              <View key={file.id}>
+                {index > 0 ? <Divider inset={Spacing.three + 20} /> : null}
+                {fileRow(file)}
+              </View>
+            ))}
+            {files.length > shownFiles.length ? (
+              <>
+                <Divider inset={Spacing.three + 20} />
+                <Pressable
+                  role="button"
+                  aria-label={`Show all ${files.length} files`}
+                  onPress={() => setAllFiles(true)}
+                  style={({ pressed }) => [
+                    styles.showAll,
+                    pressed && { backgroundColor: theme.backgroundSelected },
+                  ]}>
+                  <ThemedText type="link" themeColor="textSecondary">
+                    Show all {files.length} files
+                  </ThemedText>
+                </Pressable>
+              </>
+            ) : null}
+          </Card>
+        </Section>
+      ) : null}
     </Screen>
   );
+}
+
+function sinceText(ms: number): string {
+  const since = formatSince(ms);
+  return since === 'now' ? 'just now' : `${since} ago`;
 }
 
 const styles = StyleSheet.create({
@@ -287,6 +376,12 @@ const styles = StyleSheet.create({
     paddingLeft: Spacing.three + 16 + Spacing.three - 4,
     paddingRight: Spacing.three,
     paddingBottom: Spacing.three - 4,
+  },
+  fileRow: { minHeight: 56, alignItems: 'center' },
+  unread: { width: 8, height: 8 },
+  showAll: {
+    paddingVertical: Spacing.three - 4,
+    paddingHorizontal: Spacing.three + 20 + Spacing.three - 4,
   },
   preview: {
     marginTop: Spacing.half,

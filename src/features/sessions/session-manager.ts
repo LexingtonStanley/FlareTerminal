@@ -870,6 +870,11 @@ export class SessionManager {
     if (active) this.sessions.forEach((session) => session.resume());
   }
 
+  /** Whether the app is in front, as far as the sessions know. */
+  get isAppActive() {
+    return this.appActive;
+  }
+
   /** Tells each session whether the person is looking at it: on screen, app in front. */
   private updateWatched() {
     this.sessions.forEach((session, id) =>

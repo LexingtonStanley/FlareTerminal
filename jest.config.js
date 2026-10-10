@@ -10,9 +10,9 @@ module.exports = {
   testPathIgnorePatterns: ['/node_modules/', '/e2e/', '/dist/', '/.expo/', '/.claude/worktrees/'],
   // Agent worktrees hold a second copy of the app; keep Jest's module map to this one.
   modulePathIgnorePatterns: ['<rootDir>/.claude/worktrees/'],
-  // The noble crypto packages ship ES modules only; let Babel transform them too.
+  // The noble crypto packages and marked ship ES modules only; let Babel transform them too.
   transformIgnorePatterns: expoPreset.transformIgnorePatterns.map((pattern) =>
-    pattern.replace('/node_modules/(?!(', '/node_modules/(?!(@noble|')
+    pattern.replace('/node_modules/(?!(', '/node_modules/(?!(@noble|marked|')
   ),
   moduleNameMapper: {
     '\\.css$': '<rootDir>/jest/style-stub.js',

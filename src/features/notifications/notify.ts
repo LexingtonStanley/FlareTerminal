@@ -89,6 +89,36 @@ export function postAgentNotification(
   });
 }
 
+/**
+ * Posts (or replaces) a host's notification for files its agents sent; a tap opens `fileId`.
+ */
+export function postFileNotification(
+  connectionId: string,
+  title: string,
+  body: string,
+  fileId: string
+) {
+  configure();
+  void Notifications.scheduleNotificationAsync({
+    // One per host: files that arrive later replace it.
+    identifier: `outbox-${connectionId}`,
+    content: { title, body, data: { fileId } },
+    trigger: Platform.OS === 'android' ? { channelId: CHANNEL_ID } : null,
+  });
+}
+
+/** Calls `onOpen` with the file's id when the person taps a file's notification. */
+export function useFileNotificationOpens(onOpen: (fileId: string) => void) {
+  useEffect(() => {
+    const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
+      if (response.actionIdentifier !== Notifications.DEFAULT_ACTION_IDENTIFIER) return;
+      const fileId = response.notification.request.content.data?.fileId;
+      if (typeof fileId === 'string') onOpen(fileId);
+    });
+    return () => subscription.remove();
+  }, [onOpen]);
+}
+
 /** Calls `onOpen` with the session id when the person taps one of our notifications. */
 export function useNotificationOpens(onOpen: (sessionId: string) => void) {
   useEffect(() => {

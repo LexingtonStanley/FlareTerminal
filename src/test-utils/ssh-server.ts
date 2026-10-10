@@ -49,6 +49,7 @@ export async function startTestSshServer({
   algorithms,
   forwarding = true,
   commands = true,
+  home,
   authenticate = (ctx) =>
     ctx.method === 'password' && ctx.password === 'correct-horse'
       ? ctx.accept()
@@ -60,6 +61,8 @@ export async function startTestSshServer({
   forwarding?: boolean;
   /** Whether it runs commands (exec) with this machine's /bin/sh, like sshd. */
   commands?: boolean;
+  /** The commands' $HOME (a test can't change this process's: Jest gives it a copy). */
+  home?: string;
   authenticate?: (ctx: AuthContext) => void;
 } = {}): Promise<TestServer> {
   const keys = generateHostKey(hostKey);
@@ -111,7 +114,10 @@ export async function startTestSshServer({
           if (!commands) return rejectExec?.();
           const stream = acceptExec();
           // Its own process group, so closing the channel stops everything it started.
-          const child = spawn('/bin/sh', ['-c', info.command], { detached: true });
+          const child = spawn('/bin/sh', ['-c', info.command], {
+            detached: true,
+            env: home ? { ...process.env, HOME: home } : process.env,
+          });
           stream.pipe(child.stdin).on('error', () => {});
           child.stdout.pipe(stream, { end: false });
           child.stderr.pipe(stream.stderr, { end: false });

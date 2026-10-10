@@ -76,7 +76,10 @@ Traps already hit in this exact stack:
   `fireEvent(key, 'accessibilityAction', { nativeEvent: { actionName } })` (`'activate'` taps;
   `'up'`, `'down'`, `'left'`, `'right'` flick). In Playwright, click it, or drive the mouse for
   flicks (`e2e/web/keyboard.spec.ts`). Modifier keys are `role="switch"`.
-- **noble** (`@noble/*`) ships ES modules only; `jest.config.js` transforms it.
+- **noble** (`@noble/*`) and **marked** ship ES modules only; `jest.config.js` transforms them.
+- **Jest gives each test file its own copy of `process.env`**, so a child process started by
+  code under test (the `ssh2` test server's `exec`) never sees a change to it. Give
+  `startTestSshServer` a `home` instead.
 - **react-native-webview** has no native side in Jest: `jest/webview-stub.js` renders a View
   that keeps its props, so find it by its `aria-label` and read `source`. Jest's `fetch` is a
   stub too; load pages from node servers with `node:http`.
@@ -131,9 +134,10 @@ Traps already hit in this exact stack:
 ```
 src/app/                 Routes only. Every file here is a screen; never put tests or helpers here.
   _layout.tsx            Providers (preferences, connections, groups, shortcuts, prompts, sessions,
-                         lock, keys), stack, attention banner, access guard, root ErrorBoundary
+                         outbox, lock, keys), stack, attention banner, access guard, root
+                         ErrorBoundary
   (tabs)/                Tab navigator: index (Home: sessions, shortcuts, connections), inbox
-                         (every session by what it needs), settings
+                         (every session by what it needs, then files from agents), settings
   connections/           new.tsx, [id].tsx (edit): the connection form
   shortcuts/             new.tsx, [id].tsx (edit): the shortcut form
   groups/                new.tsx, [id].tsx (edit): the group form
@@ -144,6 +148,8 @@ src/app/                 Routes only. Every file here is a screen; never put tes
   session/[id]/preview.tsx  The session's dev server in a browser, over an SSH port forward
   session/[id]/reading.tsx  Reading mode: the session's history as text, from tmux/zellij
                          over SSH or from its headless terminal
+  outbox/[id].tsx        A file an agent sent: Markdown as a page, HTML with its scripts off until
+                         they're allowed
   keyboard-preview.tsx   Both keyboards against a pretend shell, no host needed
   +not-found.tsx
 src/components/ui/       Screen, Button, TextField primitives: build screens from these
@@ -182,6 +188,11 @@ src/features/preview/    Dev server preview: local-urls.ts (localhost links and 
 src/features/images/     Images for the agent: upload.ts (the `sh -c` command that saves one in
                          ~/.flare/uploads over SSH exec, and its path for the prompt),
                          image-source.ts (clipboard, photo library, camera), the attach row
+src/features/outbox/     Files from agents: outbox.ts (the sh scripts that list ~/.flare/outbox/ and
+                         print a file, their parsers), outbox-watcher.ts (one per SSH host, beside
+                         a session), outbox-store.ts (the files on the phone), page.ts (Markdown
+                         with marked, HTML, the Content-Security-Policy), file-frame (web view;
+                         .web: sandboxed iframe), provider
 src/features/health/     Host health strip: health.ts (the sh script the session runs with exec,
                          and its parser), use-host-health, the strip
 src/features/notifications/ Local notifications for agent alerts, with Approve/Deny actions (no-op
@@ -198,7 +209,7 @@ src/test-utils/          Jest helpers: renderApp, memory-storage, fake-terminal-
                          fake-notify, fake-network (the phone's network: none, Wi-Fi, cellular),
                          fake-local-server (the preview's port), node-listen (it over
                          node:net), ssh-server (a real SSH server from ssh2, with forwarding and
-                         exec), ssh-keys (OpenSSH key files written by ssh2, so no key is checked in)
+                         exec, and a $HOME for exec), ssh-keys (OpenSSH key files written by ssh2, so no key is checked in)
 __tests__/               Router-level Jest tests (render the real src/app tree)
 e2e/web/                 Playwright specs; fake-ttyd.ts plays a ttyd host via page.routeWebSocket,
                          touch.ts opens a terminal and swipes it

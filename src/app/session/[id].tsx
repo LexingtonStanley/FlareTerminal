@@ -60,7 +60,7 @@ function useOverSsh(session: SessionSnapshot): boolean {
 
 function TerminalSession({ session }: { session: SessionSnapshot }) {
   const terminalTheme = useTerminalTheme();
-  const { fontSize, promptSuggestions } = usePreferences();
+  const { fontSize, promptSuggestions, outbox } = usePreferences();
   const headerHeight = useHeaderHeight();
   const manager = useSessionManager();
   const router = useRouter();
@@ -260,6 +260,7 @@ function TerminalSession({ session }: { session: SessionSnapshot }) {
               onModifiedKey={typed(view.type)}
               agent={session.agent ?? null}
               suggestions={promptSuggestions}
+              outbox={overSsh && outbox}
               onAttachImage={overSsh ? attachImage : null}
             />
           </>

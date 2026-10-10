@@ -53,6 +53,8 @@ const ICONS = {
   image: { ios: 'photo', android: 'image', web: 'image' },
   photos: { ios: 'photo.on.rectangle', android: 'photo_library', web: 'photo_library' },
   camera: { ios: 'camera', android: 'photo_camera', web: 'photo_camera' },
+  file: { ios: 'doc.text', android: 'description', web: 'description' },
+  phone: { ios: 'iphone', android: 'smartphone', web: 'smartphone' },
 } satisfies Record<string, SymbolViewProps['name']>;
 
 export type IconName = keyof typeof ICONS;

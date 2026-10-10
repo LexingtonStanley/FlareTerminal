@@ -18,6 +18,8 @@ export type Preferences = {
   hostHealth: boolean;
   /** The strip of slash commands and saved prompts above the composer. */
   promptSuggestions: boolean;
+  /** Bringing files agents save in ~/.flare/outbox/ on SSH hosts to the phone. */
+  outbox: boolean;
 };
 
 export type PreferencesContextValue = Preferences & {
@@ -26,6 +28,7 @@ export type PreferencesContextValue = Preferences & {
   setFontSize(size: number): void;
   setHostHealth(on: boolean): void;
   setPromptSuggestions(on: boolean): void;
+  setOutbox(on: boolean): void;
 };
 
 export const PreferencesContext = createContext<PreferencesContextValue | null>(null);

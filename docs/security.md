@@ -129,6 +129,35 @@ The image button sends a screenshot or photo through the session's SSH connectio
   platforms). A screenshot pasted from the clipboard goes as PNG. The file type comes from
   the image's own first bytes; anything that isn't a PNG, JPEG, GIF, WebP or HEIC isn't sent.
 
+## Files from agents
+
+Markdown and HTML that an agent saves in `~/.flare/outbox/` come to the phone through the
+session's SSH connection (`src/features/outbox/`). A file is the host's content, untrusted like
+terminal output.
+
+- **What runs on the host.** While an SSH session is open (and "Files from agents" is on in
+  Settings), one `sh -s` script beside it lists the folder every 5 seconds, and a second prints
+  a file that's new or changed. Both are fixed scripts that only read; a file's name is quoted
+  for sh. Flare makes nothing on the host and deletes nothing there. Only regular files
+  ending in `.md`, `.markdown`, `.html` or `.htm` come over, never a symbolic link, so a link
+  in the folder can't send a file from elsewhere. Files over 5 MB stay on the host.
+- **What the phone keeps.** The newest 50 files (up to 20 MB) in Flare's own storage, like the
+  connections list: the phone's file encryption protects them, and the app lock protects the
+  screens that show them, not the files themselves. Delete removes the phone's copy; the
+  host's stays, and comes again only if it changes.
+- **Markdown** becomes a page Flare makes (marked), with any HTML in the file shown as text,
+  so the file can't add a script, a form or a redirect. The page loads nothing: its
+  Content-Security-Policy allows only its own styles and `data:` images, and JavaScript is off.
+  A tapped `http(s)` link opens in the browser; every other address does nothing.
+- **HTML** shows as the agent made it, with JavaScript off and the same policy, so it loads
+  nothing from the internet (no tracking pixels) until you turn on Run scripts for that
+  file. Then the page runs as a website would, loading what it asks for. Either way nothing
+  connects it to the app (no message handler, no injected objects), and a page can't open
+  anything on its own: when it tries to go to an `http(s)` address, Flare shows the address
+  and asks before opening it in the browser.
+- **Protected connections and groups.** Their files' names stay out of notifications, banners
+  and the inbox, and opening one asks for the lock, as their sessions do.
+
 ## Limits
 
 - A 6-digit PIN can't resist an offline guessing attack on its own: someone with the phone's

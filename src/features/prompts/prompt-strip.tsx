@@ -1,12 +1,20 @@
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { Icon } from '@/components/ui/icon';
+import { Icon, type IconName } from '@/components/ui/icon';
 import { Spacing } from '@/constants/theme';
+import { withSendToPhone } from '@/features/outbox/outbox';
 import { useShape, useTheme, useType } from '@/hooks/use-theme';
 import type { AgentHarness } from '@/features/shortcuts/agent-command';
 
 import { promptTitle, quietHint, suggest, type Suggestion } from './prompts';
 import { usePrompts } from './prompts-provider';
+
+const CHIP_ICONS: Record<Suggestion['kind'], IconName | null> = {
+  command: null,
+  prompt: 'prompt',
+  save: 'savePrompt',
+  outbox: 'phone',
+};
 
 type PromptStripProps = {
   draft: string;
@@ -14,6 +22,8 @@ type PromptStripProps = {
   agent: AgentHarness | null;
   /** The host is asking for a password: offer nothing. */
   secure: boolean;
+  /** Files saved in the host's outbox come to the phone: offer "Send to my phone". */
+  outbox?: boolean;
   /** A chip was tapped: this text becomes the draft. */
   onPick(text: string): void;
 };
@@ -25,12 +35,12 @@ type PromptStripProps = {
  * arguments and nothing reaches the agent by accident. The row keeps its height when it has
  * nothing to offer, since a change of height resizes the terminal.
  */
-export function PromptStrip({ draft, agent, secure, onPick }: PromptStripProps) {
+export function PromptStrip({ draft, agent, secure, outbox = false, onPick }: PromptStripProps) {
   const theme = useTheme();
   const shape = useShape();
   const { sans, mono } = useType();
   const { prompts, add } = usePrompts();
-  const items = secure ? [] : suggest(draft, agent, prompts);
+  const items = secure ? [] : suggest(draft, agent, prompts, outbox);
 
   function chip(item: Suggestion) {
     const machine =
@@ -40,14 +50,23 @@ export function PromptStrip({ draft, agent, secure, onPick }: PromptStripProps) 
         ? [item.text, `${item.text}, ${item.description}`, item.text]
         : item.kind === 'prompt'
           ? [item.id, promptTitle(item.text), promptTitle(item.text)]
-          : ['save', 'Save as prompt', 'Save as prompt'];
+          : item.kind === 'outbox'
+            ? ['outbox', 'Send to my phone', 'Send to my phone']
+            : ['save', 'Save as prompt', 'Save as prompt'];
+    const press = () => {
+      if (item.kind === 'save') add(draft);
+      // After what's written: "Write up the plan. Save the result for my phone…"
+      else if (item.kind === 'outbox') onPick(withSendToPhone(draft));
+      else onPick(item.text);
+    };
+    const icon = CHIP_ICONS[item.kind];
 
     return (
       <Pressable
         key={key}
         role="button"
         aria-label={label}
-        onPress={() => (item.kind === 'save' ? add(draft) : onPick(item.text))}
+        onPress={press}
         hitSlop={{ top: 4, bottom: 4 }}
         style={({ pressed }) => [
           styles.chip,
@@ -58,9 +77,7 @@ export function PromptStrip({ draft, agent, secure, onPick }: PromptStripProps) 
             backgroundColor: pressed ? theme.backgroundSelected : theme.backgroundElement,
           },
         ]}>
-        {item.kind === 'command' ? null : (
-          <Icon name={item.kind === 'save' ? 'savePrompt' : 'prompt'} size={14} />
-        )}
+        {icon ? <Icon name={icon} size={14} /> : null}
         <Text
           numberOfLines={1}
           style={[styles.label, machine ? mono(500) : sans(500), { color: theme.text }]}>

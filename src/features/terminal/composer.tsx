@@ -24,6 +24,8 @@ type ComposerProps = {
   agent?: AgentHarness | null;
   /** Shows the strip of slash commands and saved prompts above the field. */
   suggestions?: boolean;
+  /** Files saved in the host's outbox come to the phone: the strip offers "Send to my phone". */
+  outbox?: boolean;
   /**
    * Sends an image to the host and resolves to its path there, or to null when the person
    * didn't pick one. Missing when the host can't take images.
@@ -51,6 +53,7 @@ export function Composer({
   onModifiedKey,
   agent = null,
   suggestions = true,
+  outbox = false,
   onAttachImage = null,
 }: ComposerProps) {
   const theme = useTheme();
@@ -128,7 +131,7 @@ export function Composer({
           onClose={() => setAttach({ kind: 'closed' })}
         />
       ) : suggestions ? (
-        <PromptStrip draft={draft} agent={agent} secure={secure} onPick={pick} />
+        <PromptStrip draft={draft} agent={agent} secure={secure} outbox={outbox} onPick={pick} />
       ) : null}
       <View style={styles.row}>
         {onAttachImage && !secure ? (
