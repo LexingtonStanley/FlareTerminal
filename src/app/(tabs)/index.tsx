@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui/button';
 import { Card, Divider, Section } from '@/components/ui/card';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Icon } from '@/components/ui/icon';
 import { IconButton } from '@/components/ui/icon-button';
 import { Screen } from '@/components/ui/screen';
@@ -34,6 +35,8 @@ export default function HomeScreen() {
   const allSessions = useSessions();
   const scopeOf = useProtection();
   const [selectedGroup, setSelectedGroup] = useState(ALL_GROUPS);
+  // A shortcut that asks before running, while it asks.
+  const [confirming, setConfirming] = useState<Shortcut | null>(null);
   // A deleted group falls back to everything.
   const group = groups.find(({ id }) => id === selectedGroup) ?? null;
   const inGroup = (connectionId: string) =>
@@ -55,18 +58,21 @@ export default function HomeScreen() {
   const waiting = allSessions.filter((session) => waitingFor(session)).length;
   const { groups: shortcutGroups, ungrouped } = groupShortcuts(shortcuts);
 
+  const connectionName = (shortcut: Shortcut) =>
+    allConnections.find(({ id }) => id === shortcut.connectionId)?.name;
+  const run = (shortcut: Shortcut) =>
+    start({
+      connectionId: shortcut.connectionId,
+      name: shortcut.name,
+      command: startupCommand(shortcut),
+    });
+
   const tile = (shortcut: Shortcut) => (
     <ShortcutTile
       key={shortcut.id}
       shortcut={shortcut}
-      connectionName={allConnections.find(({ id }) => id === shortcut.connectionId)?.name}
-      onRun={() =>
-        start({
-          connectionId: shortcut.connectionId,
-          name: shortcut.name,
-          command: startupCommand(shortcut),
-        })
-      }
+      connectionName={connectionName(shortcut)}
+      onRun={() => (shortcut.confirm ? setConfirming(shortcut) : run(shortcut))}
       onEdit={() => router.push({ pathname: '/shortcuts/[id]', params: { id: shortcut.id } })}
     />
   );
@@ -320,6 +326,30 @@ export default function HomeScreen() {
           }
         />
       </Section>
+      {/* A modal: it draws over the screen, whatever its place here. */}
+      {confirming ? (
+        <ConfirmDialog
+          title={`Run ${confirming.name}?`}
+          confirmTitle="Run"
+          onCancel={() => setConfirming(null)}
+          onConfirm={() => {
+            setConfirming(null);
+            run(confirming);
+          }}>
+          <ThemedText type="small" themeColor="textSecondary">
+            {`On ${connectionName(confirming) ?? 'a missing connection'}, this runs:`}
+          </ThemedText>
+          <View
+            style={[
+              styles.well,
+              { backgroundColor: theme.backgroundSelected, borderRadius: shape.radius.small },
+            ]}>
+            <ThemedText type="code" selectable>
+              {startupCommand(confirming)}
+            </ThemedText>
+          </View>
+        </ConfirmDialog>
+      ) : null}
     </Screen>
   );
 }
@@ -369,4 +399,5 @@ const styles = StyleSheet.create({
   },
   promptText: { fontSize: 15, lineHeight: 22 },
   promptCursor: { width: 9, height: 18, marginLeft: -4 },
+  well: { padding: Spacing.three - 2 },
 });

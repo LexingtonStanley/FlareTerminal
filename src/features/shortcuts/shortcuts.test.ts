@@ -2,8 +2,10 @@ import {
   DEFAULT_AGENT,
   groupOptions,
   groupShortcuts,
+  looksDestructive,
   migrateShortcut,
   newShortcutInput,
+  SHORTCUT_PRESETS,
   startupCommand,
   toShortcut,
   validateShortcut,
@@ -26,6 +28,7 @@ const agentInput = (fields: Partial<ShortcutInput> = {}): ShortcutInput => ({
   directory: '~/agents/janus',
   group: 'Agents',
   agent: { ...DEFAULT_AGENT, session: 'zellij' },
+  confirm: false,
   ...fields,
 });
 
@@ -37,6 +40,7 @@ const shortcut = (fields: Partial<Shortcut>): Shortcut => ({
   directory: '',
   group: '',
   agent: null,
+  confirm: false,
   ...fields,
 });
 
@@ -52,7 +56,7 @@ describe('migrateShortcut', () => {
 
     const migrated = migrateShortcut(saved);
 
-    expect(migrated).toEqual({ ...saved, group: '', agent: null });
+    expect(migrated).toEqual({ ...saved, group: '', agent: null, confirm: false });
     expect(startupCommand(migrated!)).toBe('cd ~/code/flare && tmux new -A -s claude claude');
   });
 
@@ -110,6 +114,7 @@ describe('newShortcutInput', () => {
       directory: '',
       group: 'Agents',
       agent: DEFAULT_AGENT,
+      confirm: false,
     });
   });
 
@@ -155,6 +160,12 @@ describe('validateShortcut', () => {
     );
   });
 
+  it('needs a preset’s placeholder filled in', () => {
+    const restart = { ...agentInput(), agent: null, command: 'sudo systemctl restart <service>' };
+    expect(validateShortcut(restart).command).toBe('Replace <service> with the service’s name');
+    expect(validateShortcut({ ...restart, command: 'sudo systemctl restart nginx' })).toEqual({});
+  });
+
   it('takes a single line', () => {
     expect(validateShortcut(agentInput({ command: 'ls\ncd /' })).command).toBe('Use a single line');
   });
@@ -175,8 +186,15 @@ describe('toShortcut', () => {
       directory: '~/agents/janus',
       group: 'Agents',
       agent: { ...DEFAULT_AGENT, session: 'zellij' },
+      confirm: false,
     });
     expect(startupCommand(saved)).toBe(JANUS_ZELLIJ);
+  });
+
+  it('asks before running only for a plain command', () => {
+    const plain = { ...agentInput(), agent: null, command: 'sudo reboot', confirm: true };
+    expect(toShortcut(plain, 'k1').confirm).toBe(true);
+    expect(toShortcut({ ...plain, agent: DEFAULT_AGENT }, 'k1').confirm).toBe(false);
   });
 
   it('keeps a command edited by hand', () => {
@@ -225,5 +243,57 @@ describe('groupOptions', () => {
       'agents',
       'Maintenance',
     ]);
+  });
+});
+
+describe('looksDestructive', () => {
+  it('flags commands that restart, stop, reboot or delete', () => {
+    const risky = [
+      'sudo reboot',
+      'sudo shutdown -h now',
+      'sudo systemctl restart nginx',
+      'systemctl --user stop app.service',
+      'sudo service postgresql restart',
+      'docker compose down',
+      'docker rm -f web',
+      'docker system prune -a',
+      'kubectl delete pod web-1',
+      'kubectl rollout restart deploy/web',
+      'rm -rf ~/build',
+      'rm --recursive old',
+      'rm notes.txt',
+      'git reset --hard origin/main',
+      'git clean -fdx',
+      'git push --force-with-lease',
+      'git push -f origin main',
+      'pkill -f node',
+      'sudo apt-get upgrade -y',
+      'brew upgrade',
+    ];
+    expect(risky.filter((command) => !looksDestructive(command))).toEqual([]);
+  });
+
+  it('leaves commands that only look or start things alone', () => {
+    const safe = [
+      'df -h',
+      'docker ps',
+      'docker logs -f web',
+      'journalctl -f -n 50',
+      'systemctl --failed',
+      'systemctl status nginx',
+      'git pull --ff-only',
+      'git push',
+      'tmux new -A -s main',
+      'htop',
+      'kubectl get pods',
+      'npm run dev',
+    ];
+    expect(safe.filter(looksDestructive)).toEqual([]);
+  });
+
+  it('flags the presets that change things', () => {
+    expect(
+      SHORTCUT_PRESETS.filter(({ command }) => looksDestructive(command)).map(({ label }) => label)
+    ).toEqual(['Restart a service', 'Reboot']);
   });
 });

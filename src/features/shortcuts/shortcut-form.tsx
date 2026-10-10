@@ -3,11 +3,12 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Button } from '@/components/ui/button';
-import { Callout } from '@/components/ui/card';
+import { Callout, Card } from '@/components/ui/card';
 import { Icon } from '@/components/ui/icon';
 import { Screen } from '@/components/ui/screen';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { TextField } from '@/components/ui/text-field';
+import { ToggleRow } from '@/components/ui/toggle-row';
 import { Spacing } from '@/constants/theme';
 import { connectionLabel, type Connection } from '@/features/connections/connections';
 import { useShape, useTheme, useType } from '@/hooks/use-theme';
@@ -23,6 +24,7 @@ import {
   AGENTS_GROUP,
   DEFAULT_AGENT,
   generatedCommand,
+  looksDestructive,
   sameGroup,
   SHORTCUT_PRESETS,
   startupCommand,
@@ -83,6 +85,11 @@ export function ShortcutForm({
   }));
   const [errors, setErrors] = useState<ShortcutErrors>({});
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  // "Ask before running" follows the command (on for a restart) until the person sets it.
+  const [confirmSet, setConfirmSet] = useState(
+    () => !initial.agent && initial.confirm !== looksDestructive(initial.command)
+  );
+  const confirm = confirmSet ? values.confirm : looksDestructive(values.command);
   const { agent } = values;
 
   /** Changes fields; an agent's command follows unless it was edited by hand. */
@@ -145,9 +152,10 @@ export function ShortcutForm({
   }
 
   function submit() {
-    const next = validateShortcut(values);
+    const input = { ...values, confirm };
+    const next = validateShortcut(input);
     setErrors(next);
-    if (Object.keys(next).length === 0) onSubmit(values);
+    if (Object.keys(next).length === 0) onSubmit(input);
   }
 
   return (
@@ -258,6 +266,17 @@ export function ShortcutForm({
             monospace
             {...field('directory')}
           />
+          <Card flush>
+            <ToggleRow
+              title="Ask before running"
+              caption="Home checks with you first. For restarts, deletes and reboots."
+              value={confirm}
+              onChange={(on) => {
+                setConfirmSet(true);
+                setValues((current) => ({ ...current, confirm: on }));
+              }}
+            />
+          </Card>
         </>
       )}
 

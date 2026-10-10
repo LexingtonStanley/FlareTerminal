@@ -119,8 +119,9 @@ Build screens from `src/components/ui/`: `Screen`, `Section` (overline heading a
 `Card` (`flush` for row lists, with `Divider`), `Button` (`primary`, `secondary`, `danger`,
 `ghost`; `small`; optional `icon`), `IconButton`, `Icon` (one name per meaning, SF Symbols on
 iOS, Material Symbols elsewhere), `TextField` (`monospace` for machine input, `hint`),
-`SegmentedControl` and `Callout` (`info`, `warning`). Status lights are `LiveDot` and
-`StatusBadge` in `src/features/sessions/session-status.tsx`.
+`SegmentedControl`, `Callout` (`info`, `warning`), `ToggleRow` and `ConfirmDialog` (asks
+before something that changes things; `Alert.alert` does nothing on the web). Status lights are
+`LiveDot` and `StatusBadge` in `src/features/sessions/session-status.tsx`.
 
 ## The terminal
 

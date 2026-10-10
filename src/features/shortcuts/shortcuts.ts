@@ -24,6 +24,8 @@ export type Shortcut = {
   group: string;
   /** How an agent shortcut's command is made; null for a plain command. */
   agent: ShortcutAgent | null;
+  /** Asks before running: a plain command that changes things (a restart, a reboot). */
+  confirm: boolean;
 };
 
 export type ShortcutInput = Omit<Shortcut, 'id'>;
@@ -31,6 +33,9 @@ export type ShortcutInput = Omit<Shortcut, 'id'>;
 export type ShortcutErrors = Partial<Record<keyof ShortcutInput, string>>;
 
 export type ShortcutPreset = { label: string; name: string; command: string };
+
+/** In a preset's command, for the person to fill in. */
+export const SERVICE_PLACEHOLDER = '<service>';
 
 /** Commands worth one tap that aren't agents (agents have their own kind of shortcut). */
 export const SHORTCUT_PRESETS: ShortcutPreset[] = [
@@ -40,7 +45,38 @@ export const SHORTCUT_PRESETS: ShortcutPreset[] = [
   { label: 'Git pull', name: 'Git pull', command: 'git pull --ff-only' },
   { label: 'Disk space', name: 'Disk space', command: 'df -h' },
   { label: 'htop', name: 'htop', command: 'htop' },
+  { label: 'Containers', name: 'Containers', command: 'docker ps' },
+  { label: 'Follow logs', name: 'Logs', command: 'journalctl -f -n 50' },
+  { label: 'Failed services', name: 'Failed services', command: 'systemctl --failed' },
+  {
+    label: 'Restart a service',
+    name: 'Restart',
+    command: `sudo systemctl restart ${SERVICE_PLACEHOLDER}`,
+  },
+  { label: 'Reboot', name: 'Reboot', command: 'sudo reboot' },
 ];
+
+/**
+ * Commands that change or remove things on the host, which a stray tap shouldn't run:
+ * restarts, stops, reboots, deletes, force-pushes. Not exhaustive; the person decides.
+ */
+const DESTRUCTIVE = [
+  /\b(reboot|shutdown|poweroff|halt)\b/,
+  /\bsystemctl\b.*\b(restart|stop|disable|kill|reload|isolate|reboot|poweroff)\b/,
+  /\bservice\s+\S+\s+(restart|stop|reload)\b/,
+  /\bdocker\b.*\b(rm|rmi|stop|kill|restart|down|prune)\b/,
+  /\bpodman\b.*\b(rm|rmi|stop|kill|restart|prune)\b/,
+  /\bkubectl\b.*\b(delete|drain|cordon|scale|rollout\s+restart)\b/,
+  /\brm\s/,
+  /\bgit\b.*\b(reset\s+--hard|clean\s+-\S*f|push\b.*(\s-f\b|--force))/,
+  /\b(kill|killall|pkill)\b/,
+  /\b(mkfs|dd|truncate|wipefs)\b/,
+  /\b(apt|apt-get|dnf|yum|pacman|brew)\b.*\b(remove|purge|autoremove|upgrade|-R\w*)\b/,
+];
+
+export function looksDestructive(command: string): boolean {
+  return DESTRUCTIVE.some((pattern) => pattern.test(command));
+}
 
 export const AGENTS_GROUP = 'Agents';
 
@@ -67,6 +103,7 @@ export function newShortcutInput(existing: Shortcut[] = []): ShortcutInput {
     directory: '',
     group: AGENTS_GROUP,
     agent: last ? { ...last, commandEdited: false } : DEFAULT_AGENT,
+    confirm: false,
   });
 }
 
@@ -95,6 +132,9 @@ export function validateShortcut(input: ShortcutInput): ShortcutErrors {
       : 'Enter a command, or pick one above';
   }
   if (/[\r\n]/.test(input.command)) errors.command = 'Use a single line';
+  if (!input.agent && input.command.includes(SERVICE_PLACEHOLDER)) {
+    errors.command = `Replace ${SERVICE_PLACEHOLDER} with the service’s name`;
+  }
   return errors;
 }
 
@@ -107,7 +147,17 @@ export function toShortcut(input: ShortcutInput, id: string): Shortcut {
     command: input.command.trim(),
   };
   const { name, connectionId, command, directory, agent } = withGeneratedCommand(trimmed);
-  return { id, name, connectionId, command, directory, group: input.group.trim(), agent };
+  const group = input.group.trim();
+  return {
+    id,
+    name,
+    connectionId,
+    command,
+    directory,
+    group,
+    agent,
+    confirm: !agent && input.confirm,
+  };
 }
 
 /** The line typed into the shell: `cd <folder> && <command>` (an agent's has its own cd). */
@@ -138,6 +188,8 @@ export function migrateShortcut(stored: unknown): Shortcut | null {
       directory: text(record.directory),
       group: text(record.group),
       agent: migrateAgent(record.agent),
+      // Saved before shortcuts could ask: as they were.
+      confirm: record.confirm === true,
     }),
   };
 }
